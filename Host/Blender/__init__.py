@@ -140,6 +140,10 @@ class BlenderHost(host_port.Host):
         bpy.data.batch_remove(list(bpy.data.objects) + list(bpy.data.collections))
         bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
 
+    def apply_post_inputs(self, context, values):
+        from . import material_builder
+        return material_builder.apply_post_inputs(context.scene, values)
+
     def load_display_stage(self, context, stage, options):
         from . import ui_stage
         return ui_stage.load(context, stage, options)

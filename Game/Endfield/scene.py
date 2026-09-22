@@ -325,8 +325,15 @@ def _import(context, arguments):
         host.clear_scene(context)
     yield command.Mark(0.15)
     built = host.import_packages(context, packages, options)
+    notes = list(built.warnings[:2])
+    # The level states its own colour grading; a host with a display chain takes it.
+    grading = datasets.scene_grading(map_name)
+    if grading is not None and host_port.COMPOSITOR in host.capabilities:
+        host.apply_post_inputs(context, grading["inputs"])
+        if grading["white_balance"] > 0.5:
+            notes.append("white balance is on in this volume and is not graded")
     state.status = "{0}: {1} object(s). {2}".format(
-        packages.label, built.imported, "  ".join(built.warnings[:2]))
+        packages.label, built.imported, "  ".join(notes))
 
 
 def _label(state):

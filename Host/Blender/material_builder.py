@@ -236,6 +236,30 @@ def post_stages_installed(scene):
     return [stage for stage in POST_STAGES if stage.installed(scene)]
 
 
+def apply_post_inputs(scene, values):
+    """Drive the host-side inputs of every post stage that declares any.
+
+    ``values`` is keyed by the stage's own input names; each is the DIFFERENCE from
+    identity, because an entry parameter's socket default is always zero and only a
+    difference makes "nothing drives it" mean "no change" -- a session with a character
+    and no scene has to land on identity.
+
+    A stage whose inputs are not all supplied is refused rather than part-written: the
+    missing one would silently fall back to identity and the picture would be quietly
+    wrong with nothing to show for it."""
+    written = 0
+    for stage in POST_STAGES:
+        names = stage.extra_inputs()
+        if not names:
+            continue
+        missing = [name for name in names if name not in values]
+        if missing:
+            raise KeyError("[material] post stage wants {0}; {1} not supplied".format(
+                names, missing))
+        written += stage.set_extra(scene, [values[name] for name in names])
+    return written
+
+
 # ---------------------------------------------------------------------------
 # Images
 # ---------------------------------------------------------------------------

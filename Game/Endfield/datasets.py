@@ -62,6 +62,7 @@ STORY_MISSIONS = "endfield.story.missions"
 STORY_QUESTS = "endfield.story.quests"
 STORY_LINES = "endfield.story.lines"
 STORY_STAGE = "endfield.story.stage"
+SCENE_ENVIRONMENT = "endfield.scene.environment"
 
 
 def _table(dataset_id, **args):
@@ -255,6 +256,45 @@ def landmarks(language):
              "rect": (row["minX"], row["minZ"], row["maxX"], row["maxZ"]),
              "seed": row["seed"]}
             for row in _rows(LANDMARKS, language=language)]
+
+
+def scene_grading(map_name):
+    """This map's colour grading, ready for the post stage's own inputs.
+
+    The volume that applies everywhere is the one the level marks global; the rest are
+    local overrides a host would have to blend by camera position, which is a runtime
+    question and not a statement.
+
+    ``inputs`` is keyed by the post stage's own input names and holds the DIFFERENCE from
+    identity, which is what those sockets take: an entry parameter's socket default in
+    Blender is always zero, so only a difference makes "nothing drives it" mean "no
+    grading" -- a session with a character and no scene has to land on identity, not on
+    contrast 0. The identity differs per component, which is why the subtraction is
+    spelled out rather than applied in bulk: hue is an offset (identity 0) while
+    saturation, contrast and the colour filter are multipliers (identity 1).
+
+    White balance comes back as its own flag: turning a temperature and a tint into LMS
+    coefficients happens inside the build's post pass, which is not read here, so a
+    volume that enables it has to be reported rather than graded by an identity that is
+    not the volume's answer.
+    """
+    rows = _rows(SCENE_ENVIRONMENT, map=map_name)
+    if not rows:
+        return None
+    row = next((r for r in rows if float(r.get("global") or 0) > 0.5), rows[0])
+    return {
+        "white_balance": float(row.get("gradeWhiteBalance") or 0),
+        "tonemap": float(row.get("tonemap") or 0),
+        "inputs": {
+            "gradeColorBalance": (0.0, 0.0, 0.0),
+            "gradeColorFilter": (float(row["gradeFilterR"]) - 1.0,
+                                 float(row["gradeFilterG"]) - 1.0,
+                                 float(row["gradeFilterB"]) - 1.0),
+            "gradeHueSatCon": (float(row["gradeHue"]),
+                               float(row["gradeSaturation"]) - 1.0,
+                               float(row["gradeContrast"]) - 1.0),
+        },
+    }
 
 
 def chunk_summary(map_name):

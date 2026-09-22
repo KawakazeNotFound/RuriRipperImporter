@@ -238,6 +238,17 @@ class Host(abc.ABC):
         it is absent there rather than doing nothing."""
 
     @abc.abstractmethod
+    def apply_post_inputs(self, context, values):
+        """Drive the display chain's host-side inputs from a level's own data --
+        the colour grading a scene states, keyed by the chain's own input names.
+        Returns how many inputs were written.
+
+        Only ever called on a host that answers :data:`COMPOSITOR`: a host whose
+        display settings are a fixed set of choices has no chain to drive, and the
+        grading a level states has nowhere to land there rather than landing
+        approximately."""
+
+    @abc.abstractmethod
     def load_display_stage(self, context, stage, options):
         """Put one of a game's own display stages into the document, as the game
         stated it (:mod:`Kernel.app.staging`). Returns the lines to word.

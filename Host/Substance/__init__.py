@@ -124,6 +124,12 @@ class SubstanceHost(host_port.Host):
         raise NotImplementedError(
             "Painter has no scene graph to clear -- see Host.clear_scene")
 
+    def apply_post_inputs(self, context, values):
+        """Unreachable: this host's display settings are a fixed set of choices, not
+        a chain with inputs. It does not declare COMPOSITOR."""
+        raise NotImplementedError(
+            "Painter has no display chain to drive -- see Host.apply_post_inputs")
+
     def load_display_stage(self, context, stage, options):
         """Unreachable: a stage is loaded AROUND what is already in the scene, and
         this host's project IS one mesh. It does not declare SCENE_GRAPH, so the
