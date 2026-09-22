@@ -291,6 +291,11 @@ def scene_grading(map_name):
     spelled out rather than applied in bulk: hue is an offset (identity 0) while
     saturation, contrast and the colour filter are multipliers (identity 1).
 
+    ``exposureStops`` is the volume's own exposure compensation, in stops -- zero is
+    identity as it stands, since the multiplier is two to that power. A volume on automatic
+    exposure adapts to its frame's histogram first, which is not read here, so that comes
+    back as its own flag too.
+
     White balance comes back as its own flag: turning a temperature and a tint into LMS
     coefficients happens inside the build's post pass, which is not read here, so a
     volume that enables it has to be reported rather than graded by an identity that is
@@ -303,7 +308,9 @@ def scene_grading(map_name):
     return {
         "white_balance": float(row.get("gradeWhiteBalance") or 0),
         "tonemap": float(row.get("tonemap") or 0),
+        "automatic_exposure": float(row.get("exposureMode") or 0) < 0.5,
         "inputs": {
+            "exposureStops": float(row.get("exposureCompensation") or 0),
             "gradeColorBalance": (0.0, 0.0, 0.0),
             "gradeColorFilter": (float(row["gradeFilterR"]) - 1.0,
                                  float(row["gradeFilterG"]) - 1.0,

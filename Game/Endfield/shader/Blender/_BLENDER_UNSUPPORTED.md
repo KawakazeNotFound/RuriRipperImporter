@@ -44,7 +44,6 @@
 | 函数 | 原因 |
 |---|---|
 | SampleNormalMap | uniform _UseBumpMap 挂 [ShaderProperty] 但 Default 缺失/不可解析——禁止发明默认值 |
-| Dissolve | 内建 radians(F) 无节点图等价(part Lit) |
 
 ## 栈 ruri_effect_uber_endfield
 

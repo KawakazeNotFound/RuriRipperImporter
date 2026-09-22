@@ -336,6 +336,9 @@ def _import(context, arguments):
         host.apply_post_inputs(context, grading["inputs"])
         if grading["white_balance"] > 0.5:
             notes.append("white balance is on in this volume and is not graded")
+        if grading["automatic_exposure"]:
+            notes.append("this volume adapts its exposure automatically; only its "
+                         "compensation is applied")
     state.status = "{0}: {1} object(s). {2}".format(
         packages.label, built.imported, "  ".join(notes))
 
