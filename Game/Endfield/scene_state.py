@@ -116,14 +116,14 @@ def load_scenes(language):
     for place in datasets.landmarks(language):
         rows = LANDMARKS.get(place["scene"])
         if rows is not None:
-            rows.append({key: place[key] for key in ("id", "label", "named", "rect")})
+            rows.append({key: place[key] for key in ("id", "label", "named", "rect", "seed")})
     for rows in LANDMARKS.values():
         rows.sort(key=lambda row: row["id"])
 
     SCENES = {SELF_CONTAINED: [], STREAMING: []}
     for scene in scenes:
         kind = STREAMING if scene["streaming"] else SELF_CONTAINED
-        SCENES[kind].append({key: scene[key] for key in ("id", "label", "named", "group")})
+        SCENES[kind].append({key: scene[key] for key in ("id", "label", "named", "group", "seed")})
     STATUS = "{0} scenes ({1} streaming, {2} named) · {3}".format(
         len(scenes), len(SCENES[STREAMING]),
         sum(1 for row in scenes if row["named"]), language)
@@ -241,8 +241,23 @@ def packages(label):
                                               for path in materials)}))
     return loading.Packages(
         CURRENT_MAP, label, loading.SCENE_WINDOW, list(RESOLVED_CABS),
+        seed=seed_of(CURRENT_MAP),
         window={"table": TABLE, "materials_by_row": MATERIALS_BY_ROW,
                 "seeds": list(SEED_PATHS), "named": named, "label": label})
+
+
+def seed_of(map_name):
+    """这张地图作为一次导入的种子 —— hook 自己发布的那一列,原样带过去。
+    拼法住在 hook 里(EndfieldStatementSource.WindowSeed),这边拼一份就是让它漂开。"""
+    for rows in SCENES.values():
+        for scene in rows:
+            if scene["id"] == map_name:
+                return scene["seed"]
+    for places in LANDMARKS.values():
+        for place in places:
+            if place["id"] == map_name:
+                return place["seed"]
+    return ""
 
 
 def reset():

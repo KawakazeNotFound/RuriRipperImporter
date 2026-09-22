@@ -241,7 +241,8 @@ def scene_maps(language):
     """Every scene the game ships streaming data for, under its own name, its own
     grouping, and the game's own streaming/self-contained split."""
     return [{"id": row["map"], "label": row["label"], "named": bool(_int(row["named"])),
-             "group": row["group"], "streaming": bool(_int(row["streaming"]))}
+             "group": row["group"], "streaming": bool(_int(row["streaming"])),
+             "seed": row["seed"]}
             for row in _rows(MAPS, language=language)]
 
 
@@ -251,7 +252,8 @@ def landmarks(language):
     return [{"id": row["levelId"], "scene": row["scene"], "label": row["label"],
              "named": bool(_int(row["named"])),
              "is_single_level": bool(_int(row["isSingleLevel"])),
-             "rect": (row["minX"], row["minZ"], row["maxX"], row["maxZ"])}
+             "rect": (row["minX"], row["minZ"], row["maxX"], row["maxZ"]),
+             "seed": row["seed"]}
             for row in _rows(LANDMARKS, language=language)]
 
 
