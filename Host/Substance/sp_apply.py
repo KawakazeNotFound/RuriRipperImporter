@@ -522,11 +522,13 @@ def setup_shader_instances(set_payloads, report):
                     bad_keys.append(key)
         if bad_keys:
             all_ok = False
-        report.append("* {0}: instance#{1} u_CharaPart={2}({3}) wrote {4}/{5} params{6}".format(
-            set_name, instance_id, payload.get("u_CharaPart"),
-            unity_material.PART_NAMES.get(payload.get("u_CharaPart"), "?"),
+        part = payload.get(unity_material.PART_UNIFORM)
+        report.append("* {0}: instance#{1} {7}={2}({3}) wrote {4}/{5} params{6}".format(
+            set_name, instance_id, part,
+            unity_material.PART_NAMES.get(part, "?"),
             len(ok_keys), len(payload),
-            "; failed: " + ", ".join(bad_keys) if bad_keys else ""))
+            "; failed: " + ", ".join(bad_keys) if bad_keys else "",
+            unity_material.PART_UNIFORM))
 
     # -- 4) verify --
     try:

@@ -32,6 +32,10 @@ PART_NAMES = {
     8: "ShadowReceiver",
 }
 
+# 部位选择器在着色器里的真名。这里的 uniform 字典一律按 GLSL 声明的名字下键,
+# 这一个也不例外 —— Painter 的 setParameters 按名字写,名字不对整条参数被拒。
+PART_UNIFORM = "_CharaPartID"
+
 # ---------------------------------------------------------------------------
 # Texture decode operations (executed by texture_pipeline)
 # ---------------------------------------------------------------------------
@@ -779,7 +783,7 @@ def build_plan(name, guid, props, texture_exists, face_basis=None):
             value = _srgb_to_linear(value)
         return value
 
-    uniforms = {"u_CharaPart": part}
+    uniforms = {PART_UNIFORM: part}
 
     # -- toggles --
     # The float property is authoritative (it is what the reference pipeline
