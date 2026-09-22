@@ -21,6 +21,7 @@
 
 | 函数 | 原因 |
 |---|---|
+| OverlayShadow | 终点 ret_gBuffer0 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | EndfieldCharaGBufferPassVertex[OverlayShadow] | uniform UNITY_MATRIX_P 为结构/资源型(float4x4),无节点图等价 |
 
 ## 栈 ruri_scene_uber_endfield
