@@ -148,6 +148,10 @@ class BlenderHost(host_port.Host):
         from . import material_builder
         return material_builder.apply_post_inputs(context.scene, values)
 
+    def apply_level_globals(self, context, values):
+        from . import material_builder
+        return material_builder.apply_level_globals(context.scene, values)
+
     def load_display_stage(self, context, stage, options):
         from . import ui_stage
         return ui_stage.load(context, stage, options)

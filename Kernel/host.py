@@ -251,6 +251,19 @@ class Host(abc.ABC):
         sky up in."""
 
     @abc.abstractmethod
+    def apply_level_globals(self, context, values):
+        """Hand the shading stacks a level's engine globals -- values the source's
+        pipeline sets once per level for every material (its fog, say), keyed by the
+        engine's own global names and in the source's own convention. A stack reads
+        them live, so they may be written before or after the level's content is
+        built. Returns ``(written, unclaimed)``: the names written and the supplied
+        names no stack reads.
+
+        Only ever called on a host that answers :data:`SCENE_GRAPH`: what these
+        globals shade is distance and height through a level, and a project that IS
+        one mesh has neither."""
+
+    @abc.abstractmethod
     def apply_post_inputs(self, context, values):
         """Drive the display chain's host-side inputs from a level's own data --
         the colour grading a scene states, keyed by the chain's own input names.

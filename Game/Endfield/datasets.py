@@ -64,6 +64,7 @@ STORY_LINES = "endfield.story.lines"
 STORY_STAGE = "endfield.story.stage"
 SCENE_ENVIRONMENT = "endfield.scene.environment"
 SCENE_AMBIENT = "endfield.scene.ambient"
+SCENE_GLOBALS = "endfield.scene.globals"
 
 
 def _table(dataset_id, **args):
@@ -274,6 +275,19 @@ def scene_ambient(map_name):
     return {"label": volume,
             "coefficients": [[float(row[channel]) for row in picked]
                              for channel in ("r", "g", "b")]}
+
+
+def scene_globals(map_name):
+    """The engine globals this map sets for every material, off the volume that applies
+    everywhere, keyed by the engine's own global names -- already packed the way the
+    build packs them, so they go to the shading stacks as they are."""
+    rows = _rows(SCENE_GLOBALS, map=map_name)
+    if not rows:
+        return {}
+    marked = [row for row in rows if float(row.get("global") or 0) > 0.5]
+    volume = (marked or rows)[0]["volume"]
+    return {row["name"]: tuple(float(row[axis]) for axis in ("x", "y", "z", "w"))
+            for row in rows if row["volume"] == volume}
 
 
 def scene_grading(map_name):

@@ -87,6 +87,15 @@ POST_STAGES = extensions.point(
     "blender.post_stages",
     "Whole-frame processing a shading stack installs onto the scene.")
 
+#: ``level_global_bases() -> {name: [default, ...]}``. Engine globals a stack
+#: reads LIVE from scene properties instead of baking them into its materials --
+#: per-level values such as fog -- each with the default its recipe declares. The
+#: stack's graph reads ``property + default``, so a property that was never
+#: written answers the default and a session with no level in it is unchanged.
+LEVEL_GLOBALS = extensions.point(
+    "blender.level_globals",
+    "Per-level engine globals a shading stack reads live from scene properties.")
+
 #: Custom property stamped on every material this module or a stack builds.
 SOURCE_KEY_PROPERTY = "ruri_source_key"
 #: Marker on an image datablock: its colour space is already what the ASSET
@@ -157,6 +166,14 @@ def register_post_stage(stage):
 
 def unregister_post_stage(stage):
     POST_STAGES.remove(stage)
+
+
+def register_level_globals(bases):
+    LEVEL_GLOBALS.add(bases)
+
+
+def unregister_level_globals(bases):
+    LEVEL_GLOBALS.remove(bases)
 
 
 def register_material_panel(panel):
@@ -270,6 +287,48 @@ def apply_post_inputs(scene, values):
                 names, missing))
         written += stage.set_extra(scene, [values[name] for name in names])
     return written
+
+
+def apply_level_globals(scene, values):
+    """Write one level's engine globals where the stacks read them live.
+
+    ``values`` is keyed by the engine's own global names, each the level's value in
+    the source's own convention. What lands on the scene is the DIFFERENCE from the
+    stack's declared default, because the graph reads ``property + default`` and an
+    unwritten property reads zero.
+
+    A stack that is handed some of its level globals but not all is refused: the
+    missing ones would silently stay at the recipe default and the picture would be
+    quietly wrong. A stack handed none of them is not this level's consumer (another
+    game's stack) and is left alone. Two stacks declaring different defaults for one
+    name cannot share a scene property, so that is refused too.
+
+    Returns ``(written, unclaimed)`` -- the names written and the supplied names no
+    registered stack reads."""
+    bases = {}
+    for provider in LEVEL_GLOBALS:
+        declared = provider()
+        supplied = [name for name in declared if name in values]
+        if supplied and len(supplied) != len(declared):
+            raise KeyError("[material] a stack reads level globals {0}; {1} not supplied".format(
+                sorted(declared), sorted(name for name in declared if name not in values)))
+        for name, base in declared.items():
+            known = bases.setdefault(name, list(base))
+            if known != list(base):
+                raise ValueError("[material] level global {0} has two defaults: {1} and {2}".format(
+                    name, known, list(base)))
+    written = []
+    for name, value in values.items():
+        base = bases.get(name)
+        if base is None:
+            continue
+        if len(value) != len(base):
+            raise ValueError("[material] level global {0} has {1} components, the stack reads {2}".format(
+                name, len(value), len(base)))
+        scene[name] = [float(component) - component_base for component, component_base in zip(value, base)]
+        written.append(name)
+    scene.update_tag()
+    return written, sorted(name for name in values if name not in bases)
 
 
 # ---------------------------------------------------------------------------
