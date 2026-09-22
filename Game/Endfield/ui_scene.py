@@ -23,7 +23,6 @@ from __future__ import annotations
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
 from ...Kernel.app import command
-from ...Kernel.app import layout as app_layout
 from ...Kernel.app import schemas, staging
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
@@ -186,7 +185,7 @@ def _load(context, arguments):
         state.status = "Nothing selected."
         return
     host = host_port.current()
-    if state.reset_scene and host_port.SCENE_GRAPH in host.capabilities:
+    if state.reset_scene and host_port.SceneGraph in host.capabilities:
         host.clear_scene(context)
     options = app_browser.as_options(app_browser.state_of(context), scene=True)
     stated = yield command.Read(lambda: statement(state, row), 0.4)
@@ -203,7 +202,7 @@ REFRESH = command.COMMANDS.define(
 LOAD = command.COMMANDS.define(
     "ruri.ui_scene_load", "Load Stage", _load,
     description="Put the selected display stage into the scene",
-    icon="IMPORT", requires=host_port.SCENE_GRAPH, poll=_has_selection, steps=True,
+    icon="IMPORT", requires=host_port.SceneGraph, poll=_has_selection, steps=True,
     status_state=STATE, failure="Loading this display stage failed")
 
 

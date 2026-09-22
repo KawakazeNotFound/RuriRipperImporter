@@ -29,7 +29,6 @@ from PySide6.QtCore import Qt
 from ...Kernel import bootstrap as kernel_bootstrap
 from ...Kernel.app import browser, command as app_command
 from ...Kernel.app import layout as app_layout
-from ...Kernel.app import filtering
 from . import render, settings
 
 
@@ -368,39 +367,3 @@ def _dock_icon():
     return icon
 
 
-def register_surfaces():
-    """The popovers and menus the descriptions name. Blender registers these as
-    real Panel/Menu classes; Qt opens the same bodies as a dialog and a popup."""
-    render.register_popover(filtering.RULES_PANEL, filtering.draw_rules)
-    render.register_popover(browser.COLUMN_WIDTHS_PANEL, browser.draw_column_widths)
-    render.register_menu(browser.DECODER_MENU, _decoder_entries)
-    render.register_menu(filtering.QUICK_FILTER_MENU, _quick_filter_entries)
-
-
-def _decoder_entries(context):
-    """The decoders THIS tab's install may be read through: every version its own
-    product ships, plus the family one, plus none at all -- the same list Blender's
-    decoder menu draws, off the same reader."""
-    state = browser.state_of(context)
-    config = browser._active_config(state)
-    product = config.game_name if config is not None else ""
-    family = config.engine_family if config is not None else ""
-    found = list(browser._decoders_of(product))
-    if family and family.lower() != product.lower():
-        found = found + list(browser._decoders_of(family))
-    entries = []
-    for entry in found:
-        label = "{0} {1}".format(entry[0], entry[1])
-        if entry[2]:
-            label = "{0}  ·  {1}".format(label, entry[2])
-        entries.append({"text": label, "command": browser.SET_DECODER.id,
-                        "values": {"decoder_id": browser._decoder_id(entry)}})
-    entries.append({"text": "None (plain Unity build)",
-                    "command": browser.SET_DECODER.id, "values": {"decoder_id": ""}})
-    return entries
-
-
-def _quick_filter_entries(context):
-    """Include/Exclude x every field, for the row the list on screen has
-    selected -- whichever list that is."""
-    return filtering.quick_filter_menu_entries(context)

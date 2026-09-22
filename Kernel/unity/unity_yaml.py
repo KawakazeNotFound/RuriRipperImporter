@@ -206,7 +206,6 @@ def _parse_flow_scalar_until(text, pos, stop):
 def _parse_flow_quoted(text, pos):
     quote = text[pos]
     pos += 1
-    start = pos
     buf = []
     while pos < len(text):
         ch = text[pos]

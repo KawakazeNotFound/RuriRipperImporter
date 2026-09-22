@@ -290,42 +290,6 @@ def _clr_byte_array(data):
     return array
 
 
-def describe_humanoid_bones(avatar_document_json):
-    """{bone name: human slot name} for an avatar's human rig, empty for a generic one.
-
-    The slot vocabulary is Unity's own humanoid enum and the index chain that
-    resolves a slot to a real bone lives C#-side (RipperBlenderBridge.
-    DescribeHumanoidBones); restating either here would be a second declaration
-    of the same thing. Needs only the runtime -- no hook, no cabmap."""
-    _ensure_runtime()
-    flat = _bridge_type.DescribeHumanoidBones(str(avatar_document_json or ""))
-    pairs = [str(value) for value in flat]
-    return {pairs[i]: pairs[i + 1] for i in range(0, len(pairs) - 1, 2)}
-
-
-def solve_humanoid_clip(avatar_document_json, clip_meta_json, clip_float_curves):
-    """The Animator itself, as a call: RipperBlenderBridge.SolveHumanoidClip.
-
-    ``avatar_document_json`` is the armature's ruri_unity_avatar stamp (the
-    Avatar document tree, Unity's own field names); the clip crosses as its
-    float channels in the standard curve-blob wire form
-    (clip_curves.humanoid_float_blob). Returns None for a clip that carries no
-    muscle encoding, else (meta_json, curve_bytes, consumed_attributes,
-    solved_curve_count) with the solved transform curves readable by
-    clip_curves.ClipCurves.from_blob. A muscle clip with no/unsuitable avatar
-    raises -- the caller decides how loud to be.
-
-    Needs only the runtime (no Initialize/hook/cabmap): the solve is pure math
-    over what the caller hands in."""
-    _ensure_runtime()
-    dto = _bridge_type.SolveHumanoidClip(str(avatar_document_json or ""),
-                                         str(clip_meta_json), clip_float_curves)
-    if dto is None:
-        return None
-    return (str(dto.MetaJson), bytes(dto.Curves),
-            [str(a) for a in dto.ConsumedAttributes], int(dto.SolvedCurveCount))
-
-
 def _ensure_runtime():
     """Boot CoreCLR (once per host process -- it cannot be re-pointed or
     unloaded once set, whether that "once" was this call or an earlier
@@ -971,4 +935,3 @@ class RipperBridge:
         System.GC.Collect(2, System.GCCollectionMode.Aggressive, True, True)
         System.GC.WaitForPendingFinalizers()
         System.GC.Collect(2, System.GCCollectionMode.Aggressive, True, True)
-

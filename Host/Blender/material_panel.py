@@ -92,7 +92,7 @@ def _st_writer(stack, row):
 
 def _rig_armature(material):
     """这张材质挂在哪副骨架上。材质自己不知道 —— 得问用它的网格,而「选中的 mesh 修改器
-    指向谁」就是绑定本身(prefab_importer.armature_of 是全插件唯一那条规则)。
+    指向谁」就是绑定本身(rig_identity.armature_of 是全插件唯一那条规则)。
 
     记住的是骨架的**名字**,活对象每次现解。Python 手上的数据块引用会被删除对象、撤销、
     换文件整个作废,再碰是 `ReferenceError: StructRNA has been removed` 而不是 None ——
@@ -106,7 +106,7 @@ def _rig_armature(material):
         armature = bpy.data.objects.get(remembered)
         if armature is not None and armature.type == "ARMATURE":
             return armature
-    from . import prefab_importer
+    from . import rig_identity
 
     found = None
     for obj in bpy.data.objects:
@@ -114,7 +114,7 @@ def _rig_armature(material):
             continue
         if not any(slot is material for slot in obj.data.materials):
             continue
-        found = prefab_importer.armature_of(obj)
+        found = rig_identity.armature_of(obj)
         if found is not None:
             break
     _RIGS[key] = found.name if found is not None else ""

@@ -509,12 +509,14 @@ class Channel:
 
 
 class Clip:
-    __slots__ = ("key", "name", "skeleton", "meta", "curves", "_channels")
+    __slots__ = ("key", "name", "skeleton", "archive", "meta", "curves", "_channels")
 
     def __init__(self, row):
         self.key = row["clip"]
         self.name = row["name"]
         self.skeleton = row["skeleton"]
+        #: The archive the clip came out of, as the reader states it.
+        self.archive = row["cab"]
         self.meta = json.loads(row["meta"]) if row["meta"] else {}
         self.curves = row["curves"]
         self._channels = None

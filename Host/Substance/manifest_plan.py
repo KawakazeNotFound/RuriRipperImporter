@@ -133,13 +133,13 @@ def build_plan(name, guid, props, texture_exists, shader_named, face_basis=None)
     for prop, value in floats.items():
         if prop not in widget_of:
             continue
-        plan.uniforms[prop] = (unity_material._srgb_to_linear(float(value))
+        plan.uniforms[prop] = (unity_material.srgb_to_linear(float(value))
                                if prop in gamma_named else value)
     for prop, rgba in colors.items():
         if prop not in widget_of:
             continue
         if prop in gamma_named:
-            plan.uniforms[prop] = ([unity_material._srgb_to_linear(float(v)) for v in rgba[:3]]
+            plan.uniforms[prop] = ([unity_material.srgb_to_linear(float(v)) for v in rgba[:3]]
                                    + [float(v) for v in rgba[3:]])
         else:
             plan.uniforms[prop] = list(rgba)

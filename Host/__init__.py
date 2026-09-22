@@ -56,5 +56,5 @@ def detect():
 
 def load():
     """Import the detected driver package. Importing it binds it
-    (:func:`Kernel.capabilities.bind`); nothing else here does."""
+    (:func:`Kernel.host.bind`); nothing else here does."""
     return importlib.import_module("." + detect(), __name__)

@@ -8,9 +8,8 @@ through, so switching the application's language switches the roster with no
 reload of anything else.
 
 The list behaves like the bundle browser next door: type to filter, click to
-select, Load to bring it in. What "bring it in" MEANS is the host's
-(:meth:`Kernel.host.Host.import_packages`); this module's business ends at
-resolving the row to what the game says it is made of.
+select, Load to bring it in. A row's payload is its seed, so Load and Reveal are the
+kernel's own verbs and what a member IS is the hook's statement source.
 
 The tab's SHAPE -- the pane switch, the facet, the search row, the list, the
 shared buttons under it, the Anim and Face panes -- is the one every cast tab has
@@ -28,12 +27,12 @@ from ...Kernel import host as host_port
 from ...Kernel.app import cast_panel
 from ...Kernel.app import command, filtering
 from ...Kernel.app import layout as app_layout
-from ...Kernel.app import loading, schemas
+from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from . import cast, datasets
+from . import datasets
 
 STATE = "ruri_roster"
 BROWSER_STATE = "ruri_cabmap"
@@ -60,15 +59,6 @@ def state_of(context):
 
 def browser_of(context):
     return host_port.current().panel_state(context, BROWSER_STATE)
-
-
-def detail_level(context):
-    """Which detail level to load, as the ONE place that states it.
-
-    Not a setting of this tab: the same number decides what the bundle browser
-    imports and what a story unit stages, and three copies of it meant picking a
-    level here changed nothing there."""
-    return browser_of(context).detail_level
 
 
 def language(state):
@@ -100,12 +90,8 @@ def rebuild(state):
 # State
 # ---------------------------------------------------------------------------
 ROSTER = Schema("Roster", """What this game's cast tab remembers beyond the
-shared record: which language it read the names in, and whether Load brings the
-expression library with the model.""", (
+shared record: which language it read the names in.""", (
     Field("language", app_state.STRING, ""),
-    Field("load_expressions", app_state.BOOL, False, "Expressions",
-          "Also load this character's SkeletalMorph expression library. Off by "
-          "default: it is a separate, much larger asset family than the model"),
 ), include=(schemas.FILTER_STATE, schemas.LOADING_STATE, cast_panel.CAST_STATE))
 
 
@@ -119,37 +105,8 @@ FILTER_SPEC = filtering.register_spec(filtering.FilterSpec(
 
 
 # ---------------------------------------------------------------------------
-# What a row IS
+# What is asked of a row
 # ---------------------------------------------------------------------------
-def _member(entry):
-    """One picked row in the game's own identity words.
-
-    The kind is not a branch on behaviour: a playable character and an npc are two
-    answers to one question (``cast.resolve``), and a character's in-world actor
-    and the model its menus pose are two families of the same answer. Which one
-    this row gets is the game's own filing, carried on the row."""
-    kind = entry.cell("kind")
-    return {"key": entry.key, "label": entry.label,
-            "character": entry.key if kind in (CHARACTERS, UI_MODELS) else "",
-            "template": entry.key if kind == NPCS else "",
-            "family": datasets.UI_MODEL if kind == UI_MODELS else datasets.POST_MODEL}
-
-
-def _loadable(context, entry):
-    member = _member(entry)
-    return member, cast.resolve([member], detail_level(context)).get(member["key"] or "")
-
-
-def _seeds(context, state):
-    """What the picked one IS, as archive names -- what every shared button below
-    the list is asked of."""
-    entry = BOUND.picked(state)
-    if entry is None:
-        return []
-    _stated, packages = _loadable(context, entry)
-    return list(packages.cabs) if packages is not None else []
-
-
 def _animation_rules(context, state):
     """Where this one's animations live, as a query for the bundle browser.
 
@@ -209,80 +166,22 @@ def _refresh(context, arguments):
     return None
 
 
-def _load(context, arguments):
-    """What loading the selected one IS, as steps -- resolve, read, hand over."""
-    state = state_of(context)
-    entry = BOUND.picked(state)
-    if entry is None:
-        # Pressed with nothing picked: say so. A button that raises here reads as
-        # the add-on being broken rather than as "choose someone first".
-        return loading.Built(warnings=["Pick someone in the list first."])
-    member, packages = yield command.Read(lambda: _loadable(context, entry), 0.3)
-    if packages is None:
-        return loading.Built(warnings=[
-            "The game states no {0} for '{1}'.".format(
-                member["family"], entry.label or entry.key)])
-    resolved = yield command.Read(lambda: loading.resolve_closure(packages.cabs), 0.75)
-    yield command.Mark(0.85)
-    return host_port.current().import_packages(
-        context, packages, browser_of(context).as_options(), resolved=resolved)
-
-
-def _settle_load(context, built):
-    """The face library is a separate asset family, so it is a separate import --
-    offered only where there is a face to put it on."""
-    state = state_of(context)
-    if built is None or (built.armature is None and not built.imported):
-        return {"CANCELLED"}
-    if state.load_expressions and host_port.supports(host_port.MORPH_TARGETS):
-        from . import face
-        face.load_library_for(context, BOUND.picked(state),
-                              (built.manifest or {}).get("facial_morph", ""))
-    return {"FINISHED"}
-
-
-def _reveal(context, arguments):
-    """Open where the selected cast member lives, over in the bundle browser. The
-    query is the id the game itself keys that row by -- no path convention of ours
-    is involved."""
-    state = state_of(context)
-    entry = BOUND.picked(state)
-    if entry is None:
-        return {"CANCELLED"}
-    reveal = command.COMMANDS.get("ruri.cabmap_reveal")
-    kind = entry.cell("kind")
-    if kind in (CHARACTERS, UI_MODELS):
-        found = datasets.model_rows(
-            entry.key,
-            datasets.UI_MODEL if kind == UI_MODELS else datasets.POST_MODEL,
-            cast=CHARACTERS)
-        if found:
-            row = found[0]
-            return reveal.run(context, {"query": entry.key, "cab": row["cab"],
-                                        "folder": row["container"].rpartition("/")[0]})
-        return reveal.run(context, {"query": entry.key, "cab": "", "folder": ""})
-    # An npc's own name reaches no mesh at all (the meshes are named after the art
-    # family, not the template), so reveal the first mesh its slot table names.
-    _info, hits, _missing = cast.model_parts(entry.key, detail_level(context))
-    if hits:
-        cab, meshes = hits[0]
-        return reveal.run(context, {"query": meshes[0], "cab": cab, "folder": ""})
-    return reveal.run(context, {"query": entry.key, "cab": "", "folder": ""})
+def _load_expressions(context, arguments):
+    """Bring the picked one's SkeletalMorph expression library onto the rig in front of the
+    user: a separate, much larger asset family than the model, so its own verb."""
+    from . import face
+    return face.load_library_for(context, BOUND.picked(state_of(context)), "")
 
 
 REFRESH = command.COMMANDS.define(
     "ruri.roster_refresh", "Refresh Roster", _refresh,
     description="Read the character/npc roster out of the game's own data tables",
     poll=_loaded)
-LOAD = command.COMMANDS.define(
-    "ruri.roster_load", "Load Model", _load,
-    description="Import this one's model, exactly as the bundle browser would",
-    poll=_has_selection, steps=True, status_state=STATE, settle=_settle_load,
-    failure="Loading this one's model failed")
-REVEAL = command.COMMANDS.define(
-    "ruri.roster_reveal", "Open Containing Folder", _reveal,
-    description="Switch to the bundle browser and open where this one's assets live",
-    poll=lambda context: BOUND.picked(state_of(context)) is not None)
+LOAD_EXPRESSIONS = command.COMMANDS.define(
+    "ruri.roster_load_expressions", "Load Expressions", _load_expressions,
+    description="Load the picked one's SkeletalMorph expression library onto the rig in "
+                "front of you -- a separate, much larger asset family than the model",
+    icon="SHAPEKEY_DATA", poll=_has_selection, requires=host_port.MorphTargets)
 
 
 # ---------------------------------------------------------------------------
@@ -296,14 +195,6 @@ _COLUMNS = (
     BOUND.key_column("({0})", label="Id", width=0.5, enabled=False),
     BOUND.column("detail", label="Detail", align=app_layout.RIGHT),
 )
-
-
-def _options(layout, context, state):
-    """The one thing this game adds under its cast list. The expression library is
-    another asset family and another import, so it is a choice made before Load --
-    and only where there is a face to put it on."""
-    if host_port.supports(host_port.MORPH_TARGETS):
-        layout.prop(state, "load_expressions", toggle=True, icon="SHAPEKEY_DATA")
 
 
 def _draw_story(layout, context):
@@ -320,9 +211,8 @@ def _draw_library(layout, context):
 
 
 PANEL = cast_panel.Panel(
-    BOUND, _COLUMNS, "roster", REFRESH.id, state_of, STATE, seeds=_seeds,
-    animation_rules=_animation_rules, options=_options, actions=(LOAD.id, REVEAL.id),
-    facet=CHARACTERS,
+    BOUND, _COLUMNS, "roster", REFRESH.id, state_of, STATE,
+    animation_rules=_animation_rules, actions=(LOAD_EXPRESSIONS.id,), facet=CHARACTERS,
     # 这个游戏自己写下来的两份目录,与引擎自己答得出的那两份并列在同一格里 ——
     # 「统一」不是把它们摊平成一份,是它们在同一个地方,并说清各自出自哪儿。
     animations=(cast_panel.Source("story", "Story",

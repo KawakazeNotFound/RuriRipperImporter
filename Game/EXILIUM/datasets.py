@@ -18,10 +18,6 @@ from ...Kernel.bridge import cabmap_state
 LANGUAGE = "exilium.roster.language"
 CAST = "exilium.roster.cast"
 SCENES = "exilium.scene.list"
-SELECT = "exilium.asset.select"
-ROLE_MESHES = "exilium.model.meshes"
-CATALOGS = "exilium.catalog.catalogs"
-ARCHIVES = "exilium.vfs.archives"
 
 # The two casts the game publishes. A panel states WHICH cast it wants, never how
 # one is read.
@@ -55,21 +51,3 @@ def cast(language):
 def scenes():
     """Every scene the game ships, under the path its own catalog states."""
     return _table(SCENES)
-
-
-def role_meshes(asset_text):
-    """The meshes one character prefab wears, which its renderers do not carry:
-    (transform, path, name, lod, container, cab), already resolved against the
-    loaded map. Empty for a prefab that keeps no such list."""
-    return _rows(ROLE_MESHES, assetText=str(asset_text or ""))
-
-
-def cabs_for(addresses):
-    """The loaded map's rows for a batch of addresses. A row with an empty cab
-    means the catalog knows the address but this install carries nothing for it --
-    which is the difference between "the game has no such thing" and "you have not
-    downloaded it", and the panels say which."""
-    addresses = [str(address) for address in addresses if address]
-    if not addresses:
-        return []
-    return _rows(SELECT, address=addresses)

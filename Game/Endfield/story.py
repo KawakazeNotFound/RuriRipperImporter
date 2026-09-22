@@ -38,7 +38,6 @@ the unit speaks with the speaker and the emotion the face is driven to.
 
 from __future__ import annotations
 
-import re
 
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
@@ -63,8 +62,8 @@ def projection(name):
 
     Same rule as the generated shader stack (:mod:`Kernel.shaderstack`): the
     folder IS the host's name, so the join needs no table, and a host with no
-    projection has no folder -- which is exactly what the tab's ANIMATION
-    capability already keeps unreachable there. Playing a cutscene is a director,
+    projection has no folder -- which is exactly what the tab's Timeline
+    requirement already keeps unreachable there. Playing a cutscene is a director,
     not a thing a second host does differently."""
     import importlib
     return importlib.import_module("{0}.{1}.{2}".format(
@@ -811,46 +810,40 @@ def _goto_unit(context, arguments):
 
 
 def _reveal(context, arguments):
-    """Open where the open selection's animations live, over in the bundle browser.
-
-    The folder is the one the hook read off the game's own filing, never a path this
-    add-on invented."""
+    """Open where the open selection's animations live, over in the bundle browser: the
+    first checked clip's archive, else the first listed one's -- revealed the way any row is,
+    by its seed."""
     state = state_of(context)
-    opened = _opened(state)
     checked = _checked(state)
-    reveal = command.COMMANDS.get("ruri.cabmap_reveal")
     if checked:
-        container, cab = next(iter(checked.items()))
+        cab = next(iter(checked.values()))
     else:
         drawn = CLIPS.rows()
-        if not drawn:
-            return reveal.run(context, {"cab": "", "query": opened, "folder": ""})
-        container, cab = drawn[0]["container"], drawn[0]["cab"]
-    return reveal.run(context, {"cab": cab, "query": opened,
-                                "folder": container.rpartition("/")[0]})
+        cab = drawn[0]["cab"] if drawn else ""
+    return command.COMMANDS.get("ruri.reveal").run(context, {"seeds": cab, "panel": STATE})
 
 
 REFRESH = command.COMMANDS.define(
     "ruri.story_refresh", "Refresh Story List", _refresh,
     description="List the cutscenes / dialogue timelines the game ships animations "
                 "for, or everyone the story animates",
-    icon="FILE_REFRESH", requires=host_port.ANIMATION, poll=_loaded)
+    icon="FILE_REFRESH", requires=host_port.Timeline, poll=_loaded)
 SELECT = command.COMMANDS.define(
     "ruri.story_select", "Check Animations", _select,
     description="Check or uncheck the listed animations",
-    requires=host_port.ANIMATION, poll=_has_clips,
+    requires=host_port.Timeline, poll=_has_clips,
     arguments=(Field("mode", app_state.STRING, "ALL"),
                Field("kind", app_state.STRING, "")))
 IMPORT = command.COMMANDS.define(
     "ruri.story_import", "Import Checked Animations", _import_checked,
     description="Build the checked animations onto the rigs the game names -- the "
                 "actor's own where there is one",
-    icon="IMPORT", requires=host_port.ANIMATION, poll=_has_checked)
+    icon="IMPORT", requires=host_port.Timeline, poll=_has_checked)
 LOAD_UNIT = command.COMMANDS.define(
     "ruri.story_load_unit", "Load Whole Cutscene", _load_unit,
     description="Build this unit's performance: its cast, their animation, the camera "
                 "it films through and the lines it speaks -- then press play",
-    icon="SEQUENCE", requires=host_port.ANIMATION, poll=_has_unit, steps=True,
+    icon="SEQUENCE", requires=host_port.Timeline, poll=_has_unit, steps=True,
     status_state=STATE, failure="Building this unit's stage failed",
     arguments=(Field("play", app_state.BOOL, True, "Play when built",
                      "Start the story as soon as it is on stage, looking through the "
@@ -859,7 +852,7 @@ GOTO_UNIT = command.COMMANDS.define(
     "ruri.story_goto_unit", "Open This Story", _goto_unit,
     description="Switch to By Story and open the cutscene / dialogue this animation "
                 "belongs to",
-    icon="ZOOM_SELECTED", requires=host_port.ANIMATION, poll=_loaded,
+    icon="ZOOM_SELECTED", requires=host_port.Timeline, poll=_loaded,
     arguments=(Field("channel", app_state.STRING, ""),
                Field("unit", app_state.STRING, ""),
                Field("spoken", app_state.STRING, "")))
@@ -867,7 +860,7 @@ REVEAL = command.COMMANDS.define(
     "ruri.story_reveal", "Open Containing Folder", _reveal,
     description="Switch to the bundle browser and open the folder these animations "
                 "live in",
-    icon="FILE_FOLDER", requires=host_port.ANIMATION, poll=_has_opened)
+    icon="FILE_FOLDER", requires=host_port.Timeline, poll=_has_opened)
 
 
 def _opened(state):

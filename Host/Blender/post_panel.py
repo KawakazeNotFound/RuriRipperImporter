@@ -329,9 +329,9 @@ _CLASSES = (
 #: each with the capability that makes it mean anything. A host that answers none
 #: of them registers none, and the tab says so instead of standing empty.
 _SECTIONS = (
-    ("materials", "Materials", draw_materials_section, host_port.NODE_MATERIALS),
-    ("main_light", "Main light", draw_main_light_section, host_port.SCENE_GRAPH),
-    ("post_chain", "Post chain", draw_post_chain_section, host_port.COMPOSITOR),
+    ("materials", "Materials", draw_materials_section, host_port.NodeMaterials),
+    ("main_light", "Main light", draw_main_light_section, host_port.SceneGraph),
+    ("post_chain", "Post chain", draw_post_chain_section, host_port.Compositor),
 )
 
 

@@ -19,7 +19,6 @@ under its own handle and already cached by (id, args).
 from __future__ import annotations
 
 from ...Kernel.bridge import cabmap_state
-from ...Kernel.unity import class_registry
 
 MAPS = "endfield.scene.maps"
 LANDMARKS = "endfield.scene.landmarks"
@@ -30,15 +29,12 @@ PLACEMENT_MATERIALS = "endfield.scene.placement_materials"
 PLACEMENT_COUNTS = "endfield.scene.placement_counts"
 SEED_PATHS = "endfield.scene.seed_paths"
 NPC_PARTS = "endfield.npc.parts"
-NPC_MATERIALS = "endfield.npc.materials"
-NPC_MESHES = "endfield.npc.meshes"
 CHARACTER_MODELS = "endfield.character.models"
 LANGUAGE = "endfield.roster.language"
 CAST = "endfield.roster.cast"
 MODEL = "endfield.asset.model"
 PART = "endfield.asset.part"
 NAMED = "endfield.asset.named"
-RANK = "endfield.asset.rank"
 MODEL_ASSETS = "endfield.character.model_assets"
 ANIMATIONS = "endfield.character.animations"
 MORPH_LIBRARY = "endfield.morph.library"
@@ -57,7 +53,6 @@ UI_BINDINGS = "endfield.ui.bindings"
 STORY_UNITS = "endfield.story.units"
 STORY_CLIPS = "endfield.story.clips"
 STORY_ACTORS = "endfield.story.actors"
-STORY_TIMELINE_SHAPE = "endfield.story.timeline_shape"
 STORY_MISSIONS = "endfield.story.missions"
 STORY_QUESTS = "endfield.story.quests"
 STORY_LINES = "endfield.story.lines"
@@ -210,12 +205,6 @@ def story_stage(unit, variant="", language=""):
     Unity-shaped, so nothing on this side has to know what an ActivationTrack is;
     a directive is a word, and the stage builder has one function per word."""
     return _table(STORY_STAGE, unit=unit, variant=variant, language=language)
-
-
-def story_timeline_shape(unit, variant=""):
-    """What one unit's Timeline assets carry, field by field. Diagnostic: the
-    reader binds to field names, and this is how a drift in them is seen."""
-    return _table(STORY_TIMELINE_SHAPE, unit=unit, variant=variant)
 
 
 def story_actors(channel="", language=""):
@@ -400,50 +389,11 @@ def placements(map_name, min_x, min_z, max_x, max_z, scene_state_ids, detail_lev
         "stand_in_filtered": _int(count.get("standInFiltered", 0)),
         "no_renderers": _int(count.get("noRenderers", 0)),
         "distinct_assets": _int(count.get("distinctAssets", 0)),
+        "seed": str(count.get("seed", "")),
     }
 
 
 # ── resolving a name to the rows that hold it ───────────────────────────────
-
-def _selection(dataset_id, **args):
-    """Rows of one selection dataset, in the game's own preference order. Every
-    row is (cab, container, lod_rank, variant) -- the CAB an import seeds with,
-    the addressable path it resolved to, and the two facts the game states about
-    a path: which detail level it is, and whether it is the skinned variant."""
-    return [{"cab": row["cab"], "container": row["container"],
-             "lod_rank": _int(row["lodRank"]), "variant": bool(_int(row["variant"]))}
-            for row in _rows(dataset_id, **args)]
-
-
-def model_rows(name, family, cast=""):
-    """The rows of the prefab named ``<name>_<family>`` exactly."""
-    return _selection(MODEL, name=name, family=family, cast=cast)
-
-
-def part_rows(part, cast=""):
-    """One assembled part's rows -- prefab where the game ships one, else the
-    authored skinned mesh, else its material-variant family's shared mesh."""
-    return _selection(PART, part=part, cast=cast)
-
-
-def named_rows(stem):
-    """Every row whose asset leaf IS this name, any extension."""
-    return _selection(NAMED, stem=stem)
-
-
-def ranked(names):
-    """{name: {mesh_name, stem, extension, lod_rank, family_stem, is_prefab}} for a
-    batch of asset paths or mesh names. One crossing for the whole batch: these
-    are the game's naming conventions, and a per-name call inside an import loop
-    would be a round trip per placement."""
-    names = [str(name) for name in names]
-    if not names:
-        return {}
-    return {row["name"]: {"mesh_name": row["meshName"], "stem": row["stem"],
-                          "lod_rank": _int(row["lodRank"]), "family_stem": row["familyStem"],
-                          "is_prefab": bool(_int(row["isPrefab"]))}
-            for row in _rows(RANK, name=names)}
-
 
 def character_model_cabs():
     """The CABs holding the game's own per-character data assets."""
@@ -596,37 +546,6 @@ def npc_parts(template_id):
         "avatar_mesh": first.get("avatarMesh", ""),
         "parts": [row["part"] for row in rows],
     }
-
-
-def npc_meshes(cabs):
-    """{part slot: {detail level: [{name, path}]}} for one avatar-mesh family.
-
-    A template's part names are SLOT names in this table, not asset names -- which
-    mesh a slot wears, and WHERE that mesh lives, are stated here and nowhere else.
-    The slot's own meshPathHash resolves through the game's addressable hash table
-    to the container path, so nothing has to be matched by name: the mesh an npc
-    wears is routinely a sub-asset of a shared fbx, or a baked mesh under a
-    generated/ tree, neither of which carries its own name anywhere findable."""
-    texts = _mono_behaviour_texts(cabs)
-    if not texts:
-        return {}
-    slots = {}
-    for row in _rows(NPC_MESHES, assetText=texts):
-        levels = slots.setdefault(str(row["part"]), {})
-        levels.setdefault(_int(row["lod"]), []).append(
-            {"name": str(row["mesh"]), "path": str(row["path"])})
-    return slots
-
-
-def npc_materials(template_id, cabs):
-    """{mesh name: [material container path]} for one template."""
-    assigned = {}
-    for text in _mono_behaviour_texts(cabs):
-        for row in _rows(NPC_MATERIALS, template=template_id, assetText=text):
-            assigned.setdefault(str(row["mesh"]).lower(), []).append(row["material"])
-        if assigned:
-            break
-    return assigned
 
 
 def character_models(cabs):

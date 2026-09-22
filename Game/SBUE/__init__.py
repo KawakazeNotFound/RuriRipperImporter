@@ -52,34 +52,6 @@ def _read_all_shaders(output):
     return datasets.all_shaders(output)
 
 
-def _import_packages(context, packages, options):
-    """Every package built from what the decoder states it holds.
-
-    An Unreal build is read directly: placements, geometry, materials, texture pixels and
-    animation curves all cross as data, so nothing here creates a Unity asset or parses text.
-
-    Reading is this module's (``read.package``); BUILDING is the host's one import
-    entry. That split is the whole reason an Unreal actor can reach a second host at
-    all -- what comes out of the decoder is already the normalised forms both
-    builders take.
-    """
-    from ...Kernel import host as host_port
-    from . import read
-    host = host_port.current()
-    built = 0
-    for package in dict.fromkeys(packages):
-        stated = read.package(package, package, options)
-        if stated is None:
-            # Placing nothing is not holding nothing: a sequence is something a
-            # thing DOES, so the build files it apart from the things it places.
-            # Reporting "built nothing" here is what made every animation row in
-            # the browser a button that did nothing at all.
-            built += host.import_performance(context, package, options)
-            continue
-        built += host.import_packages(context, stated, options).imported
-    return built
-
-
 def _register():
     _LOADED[:] = [importlib.import_module("." + one.id, __name__)
                   for one in SECTIONS if one.available]
@@ -109,7 +81,6 @@ GAME_MODULE = GameModule(
                 "Every character the install ships, picked by name and imported whole",
                 ("characters", "draw")),
     ),
-    importer=_import_packages,
     shaders=lambda packages, output: _read_shaders(packages, output),
     all_shaders=lambda output: _read_all_shaders(output),
     settings_schema=datasets.SETTINGS_SCHEMA,

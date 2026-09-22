@@ -8,10 +8,9 @@ enemies, the summons -- each already resolved to the address the catalog knows i
 by.
 
 The list behaves like the bundle browser next door: type to filter, click to
-select, Load to bring it in, and one button reveals where the selection lives over
-in that browser. Loading is deliberately not its own importer: it resolves the
-row's own address to the CABs the loaded map holds, puts them in the browser's own
-selection and runs the browser's own import, so a fix there is a fix here.
+select, and Load and Reveal are the kernel's verbs over the row's payload -- its
+seed, which the hook's statement source reads as the archives the address spans and
+the meshes its renderers are filled with at run time.
 
 Nothing here imports a host.
 """
@@ -28,7 +27,7 @@ from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from . import datasets, mesh_resolver
+from . import datasets
 
 STATE = "ruri_exilium_roster"
 SPEC_KEY = "EXILIUM:character"
@@ -120,87 +119,6 @@ def _refresh(context, arguments):
     return None
 
 
-def archives_for(address):
-    """Which archives one catalog address IS.
-
-    This title addresses everything by a catalog ADDRESS, and which archives one
-    address lives in is the hook's own join. A character's renderers carry no mesh
-    of their own and the meshes its list names live in OTHER archives, so a prefab
-    reaches those too -- or a closure resolved from it has nothing for the resolver
-    to find (see mesh_resolver). Stated once: Load seeds with this, and so does
-    every question the shared buttons ask about a row."""
-    cabs = [row["cab"] for row in datasets.cabs_for([address]) if row["cab"]]
-    if not cabs or not str(address).lower().endswith(".prefab"):
-        return cabs
-    return list(mesh_resolver.seeds_for(address, cabs, _asset_name(address)))
-
-
-def _asset_name(address):
-    """The asset an address names, by the game's own leaf. This game builds every
-    asset under its GUID, so the exported file is named after the asset itself and
-    the leaf of the address is the one thing both sides agree on."""
-    leaf = str(address).replace("\\", "/").rsplit("/", 1)[-1]
-    return leaf.rsplit(".", 1)[0]
-
-
-def load_address(context, address, label):
-    """Put whatever one address resolves to in the browser's own selection and run
-    its own import, as steps.
-
-    Shared by both tabs, because "load this one thing" is the same act whether the
-    thing is a model or a scene."""
-    state = state_of(context)
-    if not address:
-        state.status = "'{0}' has no address in the game's own catalog.".format(label)
-        return
-    found = yield command.Read(lambda: datasets.cabs_for([address]), 0.2)
-    cabs = [row["cab"] for row in found if row["cab"]]
-    if not cabs:
-        known = any(row["container"] for row in found)
-        state.status = (
-            "'{0}' is in the catalog but this install carries no archive for it -- "
-            "download it in the game first.".format(label) if known else
-            "'{0}' is not in this install's catalog.".format(label))
-        return
-    name = _asset_name(address)
-    seeds = archives_for(address)
-    cabmap_state.clear_selection()
-    for cab in seeds:
-        cabmap_state.SELECTED_CABS.add(cab)
-    # This game pools dozens of unrelated archives into one file, so one cab's
-    # resolved closure exports over a thousand roots that have nothing to do with
-    # what was asked for -- loading one character used to bring in a scene's worth
-    # of strangers. The address named exactly one asset, so name it to the import.
-    yield from app_browser.IMPORT_SELECTED.run(
-        context, {"reset_scene": False, "only_root_names": name})
-    state.status = "Loaded '{0}' from {1} cab(s).".format(label, len(cabs))
-
-
-def _load(context, arguments):
-    entry = BOUND.picked(state_of(context))
-    if entry is None:
-        return
-    yield from load_address(context, entry.payload, entry.label)
-
-
-def reveal_address(context, address, fallback):
-    """Reveal what one address resolves to. The query is the asset the GAME's own
-    catalog named, never a path this add-on invented."""
-    reveal = command.COMMANDS.get("ruri.cabmap_reveal")
-    for row in (datasets.cabs_for([address]) if address else []):
-        if row["cab"]:
-            return reveal.run(context, {"query": row["container"], "cab": row["cab"],
-                                        "folder": ""})
-    return reveal.run(context, {"query": fallback, "cab": "", "folder": ""})
-
-
-def _reveal(context, arguments):
-    entry = BOUND.picked(state_of(context))
-    if entry is None:
-        return {"CANCELLED"}
-    return reveal_address(context, entry.payload, entry.key)
-
-
 def _outfits(context, arguments):
     """List the selected character's own models, in the Models pane."""
     state = state_of(context)
@@ -239,15 +157,6 @@ REFRESH = command.COMMANDS.define(
     "ruri.exilium_roster_refresh", "Refresh Roster", _refresh,
     description="Read the cast out of the game's own config tables",
     icon="FILE_REFRESH", poll=_loaded)
-LOAD = command.COMMANDS.define(
-    "ruri.exilium_roster_load", "Load Model", _load,
-    description="Import this one's model, exactly as the bundle browser would",
-    icon="IMPORT", poll=_has_selection, steps=True, status_state=STATE,
-    failure="Loading this one's model failed")
-REVEAL = command.COMMANDS.define(
-    "ruri.exilium_roster_reveal", "Open Containing Folder", _reveal,
-    description="Switch to the bundle browser and open where this one's assets live",
-    icon="FILE_FOLDER", poll=_has_selection)
 OUTFITS = command.COMMANDS.define(
     "ruri.exilium_roster_outfits", "Show Outfits", _outfits,
     description="Switch to the Models pane and list only the models this one wears",
@@ -273,17 +182,9 @@ _GROUP_COLUMN = BOUND.column("", icon="OUTLINER_COLLECTION")
 
 
 
-def _seeds(_context, state):
-    """What the picked one IS, as archive names -- the same set Load seeds with, so
-    what the shared buttons read about a row is what loading that row would read."""
-    entry = BOUND.picked(state)
-    return [] if entry is None or not entry.payload else archives_for(entry.payload)
-
-
 PANEL = cast_panel.Panel(
-    BOUND, _COLUMNS, "exilium_roster", REFRESH.id, state_of, STATE, seeds=_seeds,
-    group_column=_GROUP_COLUMN, actions=(LOAD.id, REVEAL.id, OUTFITS.id),
-    facet=CHARACTERS)
+    BOUND, _COLUMNS, "exilium_roster", REFRESH.id, state_of, STATE,
+    group_column=_GROUP_COLUMN, actions=(OUTFITS.id,), facet=CHARACTERS)
 
 
 def draw(layout, context):

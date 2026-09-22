@@ -36,7 +36,6 @@ _KIND_DIMENSIONS = {"pos": 3, "rot": 4, "scale": 3, "euler": 3, "float": 1}
 # raises ValueError -- this is the ONLY clip parser, so a Unity format change
 # fails loudly instead of importing a silently wrong curve.
 
-_NUMBER = r"([^\s,}]+)"
 # A section runs until the NEXT top-level "  m_Xxx:" key -- list entries
 # ("  - curve:") also sit at 2-space indent, so the terminator must match the
 # key shape specifically, not just any non-space at column 2 (grounded against
@@ -48,7 +47,6 @@ _SECTION_KINDS = {"m_RotationCurves": ("rot", 4), "m_PositionCurves": ("pos", 3)
                   "m_ScaleCurves": ("scale", 3), "m_EulerCurves": ("euler", 3),
                   "m_FloatCurves": ("float", 1)}
 _ENTRY_SPLIT = re.compile(r"^  - curve:", re.M)
-_KEYFRAME_COUNT = re.compile(r"- serializedVersion: \d+")
 
 
 def _keyframe_pattern(dimensions):
@@ -375,47 +373,3 @@ class ClipCurves:
 # the Animator itself, as a call). What crosses is the SAME curve-blob layout as
 # from_blob, in both directions: float channels out, solved transform curves
 # back. These two functions are the Python half of that wire.
-
-def humanoid_float_blob(clip):
-    """The clip's float channels (blendshape channels excluded -- never muscle
-    data, routinely thousands of curves) as a (meta_json, payload_bytes) curve
-    blob for the C# humanoid solve. Which of them ARE muscle channels is the
-    solver's own knowledge; everything else rides along and is ignored there."""
-    entries = []
-    parts = []
-    offset = 0
-    for channel in clip.floats:
-        attribute = channel.attribute or ""
-        if attribute.startswith("blendShape."):
-            continue
-        key_count = int(len(channel.times))
-        if key_count == 0:
-            continue
-        entries.append({"kind": "float", "path": channel.path or "", "attr": attribute,
-                        "classId": int(channel.class_id), "keys": key_count, "off": offset})
-        parts.extend((np.ascontiguousarray(channel.times, dtype=np.float32),
-                      np.ascontiguousarray(channel.values, dtype=np.float32).reshape(-1),
-                      np.ascontiguousarray(channel.in_slopes, dtype=np.float32).reshape(-1),
-                      np.ascontiguousarray(channel.out_slopes, dtype=np.float32).reshape(-1)))
-        offset += 4 * key_count
-    meta = {"name": clip.name, "sampleRate": clip.sample_rate,
-            "startTime": clip.start_time, "stopTime": clip.stop_time,
-            "keepPositionXZ": clip.keep_position_xz, "keepPositionY": clip.keep_position_y,
-            "keepOrientation": clip.keep_orientation, "curves": entries}
-    payload = np.concatenate(parts) if parts else np.empty(0, dtype=np.float32)
-    return json.dumps(meta, separators=(",", ":")), payload.tobytes()
-
-
-def merge_solved(clip, solved, consumed_attributes):
-    """Fold a solve result back into ``clip``, in place, with the exact
-    semantics the C# in-place converter applies to a typed clip: a solved curve
-    OWNS its path (any existing rotation/position curve on that path is
-    replaced -- muscle curves are the humanoid bones' authoritative encoding),
-    and the float channels the solve consumed are dropped."""
-    consumed = set(consumed_attributes)
-    clip.floats = [channel for channel in clip.floats if channel.attribute not in consumed]
-    for existing, incoming in ((clip.rotations, solved.rotations),
-                               (clip.positions, solved.positions)):
-        solved_paths = {channel.path for channel in incoming}
-        existing[:] = [channel for channel in existing if channel.path not in solved_paths]
-        existing.extend(incoming)

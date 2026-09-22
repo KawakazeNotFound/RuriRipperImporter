@@ -52,9 +52,9 @@ from .. import GameModule, GameSection, GameTab
 SECTIONS = (
     GameSection("roster"),
     GameSection("scene"),
-    GameSection("ui_scene", host_port.SCENE_GRAPH),
-    GameSection("story", host_port.ANIMATION),
-    GameSection("face", host_port.MORPH_TARGETS),
+    GameSection("ui_scene", host_port.SceneGraph),
+    GameSection("story", host_port.Timeline),
+    GameSection("face", host_port.MorphTargets),
 )
 
 _LOADED = []
@@ -100,7 +100,7 @@ GAME_MODULE = GameModule(
         # A scene window is hundreds of separate placements with their own
         # transforms, which every host can hold: as many objects where there is a
         # scene, as one glTF whose nodes share their meshes where the project IS a
-        # file. What the window is gets stated once (loading.SCENE_WINDOW) and
+        # file. What the window is gets stated once, by the hook, as its seed, and
         # built by whichever host is there. The one half that does NOT cross is
         # the display stage, and it says so inside the tab.
         GameTab("streamingscene", "StreamingScene",

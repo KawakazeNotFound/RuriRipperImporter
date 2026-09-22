@@ -26,6 +26,10 @@ from mathutils import Matrix, Quaternion, Vector
 from ...Kernel import statement as kernel_statement
 from . import derived_state, material_builder, rig_identity
 
+#: The custom property a placed object carries its stated tag under, so a camera
+#: the game tagged is found again by what the game called it.
+TAG = "unity_tag"
+
 #: Cosmetic bone length for a bone with no child to point at.
 _DEFAULT_BONE_LENGTH = 0.03
 _MAX_BONE_LENGTH = 0.3
@@ -241,11 +245,6 @@ class _Materialisation:
         rig_identity.stamp(rig, rests)
         rig_identity.stamp_avatar(rig, skeleton.avatar)
         rig_identity.stamp_source(rig, self.options.get("source_game", ""))
-        # The FIRST seed, not all of them: a later question about this character is
-        # asked about one thing, and a selection that built one rig out of several
-        # seeds put the character first and its wardrobe after it.
-        seeds = list(self.statement.seeds)
-        rig_identity.stamp_seed(rig, seeds[0] if seeds else "")
 
     def _group_humanoid(self, rig, skeleton, names):
         """Sort a humanoid rig's bones into bone collections, as the avatar states
@@ -302,6 +301,8 @@ class _Materialisation:
             made.parent = parent
             made.matrix_parent_inverse = Matrix.Identity(4)
         made.matrix_basis = local
+        if node.tag:
+            made[TAG] = node.tag
         self._apply_morphs(made, node.mesh)
         self.built[node.index] = made
         self.objects.append(made)

@@ -52,17 +52,17 @@ def cast():
     return cabmap_state.BRIDGE.game_data(CHARACTERS)
 
 
-def shaders(packages, output):
-    """Decompile every shader variant the stated packages compiled to, into ``output``.
+def shaders(seeds, output):
+    """Decompile every shader variant the stated seeds compiled to, into ``output``.
     One row per archive that carried them. Each package answers as whatever it is -- a
     material for itself, a mesh or an actor for every material it names, an effect for
     its own scripts. Unreal ships no shader asset -- a material's program is blobs in a
     shared archive -- so what lands on disk is the vertex and pixel stages as source,
     one file per variant."""
-    wanted = [str(one) for one in packages if one]
+    wanted = [str(one) for one in seeds if one]
     if cabmap_state.BRIDGE is None or not wanted or not output:
         return []
-    return _rows(SHADERS, packages=wanted, output=output)
+    return _rows(SHADERS, seed=wanted, output=output)
 
 
 def all_shaders(output):

@@ -13,10 +13,10 @@ of a name:
            really is.
 
 Both lists filter through the same C# engine every other list here uses, and both
-hand what they picked to the host's ONE import entry -- as a single statement, not
-one call per package: a window is twenty cells of one world, and reading it as one
-thing is what lets a mesh two cells share be decoded once and lets a host whose
-project IS one file get a window rather than twenty projects.
+hand what they picked to the kernel's ONE load as seeds -- a window's cells as one
+selection, not one load per package: a window is twenty cells of one world, and
+reading it as one thing is what lets a mesh two cells share be decoded once and lets
+a host whose project IS one file get a window rather than twenty projects.
 
 Nothing is cut or matched on this side: the window and the hierarchical level go to
 the decoder as dataset arguments, so the cells are cut where they are read, and the
@@ -29,14 +29,14 @@ from __future__ import annotations
 
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
-from ...Kernel.app import command, filtering
+from ...Kernel.app import cast_panel, command, filtering
 from ...Kernel.app import layout as app_layout
 from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from . import datasets, read
+from . import datasets
 
 TAB_KEY = "UnrealEngine:scene"
 STATE = "ruri_unreal_levels"
@@ -260,16 +260,8 @@ def _loaded(context):
     return app_browser.state_of(context).loaded and cabmap_state.BRIDGE is not None
 
 
-def _has_level(context):
-    return _loaded(context) and selected(state_of(context)) is not None
-
-
 def _has_world(context):
     return _loaded(context) and bool(world_state_of(context).world)
-
-
-def _has_cells(context):
-    return _loaded(context) and bool(CELL_BOUND.count)
 
 
 def _refresh(context, arguments):
@@ -310,49 +302,6 @@ def _read_cells(context, arguments):
     return None
 
 
-def _import(context, state, packages, what):
-    """Read every picked package as ONE placement statement and hand it to the
-    host's one import entry -- the same road the browser's own rows take."""
-    browser = app_browser.state_of(context)
-    blocked = app_browser._blocking_required_options(
-        app_browser._ensure_active_config(browser))
-    if blocked:
-        state.status = blocked
-        return
-    packages = list(dict.fromkeys(name for name in packages if name))
-    if not packages:
-        state.status = "Nothing selected."
-        return
-    options = app_browser.as_options(browser, scene=True)
-    label = packages[0] if len(packages) == 1 else "{0} ({1} {2}s)".format(
-        _CELLS["world"] or packages[0], len(packages), what)
-    stated = yield command.Read(lambda: read.packages(packages, label, options), 0.7)
-    if stated is None:
-        state.status = "The {0} {1} package(s) place nothing this install carries.".format(
-            len(packages), what)
-        return
-    yield command.Mark(0.8)
-    built = host_port.current().import_packages(context, stated, options)
-    state.status = "{0}: {1} placement(s) from {2} package(s). {3}".format(
-        label, built.imported, len(packages), "  ".join(built.warnings[:2]))
-
-
-def _import_level(context, arguments):
-    state = state_of(context)
-    entry = selected(state)
-    yield from _import(context, state, [entry.key if entry else ""], "level")
-
-
-def _import_window(context, arguments):
-    state = world_state_of(context)
-    yield from _import(context, state, CELL_BOUND.keys(), "cell")
-
-
-def _import_world(context, arguments):
-    state = world_state_of(context)
-    yield from _import(context, state, [state.world], "world")
-
-
 REFRESH = command.COMMANDS.define(
     "ruri.unreal_worlds_refresh", "Refresh", _refresh,
     description="Re-read the worlds this install ships off the decoder",
@@ -361,23 +310,6 @@ READ_CELLS = command.COMMANDS.define(
     "ruri.unreal_cells_read", "Read Cells", _read_cells,
     description="Read the picked world's streaming cells, cut to the size and level stated",
     icon="VIEWZOOM", internal=True, poll=_has_world)
-IMPORT_LEVEL = command.COMMANDS.define(
-    "ruri.unreal_level_import", "Import Level", _import_level,
-    description="Import this level whole: its actors at their places, as the browser would",
-    icon="IMPORT", poll=_has_level, steps=True, status_state=STATE,
-    failure="Unreal level import failed")
-IMPORT_WINDOW = command.COMMANDS.define(
-    "ruri.unreal_window_import", "Import Window", _import_window,
-    description="Import every cell listed below, as one window with its actors at their "
-                "world places",
-    icon="IMPORT", poll=_has_cells, steps=True, status_state=WORLD_STATE,
-    failure="Unreal window import failed")
-IMPORT_WORLD = command.COMMANDS.define(
-    "ruri.unreal_world_import", "Import World Package", _import_world,
-    description="Import the world's own package: the persistent level the cook folded its "
-                "always-loaded actors into",
-    icon="IMPORT", poll=_has_world, steps=True, status_state=WORLD_STATE,
-    failure="Unreal world import failed")
 
 
 # ---------------------------------------------------------------------------
@@ -423,8 +355,10 @@ def _draw_self_contained(layout, context):
     app_view.draw_list(LEVEL_BOUND, layout, state, _LEVEL_COLUMNS, "unreal_levels")
     app_browser.draw_import_options(layout, context)
     tail = layout.column(align=True)
-    tail.enabled = selected(state) is not None
-    tail.operator(IMPORT_LEVEL.id, icon="IMPORT")
+    entry = selected(state)
+    tail.enabled = entry is not None
+    cast_panel.draw_row_verbs(tail, [entry.payload] if entry is not None and entry.payload else [],
+                              STATE, scene=True)
 
 
 def _draw_streaming(layout, context):
@@ -451,7 +385,8 @@ def _draw_streaming(layout, context):
     if rect is None:
         box.label(text="It states no ground of its own -- import its package whole.",
                   icon="INFO")
-        box.operator(IMPORT_WORLD.id, icon="IMPORT")
+        cast_panel.draw_load(box, [state.world], WORLD_STATE, text="Import World Package",
+                             scene=True)
         return
     box.label(text="{0:.0f} x {1:.0f} m whole".format(
         _metres(rect[2] - rect[0]), _metres(rect[3] - rect[1])))
@@ -482,8 +417,9 @@ def _draw_streaming(layout, context):
     app_browser.draw_import_options(layout, context)
     tail = layout.column(align=True)
     tail.enabled = bool(CELL_BOUND.count)
-    tail.operator(IMPORT_WINDOW.id, icon="IMPORT")
-    layout.operator(IMPORT_WORLD.id, icon="IMPORT")
+    cast_panel.draw_load(tail, CELL_BOUND.keys(), WORLD_STATE, text="Import Window", scene=True)
+    cast_panel.draw_load(layout, [state.world], WORLD_STATE, text="Import World Package",
+                         scene=True)
 
 
 _KIND_DRAW = {LEVEL: _draw_self_contained, WORLD: _draw_streaming}

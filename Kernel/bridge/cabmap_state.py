@@ -30,6 +30,8 @@ constant it needs (SEARCH_DEBOUNCE_SECONDS) and the work it triggers
 
 from __future__ import annotations
 
+import os
+
 from . import pythonnet_bridge
 
 # Holds the loaded cabmaps (each a multi-second load) and the live bridge session,
@@ -69,7 +71,7 @@ class GameSession:
     selected by. One title installed twice is two keys and one game."""
 
     __slots__ = ("key", "game", "ROWS", "VISIBLE", "CURRENT_DIR", "CURRENT_SUBFOLDERS",
-                 "SELECTED_CABS", "SELECT_ANCHOR", "ANIMATION_BUILD_STATE",
+                 "SELECTED_CABS", "SELECT_ANCHOR",
                  "_CAB_INDEX", "_sort_column", "_sort_dir", "_active_rules")
 
     def __init__(self, key, game=""):
@@ -81,7 +83,6 @@ class GameSession:
         self.CURRENT_SUBFOLDERS = []  # list[(name, recursive_file_count)] -- CURRENT_DIR's child folders, alpha-sorted
         self.SELECTED_CABS = set()    # cab keys of every selected row
         self.SELECT_ANCHOR = None     # ROWS index of the last plainly-clicked row (Shift range anchor)
-        self.ANIMATION_BUILD_STATE = None  # animation-build handover dict | None (see below)
         self._CAB_INDEX = None        # lazily built cab -> row id (see _cab_index)
         self._sort_column = "name"
         self._sort_dir = 0            # 0 = unsorted (load order), 1 = ascending, 2 = descending
@@ -170,19 +171,13 @@ def active_game():
     return ACTIVE.game if ACTIVE is not None else ""
 
 
-def game_of(key):
-    """The decoder game of one install's session, "" when it has none."""
-    session = SESSIONS.get(key)
-    return session.game if session is not None else ""
-
-
 # The names that are a VIEW onto ACTIVE rather than real module attributes.
 # __getattr__ (PEP 562, only called on a normal-lookup miss) resolves each read
 # to the live session; writes to SELECT_ANCHOR go through set_select_anchor. None
 # of these is ever assigned at module scope -- doing so would shadow the proxy.
 _SESSION_FIELDS = frozenset({
     "ROWS", "VISIBLE", "CURRENT_DIR", "CURRENT_SUBFOLDERS",
-    "SELECTED_CABS", "SELECT_ANCHOR", "ANIMATION_BUILD_STATE",
+    "SELECTED_CABS", "SELECT_ANCHOR",
     "_CAB_INDEX", "_sort_column", "_sort_dir", "_active_rules",
 })
 
@@ -290,8 +285,8 @@ class Rule:
 
 
 def reset():
-    """Reset the ACTIVE session back to empty (its rows, folder tree, selection,
-    sort and animation handover). Only the current session -- the other games'
+    """Reset the ACTIVE session back to empty (its rows, folder tree, selection
+    and sort). Only the current session -- the other games'
     sessions and the process-wide BRIDGE are left alone, matching HOLDS_PROCESS_STATE:
     a reset is "clear what I'm looking at", not "throw away the CLR runtime and every
     loaded cabmap"."""
@@ -302,7 +297,6 @@ def reset():
     ACTIVE.CURRENT_DIR = ()
     ACTIVE.CURRENT_SUBFOLDERS = []
     clear_selection()
-    clear_animation_build_state()
 
 
 def ensure_bridge(decoder_id, game_root, source_options=None):
@@ -327,75 +321,6 @@ def ensure_bridge(decoder_id, game_root, source_options=None):
           or BRIDGE.source_options != options):
         BRIDGE.reinitialize(decoder_id, game_root, options)
     return BRIDGE
-
-
-# --- Animation browser build context ----------------------------------------
-# An animation browser only DISCOVERS which CABs in the selected row's
-# dependency closure are AnimationClip-classed -- pure in-memory cabmap metadata
-# (ResolveClosureCabNames + each CAB's already-loaded TypeNames), no VFS
-# decrypt, no AssetRipper export, no db. Actually building an action is deferred
-# until the user checks specific clips and asks for them. That later build needs
-# a real skeleton to attach onto AND a real db (guid-keyed resolved closure) to
-# translate a checked clip's CAB name into its actual guid; two paths lead
-# there:
-#   - the character was already fully imported -- set_animation_build_state
-#     records the REAL post-build fields immediately (db/arm_name/maps/
-#     path_to_meshobjects all present).
-#   - only clip DISCOVERY (cheap, no import_cabs call at all) has run so far --
-#     the state has no db/skeleton yet, just enough to resolve them lazily
-#     (seed_cabs + options) the first time the user actually asks to attach a
-#     clip (mark_animation_build_done fills in the real fields once that
-#     happens). Keyed to a single character at a time: discovering/importing a
-#     different one replaces this outright.
-#
-# The values are opaque here on purpose -- ``arm_name`` and
-# ``path_to_meshobjects`` mean whatever the host's own builder put in them.
-# This module only guarantees the handover survives between the two clicks. It
-# rides on the active session, so each game's in-progress animation build is its
-# own.
-
-
-def set_animation_build_state(db, arm_name, maps, path_to_meshobjects):
-    """A character was just FULLY imported (mesh/skeleton/materials already
-    built) -- record its real post-build fields immediately."""
-    ACTIVE.ANIMATION_BUILD_STATE = {
-        "db": db,
-        "arm_name": arm_name,
-        "maps": maps,
-        "path_to_meshobjects": path_to_meshobjects,
-        "seed_cabs": [],
-        "options": None,
-    }
-
-
-def set_animation_discovery_state(seed_cabs, options, carry=None):
-    """A cheap CAB-level clip discovery happened -- db stays None until the seeds are
-    actually exported. ``carry`` is a previous build state whose armature the CALLER
-    verified is still alive: the character it built survives discovery instead of being
-    forgotten and rebuilt on the next import."""
-    ACTIVE.ANIMATION_BUILD_STATE = {
-        "db": None,
-        "arm_name": carry["arm_name"] if carry else None,
-        "maps": carry["maps"] if carry else None,
-        "path_to_meshobjects": carry["path_to_meshobjects"] if carry else None,
-        "seed_cabs": list(seed_cabs),
-        "options": options,
-    }
-
-
-def mark_animation_build_done(db, arm_name, maps, path_to_meshobjects):
-    """Fill in the real post-build fields once the lazy full import has actually
-    happened, so a second click attaches more clips to the SAME armature instead
-    of re-importing."""
-    if ACTIVE.ANIMATION_BUILD_STATE is not None:
-        ACTIVE.ANIMATION_BUILD_STATE["db"] = db
-        ACTIVE.ANIMATION_BUILD_STATE["arm_name"] = arm_name
-        ACTIVE.ANIMATION_BUILD_STATE["maps"] = maps
-        ACTIVE.ANIMATION_BUILD_STATE["path_to_meshobjects"] = path_to_meshobjects
-
-
-def clear_animation_build_state():
-    ACTIVE.ANIMATION_BUILD_STATE = None
 
 
 def load_rows(preferred_dir=()):
@@ -556,11 +481,6 @@ def reapply_filter(query):
     refresh_visible(query, ACTIVE._active_rules)
 
 
-def active_rules():
-    """The rule set the current VISIBLE was computed with."""
-    return ACTIVE._active_rules
-
-
 def _apply_sort():
     if ACTIVE._sort_dir == 0:
         ACTIVE.VISIBLE.sort()  # back to load order
@@ -595,3 +515,44 @@ def display_window():
     back 500. The count comes back separately so the UI can say so honestly."""
     capped = ACTIVE.VISIBLE[:DISPLAY_CAP]
     return len(ACTIVE.VISIBLE), [(i, ACTIVE.ROWS.row(i)) for i in capped]
+
+
+#: Per install: which archive each CAB lives in, and which of those archives are gone. Session
+#: state -- a cabmap load fills it and a rebuild invalidates it.
+_ARCHIVES = {}
+
+
+def _archives():
+    """Which archive each CAB lives in, and which of those archives are gone.
+
+    The map names a few dozen chunk files for a quarter-million CABs, so asking the filesystem once
+    per ARCHIVE answers it for every CAB in it."""
+    key = active_key()
+    if key in _ARCHIVES:
+        return _ARCHIVES[key]
+    table = BRIDGE.enumerate_table()
+    root = BRIDGE.game_root or ""
+    by_cab = {}
+    rows = {}
+    for index in range(len(table.cabs)):
+        source = str(table.cell(index, "source"))
+        by_cab[table.cell(index, "cab")] = source
+        rows[source] = rows.get(source, 0) + 1
+    gone = {source: count for source, count in rows.items()
+            if not os.path.isfile(os.path.join(root, source.replace("\\", "/")))}
+    _ARCHIVES[key] = (by_cab, gone)
+    return _ARCHIVES[key]
+
+
+def unreachable_rows():
+    """(archives gone, cab rows in them) for the loaded map -- what a rebuild would bring back.
+    (0, 0) for a map that matches the install it was built from."""
+    try:
+        _by_cab, gone = _archives()
+    except Exception:
+        return 0, 0
+    return len(gone), sum(gone.values())
+
+
+def forget_archives():
+    _ARCHIVES.clear()

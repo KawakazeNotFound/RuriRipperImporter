@@ -28,7 +28,7 @@ def game_name():
     """The product the browser's current tab is on, or "" before one is typed."""
     from ...Kernel.app import browser
     try:
-        config = browser._active_config(browser.state_of(None))
+        config = browser.active_config(browser.state_of(None))
     except (KeyError, RuntimeError):
         return ""
     return ((config.game_name if config is not None else "") or "").strip()

@@ -524,13 +524,13 @@ class Renderer:
         target.addWidget(button)
 
     def _open_popover(self, panel_id):
-        describe = _POPOVERS.get(panel_id)
-        if describe is None:
+        surface = app_layout.SURFACES.get(panel_id)
+        if surface is None:
             return
         dialog = QtWidgets.QDialog(self.host_widget)
-        dialog.setWindowTitle(panel_id)
+        dialog.setWindowTitle(surface.label)
         body = QtWidgets.QVBoxLayout(dialog)
-        self.draw(app_layout.describe(describe, self.context), body)
+        self.draw(app_layout.describe(surface.draw, self.context), body)
         dialog.exec()
 
     def _progress(self, spec, target):
@@ -645,14 +645,6 @@ class Renderer:
         self.invoke(app_command.COMMANDS.get(spec["group_command"]), values)
 
 
-#: Popover bodies, by the id a description names. Registered where the popover's
-#: content is declared, so the renderer never learns what is in one.
-_POPOVERS = {}
-#: Menu entries, by the id a description names -- a callable (context) -> rows of
-#: {"text", "command", "values"}.
-_MENUS = {}
-
-
 def _modifiers(command):
     """The two selection modifiers, off the keyboard state at the moment of the
     click. Qt reports them per event; this is the same reading Blender's invoke()
@@ -664,14 +656,6 @@ def _modifiers(command):
             app_command.RANGE: bool(held & Qt.ShiftModifier)}
 
 
-def register_popover(panel_id, describe):
-    _POPOVERS[panel_id] = describe
-
-
-def register_menu(menu_id, entries):
-    _MENUS[menu_id] = entries
-
-
 def _menu_entries(menu_id, context):
-    build = _MENUS.get(menu_id)
-    return list(build(context)) if build is not None else []
+    surface = app_layout.SURFACES.get(menu_id)
+    return list(surface.entries(context)) if surface is not None else []

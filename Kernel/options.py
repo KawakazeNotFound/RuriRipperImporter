@@ -10,10 +10,10 @@ the exact failure mode two truths produce.
 So the table lives here, the hosts' widgets are GENERATED from it, and both ends
 of every option are the same string.
 
-An option that only some applications can honour states the CAPABILITY it needs
-(``Kernel.host.ANIMATION`` and friends), never a host name. A host offers the
-options its declared capabilities cover and no others, so a host that gains a
-capability gains the options with it and a new host answers by declaring.
+An option that only some applications can honour states the host PROTOCOL it
+needs (``Kernel.host.Timeline`` and friends), never a host name. A host offers the
+options the protocols it derives from cover and no others, so a host that gains a
+protocol gains the options with it and a new host answers by deriving.
 """
 
 from __future__ import annotations
@@ -56,12 +56,6 @@ class Option:
 # blendshapes, and a UV-flip override. A model imported without its textures or
 # its skeleton is not a lighter import, it is a broken one, and nobody ever
 # reached for those ticks. They are gone from every host's panel.
-#
-# Three of those four names survive INSIDE the importer as call parameters
-# (prefab_importer.DEFAULT_OPTIONS), because a couple of internal paths really do
-# want geometry only -- loading a clip's authoring rig just to read its rest pose
-# has no use for materials. That is a caller stating an intent, not a user
-# flipping a preference, which is exactly why it is not an option.
 
 #: ORDER IS THE UI ORDER. What is in the model first, then per-host output.
 SCHEMA = (
@@ -85,7 +79,7 @@ SCHEMA = (
            "character -- a character is a dozen materials and this is what makes it look "
            "like itself; a scene window is hundreds, which is why that road remembers its "
            "own answer",
-           requires=host_port.NODE_MATERIALS),
+           requires=host_port.NodeMaterials),
     Option("link_shader_templates", BOOL, False, "Link Shader Templates",
            "Where the game shading stack's node-group templates live. Off (default) "
            "APPENDS them so they become this file's own data: the file still renders "
@@ -94,46 +88,46 @@ SCHEMA = (
            "a relative path -- smaller files, one shared copy per folder, but the copy has "
            "to travel with them. A link that stops resolving is not an error: an empty "
            "stand-in is substituted silently and the whole model renders black",
-           requires=host_port.NODE_MATERIALS),
+           requires=host_port.NodeMaterials),
     Option("import_empties", BOOL, False, "Import Empties",
            "Keep every GameObject as an Empty. Off keeps only the empties that hold "
            "imported content in the hierarchy",
-           requires=host_port.SCENE_GRAPH),
+           requires=host_port.SceneGraph),
     Option("import_animations", BOOL, True, "Discover Animations",
            "List this character's animation clips in the Animations panel after import. "
            "Clips are NOT built until you check them there and click Import -- a single "
            "clip can be 100+MB, so nothing is loaded automatically",
-           requires=host_port.ANIMATION),
+           requires=host_port.Timeline),
     Option("retarget_face", BOOL, False, "Retarget Face",
            "For a clip whose facial animation is baked into its bone tracks (UI and "
            "cutscene clips are), work out WHICH library expressions that performance is "
            "-- measured on the character the clip was authored on -- and have the "
            "character in the scene play those same named expressions through its own face "
            "table. No geometry crosses between the two faces",
-           requires=host_port.ANIMATION),
+           requires=host_port.Timeline),
     Option("import_secondary_motion", BOOL, False, "Import Cloth",
            "Bring the model's own secondary motion across: the hair, cloth and accessory "
            "chains its author tuned on the model itself, plus the collision volumes they "
            "collide with, written onto the imported armature. Replaces whatever that "
            "armature already carried",
-           requires=host_port.SKELETON),
+           requires=host_port.Rig),
 
     Option("force_rebuild", BOOL, False, "Rebuild Texture Cache",
            "Re-bake every channel image even when the cache already looks current",
-           requires=host_port.TEXTURE_CACHE),
+           requires=host_port.TextureCache),
     Option("texture_resolution", INT, 2048, "Texture Resolution",
            "Working resolution of the texture sets the project is created with",
-           requires=host_port.TEXTURE_SETS, choices=(512, 1024, 2048, 4096)),
+           requires=host_port.TextureSets, choices=(512, 1024, 2048, 4096)),
     Option("apply_environment", BOOL, True, "Set Environment",
            "Set the reflection environment the ported shader documents as its requirement",
-           requires=host_port.DISPLAY_SETTINGS),
+           requires=host_port.DisplaySettings),
     Option("apply_color_lut", BOOL, True, "Set Colour LUT",
            "Load the grading strip shipped beside the shader",
-           requires=host_port.DISPLAY_SETTINGS),
+           requires=host_port.DisplaySettings),
     Option("force_linear_tonemap", BOOL, True, "Force Linear Tone Mapping",
            "The ported shader applies the game's tonemap itself; leaving the display tone "
            "mapping on anything but Linear applies it twice",
-           requires=host_port.DISPLAY_SETTINGS),
+           requires=host_port.DisplaySettings),
 )
 
 _BY_KEY = {option.key: option for option in SCHEMA}

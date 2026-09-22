@@ -12,8 +12,8 @@ invented here:
                          ``_CharacterParams*`` inputs (see BINDINGS -- which
                          volume field lands in which slot is read off how the
                          game's own shader uses that component).
-``stage prefab``         the stage itself, imported by the shared prefab
-                         importer: floor, sky sphere, cameras, hierarchy 1:1.
+``stage prefab``         the stage itself, loaded through the kernel's one load:
+                         floor, sky sphere, cameras, hierarchy 1:1.
 
 Only parameters the volume actually OVERRIDES are pushed: an unticked row in the
 game's inspector contributes nothing, and writing its m_Value anyway would dress
@@ -26,12 +26,8 @@ import bpy
 import numpy
 from mathutils import Vector
 
-from . import coordinate, material_panel, prefab_importer
+from . import coordinate, material_panel, materialise
 from ...Kernel.app import loading, staging
-from ...Kernel.bridge import cabmap_state
-from ...Kernel.unity import bridge_asset_db
-
-STAGE_COLLECTION = "Endfield UI Stage"
 
 MAIN_CAMERA_TAG = "MainCamera"
 
@@ -246,36 +242,6 @@ def _write_slot(current, comps, value):
     return True
 
 
-def import_stage(context, db, roots, options):
-    """Build the stage prefab exactly as any other prefab is built -- the shared
-    importer turns its hierarchy into objects, its renderers into meshes and its
-    cameras into cameras -- inside its own collection, so it can be hidden or
-    deleted without touching whatever character is being looked at.
-
-    Returns (report, ...) per root built."""
-    collection = bpy.data.collections.get(STAGE_COLLECTION)
-    if collection is None:
-        collection = bpy.data.collections.new(STAGE_COLLECTION)
-    if collection.name not in context.scene.collection.children:
-        context.scene.collection.children.link(collection)
-
-    previous = context.view_layer.active_layer_collection
-    layer = _layer_for(context.view_layer.layer_collection, collection)
-    if layer is not None:
-        context.view_layer.active_layer_collection = layer
-    reports = []
-    try:
-        for guid in roots:
-            prefab_file = db.load_guid(guid)
-            if prefab_file is None:
-                continue
-            reports.append(prefab_importer.import_prefab_from_db(context, db, prefab_file, options))
-    finally:
-        if previous is not None:
-            context.view_layer.active_layer_collection = previous
-    return reports
-
-
 def adopt_camera(context, cameras):
     """Make the stage's own camera the scene camera, so numpad-0 looks through
     what the game looks through. The render aspect follows: a vertical FOV only
@@ -288,7 +254,7 @@ def adopt_camera(context, cameras):
     tags nothing."""
     if not cameras:
         return None
-    tagged = [obj for obj in cameras if obj.get(prefab_importer.UNITY_TAG) == MAIN_CAMERA_TAG]
+    tagged = [obj for obj in cameras if obj.get(materialise.TAG) == MAIN_CAMERA_TAG]
     visible = [obj for obj in cameras if not obj.hide_viewport] or list(cameras)
     chosen = tagged[0] if tagged else visible[0]
     context.scene.camera = chosen
@@ -296,16 +262,6 @@ def adopt_camera(context, cameras):
     if render.resolution_x * 9 != render.resolution_y * 16:
         render.resolution_x, render.resolution_y = 1920, 1080
     return chosen
-
-
-def _layer_for(layer_collection, collection):
-    if layer_collection.collection is collection:
-        return layer_collection
-    for child in layer_collection.children:
-        found = _layer_for(child, collection)
-        if found is not None:
-            return found
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -332,25 +288,16 @@ def load(context, stage, options):
 
 
 def _load_art(context, prefabs, options):
-    """The stage's own prefab, built the ordinary way -- one closure, the shared
-    prefab importer, whatever hierarchy the game authored."""
-    from . import packages as materialiser
-    from ...Kernel.app import loading
-
+    """The stage's own prefab, loaded the ordinary way: its paths are its seeds."""
     seeds = [path for path in prefabs if path]
     if not seeds:
         return ["this stage names no art to build"]
     before = set(bpy.data.objects)
-    report = materialiser.materialise(
-        context, loading.Packages(seeds[0], "", loading.PREFAB, [],
-                                  paths={str(index): path
-                                         for index, path in enumerate(seeds)}),
-        None, options)
+    built = loading.load(context, seeds, options)
     placed = [obj for obj in bpy.data.objects if obj not in before]
     meshes = len([obj for obj in placed if obj.type == "MESH"])
     cameras = [obj for obj in placed if obj.type == "CAMERA"]
-    reports = [report]
-    done = ["{0} mesh(es), {1} camera(s)".format(meshes, len(cameras))]
+    done = ["{0} mesh(es), {1} camera(s)".format(meshes, len(cameras))] + built.warnings[:3]
     chosen = adopt_camera(context, cameras)
     if chosen is not None:
         done.append("looking through " + chosen.name)

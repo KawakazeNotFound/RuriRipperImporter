@@ -28,7 +28,7 @@ from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.bridge import cabmap_state
-from . import cast, morph_state, skeletal_morph
+from . import identity, morph_state, skeletal_morph
 
 STATE = "ruri_character"
 
@@ -131,12 +131,12 @@ def avatars_for(state):
     ``npc_spl_adaxier_01`` a face table called ``ardashir``, and 227 npcs share one
     called ``boy_face_common_a_01``. Matching on the rig's name found neither, so
     every npc bound zero ctrls and no expression did anything."""
-    declared = state.face_morph or cast.declared_face_morph(state.armature_name)
+    declared = state.face_morph or identity.declared_face_morph(state.armature_name)
     if declared:
         matched = morph_state.avatars_for_declaration(declared)
         if matched:
             return matched
-    tag = cast.character_tag(state.character_token)
+    tag = identity.character_tag(state.character_token)
     if tag:
         matched = morph_state.avatars_for_tag(tag)
         if matched:
@@ -413,8 +413,7 @@ def _scan(context, arguments):
     is a walk over this armature's meshes, and discovery reads the already-loaded
     row table's container paths (no VFS decrypt, no export)."""
     state = state_of(context)
-    host = host_port.current()
-    rig = host.selected_rig(context)
+    rig = host_port.selected_rig(context)
     if rig is None:
         state.status = ("Select the character whose face you want to drive: its "
                         "skeleton, or any mesh skinned to it.")
@@ -428,13 +427,13 @@ def _scan(context, arguments):
     if rig.name != state.armature_name:
         state.face_morph = ""
     state.armature_name = rig.name
-    state.face_morph = state.face_morph or cast.declared_face_morph(rig.name)
+    state.face_morph = state.face_morph or identity.declared_face_morph(rig.name)
     # An npc rig names its own template, which is the EXACT key its per-line
     # dialogue assets are filed under. Guessing a name fragment instead picks
     # whichever fragment matches most, and for an npc that is its body-type word --
     # scoping the load to every sibling that shares it.
     token = (state.character_token.strip()
-             or cast.npc_template(rig.name)
+             or identity.npc_template(rig.name)
              or _suggest_token(rig.name))
     morph_state.discover(token)
     state.character_token = token
@@ -620,36 +619,36 @@ SCAN = command.COMMANDS.define(
     "ruri.character_scan", "Scan Rig", _scan,
     description="Detect the character rig, bind its ctrl drivers, and index the "
                 "cabmap's facial-morph library",
-    icon="FILE_REFRESH", requires=host_port.MORPH_TARGETS, poll=_loaded)
+    icon="FILE_REFRESH", requires=host_port.MorphTargets, poll=_loaded)
 LOAD_LIBRARY = command.COMMANDS.define(
     "ruri.character_load_library", "Load Library", _load_library,
     description="Export and parse the shared emotion/pose/lipsync library plus this "
                 "character's own morph animations",
-    icon="IMPORT", requires=host_port.MORPH_TARGETS, poll=_library_loadable,
+    icon="IMPORT", requires=host_port.MorphTargets, poll=_library_loadable,
     steps=True, status_state=STATE, failure="Morph library load failed")
 APPLY = command.COMMANDS.define(
     "ruri.character_apply", "Apply", _apply,
     description="Pose the face with the highlighted entry",
-    icon="PLAY", requires=host_port.MORPH_TARGETS, poll=_has_items)
+    icon="PLAY", requires=host_port.MorphTargets, poll=_has_items)
 CLEAR = command.COMMANDS.define(
     "ruri.character_clear", "Rest Face", _clear,
     description="Zero every bound ctrl driver",
-    icon="LOOP_BACK", requires=host_port.MORPH_TARGETS)
+    icon="LOOP_BACK", requires=host_port.MorphTargets)
 APPLY_PHONEME = command.COMMANDS.define(
     "ruri.character_apply_phoneme", "Phoneme", _apply_phoneme,
     description="Pose one phoneme of the selected lipsync set",
-    requires=host_port.MORPH_TARGETS, poll=_has_lipsync,
+    requires=host_port.MorphTargets, poll=_has_lipsync,
     arguments=(Field("slot", app_state.INT, 0),))
 SELECT_ALL = command.COMMANDS.define(
     "ruri.character_select_all", "Select", _select_all,
     description="Check / uncheck every listed animation",
-    requires=host_port.MORPH_TARGETS,
+    requires=host_port.MorphTargets,
     arguments=(Field("mode", app_state.STRING, "ALL"),))
 BUILD_ACTIONS = command.COMMANDS.define(
     "ruri.character_build_actions", "Build Checked Actions", _build_actions,
     description="Bake the checked morph animations onto whatever this rig binds "
                 "their ctrls to",
-    icon="ACTION", requires=host_port.MORPH_TARGETS, poll=_has_checked, steps=True,
+    icon="ACTION", requires=host_port.MorphTargets, poll=_has_checked, steps=True,
     status_state=STATE, failure="Building morph actions failed")
 
 
@@ -801,7 +800,7 @@ def _draw_drivers(layout, context, state):
 
 
 def load_library_for(context, entry, facial_morph):
-    """Bring this character's face up right after the cast browser built her.
+    """Bring the picked character's face up on the rig in front of the user.
 
     The same two moves the section's own buttons make -- scan the rig that was just
     built, then export and parse the library that rig's declaration names -- so the

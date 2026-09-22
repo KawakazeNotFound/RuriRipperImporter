@@ -301,8 +301,11 @@ class Bound:
         return "" if row < 0 else self.view.text(row, column)
 
     def payload(self, state):
-        """What loading the picked row needs, in the build's own words."""
-        return "" if self.view is None else self.value(state, self.view.payload_column)
+        """What loading the picked row needs, in the build's own words -- "" for a list whose
+        table states no payload, rather than whatever column a blank name falls back to."""
+        if self.view is None or not self.view.payload_column:
+            return ""
+        return self.value(state, self.view.payload_column)
 
     def rows(self):
         """Every drawn line as its columns, headers skipped -- for a command that
@@ -425,7 +428,9 @@ class Picked:
 
     @property
     def payload(self):
-        return self.cell(self._bound.view.payload_column)
+        """The row's seed, or "" when its table states no payload column."""
+        column = self._bound.view.payload_column
+        return self.cell(column) if column else ""
 
     def cell(self, column=""):
         return self._bound.view.text(self.row, column)

@@ -24,7 +24,6 @@ from bpy.app.handlers import persistent
 from bpy.props import (BoolProperty, CollectionProperty, EnumProperty, IntProperty,
                        StringProperty)
 
-from .. import datasets
 
 # How a story runs. Continuous is a cutscene; stepped is a dialogue, and the
 # difference is only whether a hold stops the playhead.

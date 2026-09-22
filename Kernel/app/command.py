@@ -20,6 +20,8 @@ version" of a load would destroy.
 
 from __future__ import annotations
 
+from .. import extensions
+
 #: The registry IS process state. A development reload re-executes modules in
 #: sys.modules order, which puts a module BEFORE the ones it imports -- so a
 #: reload that recreated this table would wipe every command the modules above it
@@ -191,33 +193,22 @@ def _trimmed(text, width=48):
 
 
 class Registry:
-    """Every command, by id. One table so a layout can name a command without
-    importing whatever defines it."""
+    """Every command, by id: the ``commands`` extension point with the command's
+    own verbs over it, so a layout can name a command without importing whatever
+    defines it. A reload and a collision mean here exactly what they mean for
+    everything else that registers (:mod:`Kernel.extensions`)."""
 
     def __init__(self):
-        self._commands = {}
+        self._point = extensions.point("commands", "Every command, by id.")
 
     def add(self, command):
-        """Register a command, or REPLACE the one a reload just superseded.
-
-        Two different modules claiming one id is a real collision and still
-        raises. The same module declaring it again is a development reload, and
-        the new definition is the truth -- refusing that would freeze the old
-        body in place while the file on disk says otherwise, which is the exact
-        failure the reload exists to prevent."""
-        existing = self._commands.get(command.id)
-        if (existing is not None and existing is not command
-                and existing.source != command.source):
-            raise ValueError("two modules claim command {0!r}: {1} and {2}".format(
-                command.id, existing.source, command.source))
-        self._commands[command.id] = command
-        return command
+        return self._point.add(command, key=command.id, module=command.source)
 
     def define(self, id, label, run, **spec):
         return self.add(Command(id, label, run, **spec))
 
     def get(self, id):
-        found = self._commands.get(id)
+        found = self._point.get(id)
         if found is None:
             raise KeyError(
                 "no command {0!r} -- a layout naming one that does not exist is a "
@@ -226,14 +217,14 @@ class Registry:
 
     def available(self, capabilities):
         """The commands a host with these capabilities can offer."""
-        return tuple(command for command in self._commands.values()
+        return tuple(command for command in self._point
                      if command.requires is None or command.requires in capabilities)
 
     def __iter__(self):
-        return iter(self._commands.values())
+        return iter(self._point)
 
     def __len__(self):
-        return len(self._commands)
+        return len(self._point)
 
 
 #: The one registry. A command is registered where it is defined, and named from

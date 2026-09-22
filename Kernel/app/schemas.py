@@ -214,17 +214,16 @@ the kernel, replaceable per tab, and empty for a plain Unity build that needs no
 ))
 
 ANIMATION_CLIP = Schema("AnimationClip", """One discovered-but-not-yet-built animation
-clip. ``selected`` drives the checkbox; nothing here has been parsed past a cheap
-name/size peek, so ticking a box is free until Import is clicked.
+clip: the seed it loads as, and what the map calls it. ``selected`` drives the
+checkbox; nothing has been read yet, so ticking a box is free until Import is clicked.
 
 ``folder`` is the game's own folder for that clip, which is what a list of a few hundred
 clips is worth reading by; ``visible`` is the filter's verdict on this row. The filter
 HIDES rather than removes, so a clip checked before the box was typed into is still
 checked -- and still imported -- afterwards.""", (
-    Field("guid", state.STRING, ""),
+    Field("seed", state.STRING, ""),
     Field("name", state.STRING, ""),
     Field("folder", state.STRING, ""),
-    Field("size_bytes", state.INT, 0),
     Field("selected", state.BOOL, False),
     Field("visible", state.BOOL, True),
 ))
@@ -316,6 +315,9 @@ BROWSER = Schema("Browser", """The cabmap browser's whole state.""", (
           "geometry/textures are identical either way. Turn it on when you are actually "
           "rendering this window rather than still deciding what to import"),
     Field("animation_character_name", state.STRING, ""),
+    # The seeds the listed clips were discovered from, one per line: what is loaded
+    # first when the checked clips have no rig in front of the user to play onto.
+    Field("animation_seeds", state.STRING, ""),
     Field("animation_search", state.STRING, "", "Filter",
           "Filter the discovered clips by name or by the game's own folder",
           update="on_animation_search", live=True),

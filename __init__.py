@@ -21,8 +21,8 @@ The layering, outermost first:
                         schema, the shader-stack projection, the bring-up
                         sequence, and the data layer under it --
                         ``Kernel/bridge/`` claims the reader and holds the
-                        session over the loaded map, ``Kernel/unity`` and
-                        ``Kernel/unreal`` are the engines' own decode helpers.
+                        session over the loaded map, and ``Kernel/app/loading``
+                        is the one way a seed reaches a document.
                         Zero host imports, checkable by grep, and zero knowledge
                         of any one game.
 ``Game/<game>/``        one folder per hooked game: its datasets and its panels,

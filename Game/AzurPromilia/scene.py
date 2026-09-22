@@ -5,8 +5,9 @@ with its packages, so most scenes arrive as terrain, materials and colliders onl
 one is dimmed rather than hidden -- its resources are real and loading them is a real act, it just
 is not the scene itself.
 
-Picking one and pressing Load runs the bundle browser's own import over the archives that address
-resolved to, which is why this tab needs nothing of the host the browser does not already need.
+A row's payload is its seed -- the built scene file, else the folder its resources are filed
+under -- so Load and Reveal are the kernel's verbs over it, and this tab needs nothing of the host
+the browser does not already need.
 
 Nothing here imports a host.
 """
@@ -15,14 +16,14 @@ from __future__ import annotations
 
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
-from ...Kernel.app import command, filtering
+from ...Kernel.app import cast_panel, command, filtering
 from ...Kernel.app import layout as app_layout
 from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from . import datasets, roster
+from . import datasets
 
 STATE = "ruri_azurpromilia_scene"
 SPEC_KEY = "AzurPromilia:scene"
@@ -75,10 +76,6 @@ def _loaded(context):
     return app_browser.state_of(context).loaded and cabmap_state.BRIDGE is not None
 
 
-def _has_selection(context):
-    return _loaded(context) and BOUND.picked(state_of(context)) is not None
-
-
 def _refresh(context, arguments):
     """Read every scene the install carries."""
     state = state_of(context)
@@ -91,35 +88,10 @@ def _refresh(context, arguments):
     return None
 
 
-def _load(context, arguments):
-    """Import the selected scene through the browser's own import -- one import path, so a fix
-    there is a fix here."""
-    entry = BOUND.picked(state_of(context))
-    if entry is None:
-        return
-    yield from roster.load_address(context, entry.key, entry.label)
-
-
-def _reveal(context, arguments):
-    entry = BOUND.picked(state_of(context))
-    if entry is None:
-        return {"CANCELLED"}
-    return roster.reveal_address(context, entry.key, entry.label)
-
-
 REFRESH = command.COMMANDS.define(
     "ruri.azurpromilia_scene_refresh", "Refresh Scenes", _refresh,
     description="Read the scene list off the install's own folder tree",
     icon="FILE_REFRESH", poll=_loaded)
-LOAD = command.COMMANDS.define(
-    "ruri.azurpromilia_scene_load", "Load Scene", _load,
-    description="Import this scene, exactly as the bundle browser would",
-    icon="IMPORT", poll=_has_selection, steps=True, status_state=STATE,
-    failure="Loading this scene failed")
-REVEAL = command.COMMANDS.define(
-    "ruri.azurpromilia_scene_reveal", "Open Containing Folder", _reveal,
-    description="Switch to the bundle browser and open where this scene lives",
-    icon="FILE_FOLDER", poll=_has_selection)
 
 
 #: A scene row. Filtering already happened against the table's own fields, so no row is hidden at
@@ -146,9 +118,10 @@ def draw(layout, context):
     options = layout.column(align=True)
     app_browser.draw_import_options(options, context)
     actions = options.column(align=True)
-    actions.enabled = BOUND.picked(state) is not None
-    actions.operator(LOAD.id)
-    actions.operator(REVEAL.id)
+    entry = BOUND.picked(state)
+    actions.enabled = entry is not None
+    cast_panel.draw_row_verbs(actions, [entry.payload] if entry is not None and entry.payload else [],
+                              STATE, scene=True)
 
 
 def register():

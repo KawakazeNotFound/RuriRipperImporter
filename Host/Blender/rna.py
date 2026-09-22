@@ -152,23 +152,15 @@ class Registry:
             raise KeyError("nothing built for schema {0!r} yet".format(schema.name))
         return made
 
-    def mixin(self, schema, class_name):
-        """A plain class carrying the schema's properties as annotations, for a
-        host PropertyGroup to inherit. Blender picks annotations up through the
-        hierarchy, which is how one filter declaration serves every list without
-        each restating it."""
-        return self._make(schema, class_name, None, base=object, register=False)
-
-    def _make(self, schema, class_name, extra, base=None, register=True):
+    def _make(self, schema, class_name, extra):
         annotations = {}
         for field in schema.fields:
             annotations[field.key] = property_for(field, schema, self._handlers, self._built)
         namespace = {"__annotations__": annotations, "__doc__": schema.doc,
                      "RURI_SCHEMA": schema}
         namespace.update(extra or {})
-        made = type(class_name, (base or bpy.types.PropertyGroup,), namespace)
-        if register:
-            self.classes.append(made)
+        made = type(class_name, (bpy.types.PropertyGroup,), namespace)
+        self.classes.append(made)
         return made
 
     def register(self):
@@ -189,6 +181,29 @@ class Registry:
 #: cannot collide without saying so in the declaration.
 _STATES = {}
 
+#: The records every panel state shares, by schema name, and the registry that
+#: built them. The filter rule is contained by every filterable list, and Blender
+#: registers a class under one name once.
+_SHARED = {}
+_SHARED_REGISTRY = []
+
+
+def register_shared():
+    from ...Kernel.app import filtering, schemas
+
+    registry = Registry(filtering.HANDLERS)
+    _SHARED[schemas.FILTER_RULE.name] = registry.build(
+        schemas.FILTER_RULE, {schemas.FILTER_RULE.name: "RURI_PG_filter_rule"})
+    registry.register()
+    _SHARED_REGISTRY.append(registry)
+
+
+def unregister_shared():
+    for registry in reversed(_SHARED_REGISTRY):
+        registry.unregister()
+    _SHARED_REGISTRY.clear()
+    _SHARED.clear()
+
 
 def register_state(name, schema, handlers, extra=None):
     """Put a panel's state on the Scene under ``name``.
@@ -196,10 +211,7 @@ def register_state(name, schema, handlers, extra=None):
     On the Scene rather than in a module global on purpose: that is what makes it
     undoable and what saves it with the .blend, which is most of the reason to
     materialise a schema as RNA at all rather than as a plain bag."""
-    from ...Kernel.app import state as app_state
-    from . import filter_ui
-
-    registry = Registry(handlers, prebuilt=filter_ui.PREBUILT)
+    registry = Registry(handlers, prebuilt=_SHARED)
     names = {contained.name: "RURI_PG_" + contained.name
              for contained in app_state.ordered(schema)}
     made = registry.build(schema, names, extra=extra)

@@ -6,51 +6,25 @@ here is streamed, so there is no window to choose.
 
 The list itself comes from the game's hook (the ``scene.places`` dataset) and the
 filtering runs on the same C# engine the bundle browser uses, over that dataset's
-own handle. Nothing on this side reads a byte of the game, and nothing here
-imports a host: what "import it" MEANS is the host's one import entry.
+own handle. A row's payload is its seed, so importing and revealing it are the
+kernel's own verbs; nothing on this side reads a byte of the game, and nothing here
+imports a host.
 """
 
 from __future__ import annotations
 
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
-from ...Kernel.app import command, filtering
-from ...Kernel.app import layout as app_layout
-from ...Kernel.app import loading, schemas
+from ...Kernel.app import cast_panel, command, filtering
+from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from ...Kernel.unity import class_registry
 from . import datasets
 
 STATE = "ruri_kk_scene"
 SPEC_KEY = "Illusion:scene"
-
-# What a level contributes, by class NAME -- the ids come from the shared
-# all-version registry, so nothing here can drift against the file format. The
-# exclusions are the point: a closure carries catalogue art a build never looks at.
-_GEOMETRY = ("GameObject", "Transform", "Mesh", "SkinnedMeshRenderer", "MeshRenderer",
-             "MeshFilter", "MonoBehaviour", "MonoScript")
-_MATERIALS = ("Material", "Shader")
-_TEXTURES = ("Texture2D",)
-_LIGHTING = ("Light", "Cubemap", "LightProbes", "RenderSettings", "LightmapSettings",
-             "ReflectionProbe")
-
-
-def _class_ids(options):
-    names = list(_GEOMETRY) + list(_LIGHTING)
-    if options.get("import_materials", True):
-        names.extend(_MATERIALS)
-        if options.get("import_textures", True):
-            names.extend(_TEXTURES)
-    resolved = []
-    for name in names:
-        found = class_registry.id_for_name(name)
-        if found is not None and found not in resolved:
-            resolved.append(found)
-    return resolved
-
 
 def state_of(context):
     return host_port.current().panel_state(context, STATE)
@@ -114,10 +88,6 @@ def _loaded(context):
     return app_browser.state_of(context).loaded and cabmap_state.BRIDGE is not None
 
 
-def _has_selection(context):
-    return _loaded(context) and selected(state_of(context)) is not None
-
-
 def _refresh(context, arguments):
     """Read every place the game names, out of its own tables."""
     state = state_of(context)
@@ -130,58 +100,10 @@ def _refresh(context, arguments):
     return None
 
 
-def _import(context, arguments):
-    """Resolve this place's dependency closure and hand it to the host.
-
-    The closure is narrowed to the classes a LEVEL is made of, which is this
-    game's own fact -- its bundles carry catalogue art no build ever looks at."""
-    state = state_of(context)
-    place = selected_place(state)
-    if place is None:
-        state.status = "Nothing selected."
-        return
-    cabs = datasets.cabs_for([place["bundle"]])
-    if not cabs:
-        state.status = "'{0}' is not in the loaded cabmap.".format(place["bundle"])
-        return
-    host = host_port.current()
-    if state.reset_scene and host_port.SCENE_GRAPH in host.capabilities:
-        host.clear_scene(context)
-    options = app_browser.as_options(app_browser.state_of(context), scene=True)
-    wanted = _class_ids(options)
-    resolved = yield command.Read(
-        lambda: loading.resolve_closure(cabs, export_class_ids=wanted), 0.7)
-    yield command.Mark(0.8)
-    lines = []
-    built = host.import_packages(
-        context, loading.Packages(place["id"], place["name"], loading.PREFAB, cabs),
-        options, lines, resolved)
-    state.status = "{0}: {1} root(s) from {2} CAB(s). {3}".format(
-        place["name"], built.imported, len(cabs), "  ".join(built.warnings[:2]))
-
-
-def _reveal(context, arguments):
-    place = selected_place(state_of(context))
-    if place is None:
-        return {"CANCELLED"}
-    cabs = datasets.cabs_for([place["bundle"]])
-    return command.COMMANDS.get("ruri.cabmap_reveal").run(
-        context, {"query": place["asset"], "cab": cabs[0] if cabs else "", "folder": ""})
-
-
 REFRESH = command.COMMANDS.define(
     "ruri.kk_scene_refresh", "Refresh Scenes", _refresh,
     description="Read every place the game names, out of its own tables",
     icon="FILE_REFRESH", poll=_loaded)
-IMPORT = command.COMMANDS.define(
-    "ruri.kk_scene_import", "Import", _import,
-    description="Resolve this place's dependency closure and import it",
-    icon="IMPORT", poll=_has_selection, steps=True, status_state=STATE,
-    failure="Scene import failed")
-REVEAL = command.COMMANDS.define(
-    "ruri.kk_scene_reveal", "Open Containing Folder", _reveal,
-    description="Switch to the bundle browser and open this place's bundle",
-    icon="FILE_FOLDER", poll=_has_selection)
 
 
 _COLUMNS = (BOUND.column("", icon="WORLD"),)
@@ -198,19 +120,20 @@ def draw(layout, context):
     layout.label(text=state.status, icon="INFO")
 
     place = selected_place(state)
+    entry = selected(state)
     actions = layout.column(align=True)
     actions.enabled = place is not None
     if place is not None:
         info = actions.box()
         info.label(text="{0}  ->  {1}".format(place["bundle"], place["asset"]))
-        info.label(text="{0} CAB(s) · named by {1}".format(
-            len(datasets.cabs_for([place["bundle"]])), place["sources"]))
+        info.label(text="named by {0}".format(place["sources"]))
     # 与浏览器同一份导入选项;"清场"只在真有场景图可清的宿主上有意义。
     app_browser.draw_import_options(actions, context)
-    if host_port.SCENE_GRAPH in host_port.current().capabilities:
+    scene_graph = host_port.SceneGraph in host_port.current().capabilities
+    if scene_graph:
         actions.prop(state, "reset_scene")
-    actions.operator(IMPORT.id)
-    actions.operator(REVEAL.id)
+    cast_panel.draw_row_verbs(actions, [entry.payload] if entry is not None and entry.payload else [],
+                              STATE, scene=True, reset_scene=scene_graph and state.reset_scene)
 
 
 def register():

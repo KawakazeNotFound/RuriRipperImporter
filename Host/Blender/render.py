@@ -44,11 +44,6 @@ def _apply_modifiers(target, node):
         target.alert = True
 
 
-def _text(spec, fallback=""):
-    text = spec.get("text")
-    return fallback if text is None else text
-
-
 def render(node, target, context):
     """Walk one description into ``target`` (a bpy UILayout)."""
     kind, spec = node.kind, node.spec
@@ -259,10 +254,36 @@ class RURI_UL_described(bpy.types.UIList):
                 for record in records], []
 
 
-def unregister_lists():
-    """Drop the descriptions drawn so far. The class itself is registered and
-    dropped with every other one this driver owns."""
-    _LIST_SPECS.clear()
+# ---------------------------------------------------------------------------
+# Surfaces
+# ---------------------------------------------------------------------------
+def _surface_class(surface):
+    """The Panel or Menu Blender opens a declared surface as. A popover is a HEADER-region panel:
+    a UI-region one is a sidebar panel, and a categoryless one lands in the catch-all Misc tab."""
+    if isinstance(surface, app_layout.Popover):
+        def draw_popover(self, context):
+            draw(app_layout.describe(surface.draw, context), self.layout, context)
+
+        return type(surface.id, (bpy.types.Panel,), {
+            "bl_idname": surface.id, "bl_label": surface.label, "bl_space_type": "VIEW_3D",
+            "bl_region_type": "HEADER", "bl_ui_units_x": surface.width, "draw": draw_popover})
+
+    def draw_menu(self, context):
+        first = True
+        for entry in surface.entries(context):
+            if entry.get("separator"):
+                if not first:
+                    self.layout.separator()
+                self.layout.label(text=entry["text"])
+            else:
+                operator = self.layout.operator(entry["command"], text=entry["text"],
+                                                icon=entry.get("icon") or "NONE")
+                for name, value in entry.get("values", {}).items():
+                    setattr(operator, name, value)
+            first = False
+
+    return type(surface.id, (bpy.types.Menu,), {
+        "bl_idname": surface.id, "bl_label": surface.label, "draw": draw_menu})
 
 
 # ---------------------------------------------------------------------------
@@ -299,8 +320,7 @@ def operator_class(command):
         "__annotations__": annotations,
         "RURI_COMMAND": command,
     }
-    if command._poll is not None:
-        namespace["poll"] = classmethod(lambda cls, context: command.poll(context))
+    namespace["poll"] = classmethod(lambda cls, context: command.poll(context))
 
     if command.modifiers:
         # invoke() is the only place Blender hands over the event; execute() is
@@ -354,38 +374,28 @@ class _ArgumentSchema:
         self.name = command.id
 
 
-#: Command id -> the Operator class generated for it. One per process; a command
-#: declared anywhere gets its wrapper from the sweep below, so no module has to
-#: remember to register one.
-_COMMAND_OPERATORS = {}
+#: Every class generated for what the descriptions name: the list class, one Panel or Menu per
+#: declared surface, one Operator per command this host can offer. Generated in one sweep, so no
+#: module has to remember to register any of them.
+_GENERATED = []
 
 
-def register_commands():
-    """Wrap every declared command as a Blender operator, and register the ones
-    this host can offer -- plus the one UIList every described list draws through.
-
-    Called after the game registry has run, because that is when every command
-    exists. A command whose capability this host does not answer gets no operator
-    at all -- the control that would place it is absent for the same reason."""
-    bpy.utils.register_class(RURI_UL_described)
+def register():
+    """Generate and register everything the descriptions name. Called after the game registry
+    has run, because that is when every command and surface exists. A command whose capability
+    this host does not answer gets no operator at all -- the control that would place it is
+    absent for the same reason."""
     capabilities = host_port.current().capabilities
-    for one in app_command.COMMANDS.available(capabilities):
-        if one.id in _COMMAND_OPERATORS:
-            continue
-        made = operator_class(one)
+    generated = [RURI_UL_described]
+    generated.extend(_surface_class(surface) for surface in app_layout.SURFACES)
+    generated.extend(operator_class(one) for one in app_command.COMMANDS.available(capabilities))
+    for made in generated:
         bpy.utils.register_class(made)
-        _COMMAND_OPERATORS[one.id] = made
-    return _COMMAND_OPERATORS
+        _GENERATED.append(made)
 
 
-def unregister_commands():
-    for made in reversed(list(_COMMAND_OPERATORS.values())):
-        try:
-            bpy.utils.unregister_class(made)
-        except RuntimeError:
-            pass
-    _COMMAND_OPERATORS.clear()
-    try:
-        bpy.utils.unregister_class(RURI_UL_described)
-    except RuntimeError:
-        pass
+def unregister():
+    for made in reversed(_GENERATED):
+        bpy.utils.unregister_class(made)
+    _GENERATED.clear()
+    _LIST_SPECS.clear()

@@ -57,8 +57,8 @@ class GameTab:
     expression library onto a rig -- there is no rig in Painter, so importing
     that module there would be importing a panel to then not show.
 
-    ``requires`` is the host capability the tab needs (``Kernel.host.SKELETON``
-    and friends), or None for one every host can offer. A host that cannot answer
+    ``requires`` is the host protocol the tab needs (``Kernel.host.Rig`` and
+    friends), or None for one every host can offer. A host that cannot answer
     does not get the tab AT ALL -- not a disabled one. A control that exists but
     cannot work is worse than one that is honestly missing."""
 
@@ -148,12 +148,12 @@ class GameModule:
     register/unregister pair for the bpy classes those tabs need."""
 
     __slots__ = ("game_name", "label", "tabs", "sections", "face_retarget",
-                 "secondary_motion", "engine", "settings_schema", "importer",
+                 "secondary_motion", "engine", "settings_schema",
                  "shaders", "all_shaders", "directory", "package", "_register", "_unregister")
 
     def __init__(self, game_name, label, tabs, register, unregister, sections=(),
                  face_retarget=None, secondary_motion=None, engine=None,
-                 settings_schema=None, importer=None, shaders=None, all_shaders=None):
+                 settings_schema=None, shaders=None, all_shaders=None):
         # The Unity productName this game's player builds under -- the install's own
         # word for itself, and the upstream decoder's GameName. Nothing translates it.
         self.game_name = game_name
@@ -176,9 +176,8 @@ class GameModule:
         self.settings_schema = settings_schema
         # How this game states a face, if it states one at all. A clip whose facial
         # animation is baked into its bone tracks means nothing on another character's
-        # rig, so the ONE clip-loading path asks the game that owns the clip to restate
-        # it (see cross_game_retarget.load_clips_onto). A game with no facial system
-        # simply declares none and that path stays untouched.
+        # rig, so the game that owns the clip restates it on the rig it is played on. A
+        # game with no facial system simply declares none.
         #
         # The callable takes (context, armature, clip, options, into) and returns a
         # one-line report, or None when it had nothing to do. ``clip`` is anchored to the
@@ -196,15 +195,9 @@ class GameModule:
         # The callable takes (context, armature, cabs, report) and writes onto whatever
         # cloth add-on is present, returning the report it was handed.
         self.secondary_motion = secondary_motion
-        # How this game IMPORTS a package, if its build is not one the host reads natively.
-        # The host's own road resolves a cabmap closure and reads the Unity assets in it, which
-        # is the road for a build that IS Unity; a build on another engine would have to be
-        # converted into Unity assets first, purely to reach facts its decoder already states.
-        # A module that can be read directly declares this instead, and the browser hands it the
-        # packages rather than running the closure.
-        #
-        # The callable takes (context, packages, options) and returns the objects it built.
-        self.importer = importer
+        # There is no importer here, deliberately: whatever engine a build is on, a row loads
+        # by handing its seed to the ONE load (Kernel.app.loading), and what the seed IS is
+        # answered by that game's statement source on the reader side.
         # How this game answers "what did these assets compile to". A build whose engine
         # ships shaders AS assets is answered by the shared reader -- the closure of the
         # rows, every shader in it, decompiled. A build whose engine ships none (a
@@ -273,9 +266,9 @@ def discover():
         if not entry.ispkg:
             continue
         package = importlib.import_module("{0}.{1}".format(__name__, entry.name))
-        if importlib.util.find_spec("." + _STACK_PACKAGE, package.__name__) is not None:
-            stacks.append(importlib.import_module(
-                "{0}.{1}".format(package.__name__, _STACK_PACKAGE)))
+        stack = _host_stack(package)
+        if stack is not None:
+            stacks.append(stack)
         declared = getattr(package, _DECLARATION, None)
         for module in (declared if isinstance(declared, (list, tuple)) else [declared]):
             if isinstance(module, GameModule):
@@ -288,21 +281,24 @@ def discover():
     return _MODULES
 
 
+def _host_stack(package):
+    """The generated stack a game folder carries for the host this process runs inside, when
+    that projection registers anything. The per-host folder is named after the host, so which
+    one is ours needs no table; a projection that ships assets only has nothing to register."""
+    from ..Kernel import host as host_port
+
+    folder = "{0}.{1}".format(package.__name__, _STACK_PACKAGE)
+    if importlib.util.find_spec(folder) is None:
+        return None
+    projection = "{0}.{1}".format(folder, host_port.current().name)
+    if importlib.util.find_spec(projection) is None:
+        return None
+    stack = importlib.import_module(projection)
+    return stack if hasattr(stack, "register") and hasattr(stack, "unregister") else None
+
+
 def modules():
     return list(_MODULES)
-
-
-def all_tabs():
-    """Every tab THIS host can offer. A tab whose capability the host does not
-    answer is absent, not disabled."""
-    return [tab for game in _MODULES for tab in game.tabs if tab.available]
-
-
-def tab_by_key(key):
-    """Any declared tab by its stored key, enabled or not -- what a tooltip
-    needs, which must read the same whether or not that game is in front of the
-    panel."""
-    return next((tab for tab in all_tabs() if tab.key == key), None)
 
 
 def module_for(product, engine=""):

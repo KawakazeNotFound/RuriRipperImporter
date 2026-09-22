@@ -24,18 +24,9 @@ from __future__ import annotations
 
 import threading
 
-import bpy
 
 from ...Kernel import console_tail
-from ...Kernel.app import command, schemas, state as app_state
-from . import rna
-
-#: Mix into a panel's PropertyGroup to make it drivable, and drawable, by the
-#: loader. Generated from the ONE declaration, so a panel cannot support half of
-#: it and Painter's progress line reads the same three values.
-LoadingState = rna.Registry(app_state.Handlers("step_loader")).mixin(
-    schemas.LOADING_STATE, "LoadingState")
-
+from ...Kernel.app import command
 
 # The step vocabulary is the kernel's: a long load is DESCRIBED once and driven
 # per host -- modally here, on a worker thread in Painter -- and both drivers walk

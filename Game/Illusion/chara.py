@@ -1,15 +1,13 @@
 """A character is ASSEMBLED, not shipped: one skeleton plus a prefab per slot.
 
 WHICH pieces, in what order, on which bone and with what correction is the hook's
-answer (the ``chara.plan`` dataset, keyed by the card and the outfit). This module
-turns that answer into the neutral statement every host understands
-(:class:`Kernel.app.loading.Packages` of kind ``ASSEMBLY``) and hands it over.
-
-What "assemble" MEANS is then the host's: Blender joins the pieces onto one
-armature, Painter puts the same pieces in one project at the same places -- the
-bone a piece hangs on is a Transform of the rig prefab either way. What does not
-cross is driving her FACE and her ANIMATIONS, which are the other two sections and
-say so with their own capabilities.
+answer (the ``chara.plan`` dataset, keyed by the card and the outfit), and so is the
+seed that loads her: the row's own payload is the card in its first outfit with
+every slot, and the outfit and the families of pieces picked here are asked of the
+hook as the seed of exactly those choices (``chara.seed``). Loading is the kernel's
+verb over that seed; what "assemble" MEANS is the reader's statement and the host's
+building. What does not cross is driving her FACE and her ANIMATIONS, which are the
+other two sections and say so with their own capabilities.
 
 Nothing here imports a host.
 """
@@ -21,12 +19,11 @@ from ...Kernel.app import browser as app_browser
 from ...Kernel.app import cast_panel
 from ...Kernel.app import command, filtering
 from ...Kernel.app import layout as app_layout
-from ...Kernel.app import loading, schemas
+from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from ...Kernel.unity import class_registry
 from . import datasets
 
 STATE = "ruri_kk_chara"
@@ -34,28 +31,6 @@ SPEC_KEY = "Illusion:cast"
 
 #: The seven outfits the game's own customization slots are numbered by.
 COORDINATES = ("School01", "School02", "Gym", "Swim", "Club", "Plain", "Pajamas")
-
-# What a character part contributes, by class NAME. The exclusions are the deciding
-# optimisation: one head bundle's closure carries the game's whole eye/eyebrow/nose
-# PATTERN LIBRARY as several hundred textures a build never looks at.
-_GEOMETRY = ("GameObject", "Transform", "Mesh", "SkinnedMeshRenderer", "MeshRenderer",
-             "MeshFilter", "MonoBehaviour", "MonoScript")
-_MATERIALS = ("Material", "Shader")
-_TEXTURES = ("Texture2D",)
-
-
-def _class_ids(options):
-    names = list(_GEOMETRY)
-    if options.get("import_materials", True):
-        names.extend(_MATERIALS)
-        if options.get("import_textures", True):
-            names.extend(_TEXTURES)
-    resolved = []
-    for name in names:
-        class_id = class_registry.id_for_name(name)
-        if class_id is not None and class_id not in resolved:
-            resolved.append(class_id)
-    return resolved
 
 
 def state_of(context):
@@ -93,7 +68,9 @@ FILTER_SPEC = filtering.register_spec(filtering.FilterSpec(
 # The rows
 # ---------------------------------------------------------------------------
 def selected_card(state):
-    return BOUND.payload(state)
+    """The picked card's own path -- the row's key, which is what the plan is asked by."""
+    entry = BOUND.picked(state)
+    return entry.key if entry is not None else ""
 
 
 def plan(state):
@@ -138,10 +115,6 @@ def _loaded(context):
     return app_browser.state_of(context).loaded and cabmap_state.BRIDGE is not None
 
 
-def _has_card(context):
-    return _loaded(context) and bool(selected_card(state_of(context)))
-
-
 def _refresh(context, arguments):
     """Read the game's customization catalog and its character cards."""
     state = state_of(context)
@@ -155,94 +128,21 @@ def _refresh(context, arguments):
     return None
 
 
-def _float(part, column, fallback=0.0):
-    try:
-        return float(part.get(column, fallback))
-    except (TypeError, ValueError):
-        return fallback
-
-
-def _parts(rows):
-    """The plan restated in the neutral vocabulary an assembly is made of.
-
-    Row 0 IS the skeleton -- that is the hook's ordering, not a guess here -- and
-    every other row names the BONE it hangs on plus the correction the game's own
-    table composed for it."""
-    made = []
-    for position, part in enumerate(rows):
-        made.append({
-            "asset": part["asset"],
-            "label": part.get("label") or part["asset"],
-            "anchor": part.get("parent") or "",
-            "position": (_float(part, "movePosX"), _float(part, "movePosY"),
-                         _float(part, "movePosZ")),
-            "rotation": (_float(part, "moveRotX"), _float(part, "moveRotY"),
-                         _float(part, "moveRotZ")),
-            "scale": (_float(part, "moveSclX", 1.0), _float(part, "moveSclY", 1.0),
-                      _float(part, "moveSclZ", 1.0)),
-            "rig": position == 0,
-        })
-    return made
-
-
-def _build(context, arguments):
-    """Resolve every piece this character wears and hand them over as ONE thing."""
-    state = state_of(context)
-    name = BOUND.value(state)
-    rows = wanted_plan(state)
-    if not rows:
-        state.status = "That card resolves to nothing importable."
-        return
-    bundles = []
-    for part in rows:
-        if part["bundle"] not in bundles:
-            bundles.append(part["bundle"])
-    cabs = datasets.cabs_for(bundles)
-    if not cabs:
-        state.status = "None of the {0} bundle(s) are in the loaded cabmap.".format(
-            len(bundles))
-        return
-
-    options = app_browser.as_options(app_browser.state_of(context))
-    packages = loading.Packages(
-        selected_card(state), name or "Character", loading.ASSEMBLY,
-        cabs, parts=_parts(rows), export_class_ids=_class_ids(options),
-        manifest={"plan": rows})
-    # One read for the whole plan: the pieces share bundles heavily, and a closure
-    # resolved once is the difference between a character and a re-read per slot.
-    resolved = yield command.Read(
-        lambda: loading.resolve_closure(cabs, export_class_ids=packages.export_class_ids),
-        0.7)
-    yield command.Mark(0.8)
-    lines = []
-    built = host_port.current().import_packages(context, packages, options, lines, resolved)
-    state.status = "{0}: {1} piece(s). {2}".format(
-        packages.label, built.imported, "  ".join(built.warnings[:2]))
-    return built
-
-
-def _settle_build(context, built):
-    """The row the plan marked as the face IS the expression system; remember WHICH
-    prefab it was so the face can still be driven in a later session. Only where
-    there is a rig to remember it on -- a host without one has no face section."""
-    if built is None or built.armature is None:
-        return {"FINISHED"} if built is not None and built.imported else {"CANCELLED"}
-    from . import face
-    for part in (built.manifest or {}).get("plan", []):
-        if str(part.get("face") or "0") not in ("0", "0.0", ""):
-            face.remember(built.armature, part["bundle"], part["asset"])
-    return {"FINISHED"}
+def _seed(_context, state, _payload):
+    """The seed of the picked card in the chosen outfit, wearing the families of pieces the
+    toggles ask for -- spelled by the hook, over the slots its own plan names."""
+    card = selected_card(state)
+    if not card:
+        return ""
+    slots = sorted({part["slot"] for part in wanted_plan(state)})
+    rows = datasets.rows(datasets.SEED, cardPath=card, outfit=int(state.coordinate), slot=slots)
+    return str(rows[0]["seed"]) if rows else ""
 
 
 REFRESH = command.COMMANDS.define(
     "ruri.kk_chara_refresh", "Refresh Characters", _refresh,
     description="Read the game's customization catalog and its character cards",
     icon="FILE_REFRESH", poll=_loaded)
-BUILD = command.COMMANDS.define(
-    "ruri.kk_chara_build", "Load Model", _build,
-    description="Resolve every part this character wears and assemble her",
-    icon="IMPORT", poll=_has_card, steps=True, status_state=STATE,
-    settle=_settle_build, failure="Character build failed")
 
 
 # ---------------------------------------------------------------------------
@@ -253,17 +153,6 @@ _COLUMNS = (
     BOUND.column("file", align=app_layout.RIGHT, enabled=False),
 )
 _GROUP_COLUMN = BOUND.column("", icon="OUTLINER_COLLECTION")
-
-
-
-def _seeds(_context, state):
-    """What the picked card IS, as archive names: the bundles every piece she wears
-    in the chosen outfit resolves to -- the same set Build hands over."""
-    bundles = []
-    for part in wanted_plan(state):
-        if part["bundle"] not in bundles:
-            bundles.append(part["bundle"])
-    return datasets.cabs_for(bundles)
 
 
 def _options(layout, context, state):
@@ -295,8 +184,8 @@ def _draw_catalog(layout, context):
 
 
 PANEL = cast_panel.Panel(
-    BOUND, _COLUMNS, "illusion_cast", REFRESH.id, state_of, STATE, seeds=_seeds,
-    group_column=_GROUP_COLUMN, options=_options, actions=(BUILD.id,),
+    BOUND, _COLUMNS, "illusion_cast", REFRESH.id, state_of, STATE,
+    group_column=_GROUP_COLUMN, options=_options, seed=_seed,
     animations=(cast_panel.Source("catalog", "Catalog",
                                   "Every animation the studio catalogs, under its own "
                                   "names -- an H act as two partners side by side",

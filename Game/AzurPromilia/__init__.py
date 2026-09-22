@@ -4,18 +4,13 @@ Two tabs, neither of which means anything for another title:
 
 ``Scene``      every scene the install carries, under the folder tree the game files it in, saying
                which of them ship a built scene file at all. (``scene``)
-``Character``  the cast, read off the asset tree because this title ships no roster asset, and the
-               parts each one is assembled from. (``roster``)
+``Character``  the cast off the game's own tables, one row per outfit under the character it
+               dresses. (``roster``)
 
-Three facts about this title decide the shape of both, and all three live upstream in
-``Ruri.RipperHook.AzurPromilia`` rather than here:
-
-* its bundles state ``0.0.0`` for their engine version, so a reader that believes them picks the
-  wrong layout and reads noise -- the real version comes from the player's own settings file;
-* a character has no single asset and no roster row: the character id is a LEVEL of the address
-  tree, under a rig family, and each part is its own bundle carrying its own mesh and material;
-* it rarely ships built scenes, so "which scenes exist" and "which scenes can be opened" are two
-  different questions and a list that answers only one of them is misleading.
+Every reading behind them lives upstream in ``Ruri.RipperHook.AzurPromilia``: the configuration
+tables and the cipher they are kept under, the outfit -> unit -> model join, and what an avatar seed
+loads as -- the prefab plus the parts its own map wears, at one level. A row's payload is its seed,
+so both tabs load and reveal through the kernel's own verbs.
 
 Declared as one GAME_MODULE row (see ``Game``), so the core panel reveals both tabs exactly while
 the install in front of it IS this game, and never names it itself.
@@ -27,10 +22,9 @@ import importlib
 
 from .. import GameModule, GameSection, GameTab
 
-#: The parts the two tabs are composed of, each with the capability its host must answer. Both tabs
-#: of this game are the same act -- pick one of the things the asset tree names, and run the
-#: browser's own import over what it resolved to. That needs nothing of the host the browser does
-#: not already need, so both cross and neither declares a capability.
+#: The parts the two tabs are composed of, each with the capability its host must answer. Both are
+#: a list whose rows load through the kernel's own verbs, which need nothing of the host the browser
+#: does not already need, so neither declares a capability.
 SECTIONS = (GameSection("roster"), GameSection("scene"))
 
 _LOADED = []
@@ -60,7 +54,7 @@ GAME_MODULE = GameModule(
                 "Every scene the install carries, and which of them ship a built scene file",
                 ("scene", "draw")),
         GameTab("character", "Character",
-                "The cast read off the asset tree, and the parts each one is assembled from",
+                "The cast off the game's own tables, one row per outfit",
                 ("roster", "draw")),
     ),
     register=_register,

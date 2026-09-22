@@ -83,12 +83,11 @@ def provide(context, armature, clip, options, into=None):
     (see ``Game.GameModule.face_retarget``). Returns a one-line report, or None when there
     is nothing facial in the clip.
 
-    ``clip`` is anchored to the rig it was AUTHORED on (see
-    ``cross_game_retarget.source_anchored_clip``), so its curve paths name that rig's own
-    bones; the hook measures which character that is. ``into`` is that clip's own
+    ``clip`` is anchored to the rig it was AUTHORED on, so its curve paths name that rig's
+    own bones; the hook measures which character that is. ``into`` is that clip's own
     (action, slot) to write the face INTO -- an object plays one action, so a face given
     its own would replace the body it came with."""
-    from . import cast, face
+    from . import face, identity
 
     bridge = cabmap_state.BRIDGE
     if bridge is None or not bridge.has_map:
@@ -117,10 +116,10 @@ def provide(context, armature, clip, options, into=None):
 
     # Which face this rig wears is the GAME's own declaration, never the rig's name: it
     # routinely gives an entity one name and its face table a completely different one.
-    template = cast.npc_template(armature.name)
+    template = identity.npc_template(armature.name)
     request = {
-        "declaration": cast.declared_face_morph(template) if template else "",
-        "tagId": cast.character_tag(
+        "declaration": identity.declared_face_morph(template) if template else "",
+        "tagId": identity.character_tag(
             face.state_of(context).character_token or armature.name),
         "bones": bones,
         "clipBones": clip_bones,

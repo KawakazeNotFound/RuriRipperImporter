@@ -16,8 +16,10 @@ two hosts, three.
 
 from __future__ import annotations
 
+from .. import extensions
 from ...Kernel.bridge import cabmap_state
 from . import command as app_command
+from . import layout as app_layout
 from . import schemas
 from . import state as app_state
 
@@ -56,7 +58,7 @@ class FilterSpec:
         return [(key, label, "") for key, label in self.field_list()]
 
 
-SPECS = {}
+SPECS = extensions.point("filter specs", "List key -> what that list can be filtered by.")
 
 #: Set by the host panel: (context) -> the key of the tab currently on screen.
 #: The rule editor has no argument of its own, so the active tab IS how it knows
@@ -65,8 +67,7 @@ ACTIVE_SPEC_KEY = None
 
 
 def register_spec(spec):
-    SPECS[spec.key] = spec
-    return spec
+    return SPECS.add(spec, key=spec.key, module=getattr(spec.state_for, "__module__", ""))
 
 
 def active_spec(context):
@@ -79,20 +80,20 @@ def spec_and_state(context):
     return (spec, spec.state_for(context)) if spec is not None else (None, None)
 
 
-#: The one quick-filter menu. Which list it acts on is the ACTIVE spec, so a
-#: second list offering the same menu is a spec that answers ``row_for`` and
-#: nothing else -- rather than a second menu id both hosts have to register.
-QUICK_FILTER_MENU = "RURI_MT_quick_filter"
-
-
 def quick_filter_menu_entries(context):
     """Include/Exclude x every field, for the row the active list has selected."""
     spec = active_spec(context)
     row = spec.row_for(context) if spec is not None and spec.row_for else None
     if row is None:
-        return []
+        return [{"separator": True, "text": "No row selected"}]
     return quick_filter_entries(spec, lambda field: getattr(row, field, "")
                                 if not isinstance(row, dict) else row.get(field, ""))
+
+
+#: The one quick-filter menu. Which list it acts on is the ACTIVE spec, so a second list offering
+#: the same menu is a spec that answers ``row_for`` and nothing else.
+QUICK_FILTER_MENU = app_layout.declare_menu(
+    "RURI_MT_quick_filter", "Quick Filter Selected Row", quick_filter_menu_entries)
 
 
 # ── selection across a refill ─────────────────────────────────────────────────
@@ -168,10 +169,6 @@ def restore_selection(state, wanted, entries="entries", index="active_index", ke
     if getattr(state, index, 0) >= len(rows):
         setattr(state, index, 0)
     return False
-
-
-def enabled_rules(state):
-    return [rule for rule in state.filter_rules if rule.enabled]
 
 
 def has_active_query(state):
@@ -373,6 +370,9 @@ def draw_rules(layout, context):
 
     layout.separator()
     layout.operator(CLEAR_RULES.id, icon="TRASH")
+
+
+app_layout.declare_popover(RULES_PANEL, "Filter Rules", draw_rules, width=20)
 
 
 def quick_filter_entries(spec, value_of):

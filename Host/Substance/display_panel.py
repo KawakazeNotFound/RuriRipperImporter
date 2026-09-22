@@ -74,7 +74,7 @@ APPLY = command.COMMANDS.define(
     "ruri.display_apply", "Apply Display Settings", _apply,
     description="Set the reflection environment, the colour LUT and the tone mapping the "
                 "ported shader documents as its requirements",
-    icon="IMPORT", requires=host_port.DISPLAY_SETTINGS, poll=_identified)
+    icon="IMPORT", requires=host_port.DisplaySettings, poll=_identified)
 
 
 def _requirement(box, label, path):

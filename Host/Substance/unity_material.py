@@ -402,7 +402,7 @@ _SRGB_COLOR_PROPS = tuple(p for p in COLOR_IDENTITY
                           if p.endswith("Color") or p in _SRGB_COLOR_EXTRA)
 
 
-def _srgb_to_linear(c):
+def srgb_to_linear(c):
     """Unity's exact GammaToLinearSpace for a colour channel.
 
     Above 1 the engine leaves the sRGB piece and uses a plain 2.2 exponent, and
@@ -419,7 +419,7 @@ def _color_to_linear(prop, rgba):
     """RGB through the transfer for Color properties; alpha and Vectors raw."""
     if prop not in _SRGB_COLOR_PROPS:
         return list(rgba)
-    out = [_srgb_to_linear(float(v)) for v in rgba[:3]]
+    out = [srgb_to_linear(float(v)) for v in rgba[:3]]
     out.extend(float(v) for v in rgba[3:])
     return out
 
@@ -780,7 +780,7 @@ def build_plan(name, guid, props, texture_exists, face_basis=None):
             default = FLOAT_DEFAULTS.get(prop, 0.0)
         value = float(floats.get(prop, default))
         if prop in GAMMA_FLOAT_PROPS:
-            value = _srgb_to_linear(value)
+            value = srgb_to_linear(value)
         return value
 
     uniforms = {PART_UNIFORM: part}

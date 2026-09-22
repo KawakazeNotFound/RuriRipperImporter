@@ -20,6 +20,7 @@ exactly like every other panel body.
 
 from __future__ import annotations
 
+from .. import extensions
 from .. import host as host_port
 
 #: The registered sections hold host state (a driver registers them at startup),
@@ -46,24 +47,21 @@ class Section:
         return "<Section {0}>".format(self.key)
 
 
-SECTIONS = []
+SECTIONS = extensions.point("look sections", "Section key -> one part of how a frame is shown.")
 
 
 def register_section(key, label, draw, requires=None):
     """Add one section. Called by a DRIVER, because what the final image is made
     of is the application's answer, not the panel's."""
-    drop_section(key)
-    made = Section(key, label, draw, requires)
-    SECTIONS.append(made)
-    return made
+    return SECTIONS.add(Section(key, label, draw, requires), key=key, module=draw.__module__)
 
 
 def drop_section(key):
-    SECTIONS[:] = [section for section in SECTIONS if section.key != key]
+    SECTIONS.discard(key)
 
 
 def clear():
-    SECTIONS[:] = []
+    SECTIONS.clear()
 
 
 def sections():

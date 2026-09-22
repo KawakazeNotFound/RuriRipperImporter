@@ -8,9 +8,10 @@ statement about the shape of that table at all -- the facet switch, the search, 
 rule editor, the list, the sections and the status line are :mod:`Kernel.app.view`,
 and a decoder that grows a kind or renames a column needs no edit anywhere here.
 
-What is left is what is genuinely this engine's: importing a row is the host's own
-import of the packages the decoder named for it, and decompiling the shaders its
-materials compiled to has no counterpart anywhere else.
+A row's payload is its seed -- the packages the decoder named for it, read whole by
+its statement source -- so loading and revealing a row are the kernel's own verbs.
+What is left is genuinely this engine's: decompiling the shaders its materials
+compiled to has no counterpart anywhere else.
 
 Nothing here imports a host.
 """
@@ -26,8 +27,7 @@ from ...Kernel.app import schemas
 from ...Kernel.app import view as app_view
 from ...Kernel.app.state import Schema
 from ...Kernel.bridge import cabmap_state
-from ...Kernel.unreal import direct
-from . import datasets, read
+from . import datasets
 
 STATE = "ruri_unreal_characters"
 SPEC_KEY = "UnrealEngine:characters"
@@ -78,21 +78,6 @@ def _loaded(context):
     return app_browser.state_of(context).loaded and cabmap_state.BRIDGE is not None
 
 
-def _has_selection(context):
-    return _loaded(context) and BOUND.selected(state_of(context)) >= 0
-
-
-def _packages(state):
-    """The packages the picked row states, split the way the decoder joins its
-    lists.
-
-    A character is one row and may be several packages -- a build whose model is a
-    body and a weapon says so -- and importing it is ONE thing the user asked for,
-    so the whole row goes to the host as one statement."""
-    return [package for package in BOUND.payload(state).split(direct.SLOT_SEPARATOR)
-            if package]
-
-
 def _refresh(context, arguments):
     """Read the cast this install ships off the decoder."""
     state = state_of(context)
@@ -107,42 +92,13 @@ def _refresh(context, arguments):
     return None
 
 
-def _import(context, arguments):
-    """Read the selected row's packages and hand them to the host."""
-    state = state_of(context)
-    name = BOUND.value(state)
-    if BOUND.selected(state) < 0:
-        return
-    browser = app_browser.state_of(context)
-    blocked = app_browser._blocking_required_options(
-        app_browser._ensure_active_config(browser))
-    if blocked:
-        state.status = blocked
-        return
-    options = app_browser.as_options(browser)
-    packages = _packages(state)
-    if not packages:
-        state.status = "{0}: this install ships no model for that row.".format(name)
-        return
-    stated = yield command.Read(
-        lambda: read.packages(packages, name, options, key=packages[0]), 0.7)
-    if stated is None:
-        state.status = "'{0}' places nothing this install carries.".format(packages[0])
-        return
-    yield command.Mark(0.8)
-    built = host_port.current().import_packages(context, stated, options)
-    state.status = "{0}: {1} placement(s). {2}".format(
-        name, built.imported, "  ".join(built.warnings[:2]))
-
-
-
 def _shaders(state, output):
     """This engine ships no shader ASSET: a material's program lives as blobs in an
     archive shared with everything else the build cooked. So it answers the shared
     button itself -- what lands on disk is the vertex and pixel stages as source,
     one file per variant."""
-    packages = _packages(state)
-    return datasets.shaders(packages, output) if packages else []
+    seed = BOUND.payload(state)
+    return datasets.shaders([seed], output) if seed else []
 
 
 def _animation_rules(context, state):
@@ -173,30 +129,10 @@ def _animation_rules(context, state):
     return rules, said
 
 
-def _reveal(context, arguments):
-    state = state_of(context)
-    if BOUND.selected(state) < 0:
-        return {"CANCELLED"}
-    packages = _packages(state)
-    return command.COMMANDS.get("ruri.cabmap_reveal").run(
-        context, {"cab": packages[0] if packages else "",
-                  "query": BOUND.value(state), "folder": ""})
-
-
 REFRESH = command.COMMANDS.define(
     "ruri.unreal_characters_refresh", "List Characters", _refresh,
     description="Read the cast this install ships off the decoder",
     icon="FILE_REFRESH", internal=True, poll=_loaded)
-IMPORT = command.COMMANDS.define(
-    "ruri.unreal_character_import", "Load Model", _import,
-    description="Import this row whole, exactly as the browser would",
-    icon="IMPORT", poll=_has_selection, steps=True, status_state=STATE,
-    failure="Unreal character import failed")
-REVEAL = command.COMMANDS.define(
-    "ruri.unreal_character_reveal", "Open Containing Folder", _reveal,
-    description="Show the selected row's package in the file browser",
-    icon="FILE_FOLDER", internal=True, poll=_has_selection)
-
 
 #: Name, then the build's own id, then the build's own finer kind hard right --
 #: which is what tells several rows sharing a display name apart. Each cell names
@@ -212,13 +148,11 @@ _COLUMNS = (
 
 
 PANEL = cast_panel.Panel(
-    BOUND, _COLUMNS, "unreal_characters", REFRESH.id, state_of, STATE,
-    seeds=lambda _context, state: _packages(state),
-    actions=(IMPORT.id, REVEAL.id), shaders=_shaders,
+    BOUND, _COLUMNS, "unreal_characters", REFRESH.id, state_of, STATE, shaders=_shaders,
     animation_rules=_animation_rules,
     # 这套引擎把表情记在网格自己的 morph 列表里,不是 Unity 的混合形状 —— 问的是同一个
     # 问题,所以画在同一格里,只是换成这个解码器说它的那份数据集。
-    face_dataset=("unreal.morphtargets", "packages"),
+    face_dataset=("unreal.morphtargets", "seed"),
 )
 
 

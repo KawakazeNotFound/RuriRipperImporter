@@ -57,12 +57,6 @@ def search(table_or_handle, query, rules=None):
                          dtype="<i4")
 
 
-def host_table(handle, columns, rows, roles=()):
-    """A table this host built, handed to the reader so a view can be opened over
-    it with the same vocabulary as a published one."""
-    return _reader().open_host_table(handle, columns, rows, roles)
-
-
 def loaded():
     from . import cabmap_state
 

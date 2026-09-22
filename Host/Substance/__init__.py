@@ -41,7 +41,8 @@ _BIN_DIR_HINT = ("Set it in the RuriRipper panel's 'RipperHook bin' field, or se
                  "RURI_RIPPERHOOK_BIN environment variable.")
 
 
-class SubstanceHost(host_port.Host):
+class SubstanceHost(host_port.Host, host_port.TextureCache, host_port.TextureSets,
+                    host_port.DisplaySettings):
     """What Painter can do, and where Painter keeps what the user typed.
 
     The three below are the ones something actually asks about: its texture
@@ -52,11 +53,8 @@ class SubstanceHost(host_port.Host):
 
     name = "Substance"
 
-    capabilities = frozenset((
-        host_port.TEXTURE_CACHE,
-        host_port.TEXTURE_SETS,
-        host_port.DISPLAY_SETTINGS,
-    ))
+    #: The reader's word for the basis a glTF file -- what Painter opens -- is written in.
+    basis = "gltf"
 
     def log(self, level, message):
         writer = (substance_painter.logging.error if level == host_port.ERROR
@@ -112,118 +110,6 @@ class SubstanceHost(host_port.Host):
         for repaint in list(_REPAINT):
             repaint()
 
-    def selected_rig(self, context):
-        """Never: Painter bakes the bind pose into the geometry and has no rigs.
-        The controls that read this are absent here for the same reason."""
-        return None
-
-    def clear_scene(self, context):
-        """Unreachable: a Painter project IS one mesh, so this host does not
-        declare SCENE_GRAPH and the control that asks for it is absent. Creating
-        the project is what replaces what was there."""
-        raise NotImplementedError(
-            "Painter has no scene graph to clear -- see Host.clear_scene")
-
-    def apply_environment(self, context, ambient):
-        """Unreachable: this host's project IS one mesh, with no world to stand a
-        level's sky up in. It does not declare SCENE_GRAPH."""
-        raise NotImplementedError(
-            "Painter has no world to light -- see Host.apply_environment")
-
-    def apply_level_resources(self, context, values, payloads):
-        """Unreachable: this host's project IS one mesh, with no level for a level's
-        state to shade. It does not declare SCENE_GRAPH."""
-        raise NotImplementedError(
-            "Painter has no level to shade -- see Host.apply_level_resources")
-
-    def source_view_position(self, context):
-        """Unreachable: a project that IS one mesh has no viewpoint in a level. It does
-        not declare SCENE_GRAPH."""
-        raise NotImplementedError(
-            "Painter has no level to look at -- see Host.source_view_position")
-
-    def apply_post_inputs(self, context, values):
-        """Unreachable: this host's display settings are a fixed set of choices, not
-        a chain with inputs. It does not declare COMPOSITOR."""
-        raise NotImplementedError(
-            "Painter has no display chain to drive -- see Host.apply_post_inputs")
-
-    def load_display_stage(self, context, stage, options):
-        """Unreachable: a stage is loaded AROUND what is already in the scene, and
-        this host's project IS one mesh. It does not declare SCENE_GRAPH, so the
-        half of the tab that offers a stage is absent here."""
-        raise NotImplementedError(
-            "Painter has no scene to stand a stage in -- see Host.load_display_stage")
-
-    def write_secondary_motion(self, context, rig, reading):
-        """Unreachable: no rigs, so nothing to write a chain onto. This host does
-        not declare SKELETON and the option that would ask for it never became a
-        field here."""
-        raise NotImplementedError(
-            "Painter has no rig to write secondary motion onto -- see "
-            "Host.write_secondary_motion")
-
-    def rig_memory(self, rig):
-        """Unreachable: no rigs, so nothing to remember anything on."""
-        raise NotImplementedError(
-            "Painter has no rigs -- see Host.rig_memory")
-
-    def rig_rest(self, context, rig):
-        """Unreachable: no rigs, so no rest pose to state."""
-        raise NotImplementedError("Painter has no rigs -- see Host.rig_rest")
-
-    def bake_bone_poses(self, context, rig, source_names, frame_count, payload,
-                        name, into=None):
-        """Unreachable: no rigs and no animation surface."""
-        raise NotImplementedError(
-            "Painter has no animation surface -- see Host.bake_bone_poses")
-
-    def rig_named(self, rig_name, context=None):
-        """Never: no rigs, so no name identifies one."""
-        return None
-
-    def frame_rate(self, context):
-        """Unreachable: no timeline. This host declares neither ANIMATION nor
-        MORPH_TARGETS, so nothing that needs a rate is offered here."""
-        raise NotImplementedError(
-            "Painter has no timeline -- see Host.frame_rate")
-
-    def set_frame_range(self, context, start, end):
-        """Unreachable, for the same reason as frame_rate."""
-        raise NotImplementedError(
-            "Painter has no timeline -- see Host.set_frame_range")
-
-    def face_bindings(self, context, rig, table):
-        """Unreachable: no rigs and no blend shapes, so a face table reaches
-        nothing. This host does not declare MORPH_TARGETS."""
-        raise NotImplementedError(
-            "Painter has no face to bind -- see Host.face_bindings")
-
-    def drive_face(self, context, rig, table, weights):
-        """Unreachable, for the same reason as face_bindings."""
-        raise NotImplementedError(
-            "Painter has no face to drive -- see Host.drive_face")
-
-    def bake_face(self, context, rig, table, tracks, frames, fps, name,
-                  into=None):
-        """Unreachable: no animation surface to bake onto."""
-        raise NotImplementedError(
-            "Painter has no animation surface -- see Host.bake_face")
-
-    def drive_blend_shapes(self, context, rig, weights):
-        """Unreachable: no blend shapes. This host does not declare
-        MORPH_TARGETS, so the sections that drive them are absent here."""
-        raise NotImplementedError(
-            "Painter has no blend shapes -- see Host.drive_blend_shapes")
-
-    def import_clips(self, context, clip_cab, clip_guids, database, options,
-                     display_names=None, activate=False):
-        """Unreachable: no rigs, so no performance to put on one. This host does
-        not declare ANIMATION and the rows that hold only clips are reported as
-        unimportable rather than reaching here."""
-        raise NotImplementedError(
-            "Painter has no animation surface -- see Host.import_clips")
-
     def register_state(self, name, schema, handlers, extra=None):
         """A plain value bag. Painter has no property system to hang this on, and
         nothing to gain from pretending otherwise -- what matters is that a panel
@@ -262,10 +148,10 @@ class SubstanceHost(host_port.Host):
                 "it never declared is a panel drawing someone else's".format(name))
         return found
 
-    def import_packages(self, context, packages, options=None, report=None,
-                        resolved=None):
-        from . import packages as materialiser
-        return materialiser.materialise(context, packages, options, report, resolved)
+    def materialise(self, context, statement, options, report=None):
+        from . import materialise as materialiser
+        return materialiser.materialise(context, statement, dict(options or {}),
+                                        report if report is not None else [])
 
 
 #: Bound BEFORE the modules below are imported: the settings store's own key set
@@ -341,9 +227,8 @@ def start_plugin():
     # a game's Look tab draws whatever the host registered.
     display_panel.register()
     look.register_section("display", "Display", display_panel.draw,
-                          host_port.DISPLAY_SETTINGS)
+                          host_port.DisplaySettings)
     Game.register()
-    dock.register_surfaces()
     _panel = dock.RuriRipperDock()
     # The kernel asks for a repaint without knowing there is a panel; this is
     # what a repaint IS here, because Qt is retained-mode.

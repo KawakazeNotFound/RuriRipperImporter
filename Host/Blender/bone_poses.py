@@ -90,15 +90,15 @@ def key(context, rig, source_names, frame_count, payload, name, into=None):
         action = bpy.data.actions.new("RT_{0}".format(name))
         if hasattr(action, "use_fake_user"):
             action.use_fake_user = True
-        fcurves, slot = animation_builder._prepare_channels(action, action.name, "OBJECT")
+        fcurves, slot = animation_builder.prepare_channels(action, action.name, "OBJECT")
 
     for index, bone, bone_rest in posed:
-        locations, quaternions, scales = animation_builder._conjugated_pose_arrays(
+        locations, quaternions, scales = animation_builder.conjugated_pose_arrays(
             values[:, index, 0:3].astype(np.float64),
             values[:, index, (6, 3, 4, 5)].astype(np.float64),
             values[:, index, 7:10].astype(np.float64),
             bone_rest.inverted_safe(), conversion)
-        animation_builder._write_bone_fcurves(fcurves, bone, frames,
+        animation_builder.write_bone_fcurves(fcurves, bone, frames,
                                               locations, quaternions, scales)
 
     if into is None:

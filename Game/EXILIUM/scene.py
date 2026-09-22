@@ -2,9 +2,9 @@
 
 A scene is the one asset family whose address survives this game's build as a real
 path, so the tree drawn here is the game's own folder tree rather than anything
-reconstructed. Picking one and pressing Load runs the bundle browser's own import
-over the cabs that scene resolved to -- which is why this tab needs nothing of the
-host that the browser does not already need.
+reconstructed. A row's payload is its seed, so Load and Reveal are the kernel's
+verbs over it -- which is why this tab needs nothing of the host that the browser
+does not already need.
 
 Nothing here imports a host.
 """
@@ -13,14 +13,14 @@ from __future__ import annotations
 
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
-from ...Kernel.app import command, filtering
+from ...Kernel.app import cast_panel, command, filtering
 from ...Kernel.app import layout as app_layout
 from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from . import datasets, roster
+from . import datasets
 
 STATE = "ruri_exilium_scene"
 SPEC_KEY = "EXILIUM:scene"
@@ -77,10 +77,6 @@ def _loaded(context):
     return app_browser.state_of(context).loaded and cabmap_state.BRIDGE is not None
 
 
-def _has_selection(context):
-    return _loaded(context) and BOUND.picked(state_of(context)) is not None
-
-
 def _refresh(context, arguments):
     """Read every scene the game's own catalog names."""
     state = state_of(context)
@@ -93,35 +89,10 @@ def _refresh(context, arguments):
     return None
 
 
-def _load(context, arguments):
-    """Import the selected scene through the browser's own import -- one import
-    path, so a fix there is a fix here."""
-    entry = BOUND.picked(state_of(context))
-    if entry is None:
-        return
-    yield from roster.load_address(context, entry.key, entry.label)
-
-
-def _reveal(context, arguments):
-    entry = BOUND.picked(state_of(context))
-    if entry is None:
-        return {"CANCELLED"}
-    return roster.reveal_address(context, entry.key, entry.label)
-
-
 REFRESH = command.COMMANDS.define(
     "ruri.exilium_scene_refresh", "Refresh Scenes", _refresh,
     description="Read the scene list out of the game's own catalog",
     icon="FILE_REFRESH", poll=_loaded)
-LOAD = command.COMMANDS.define(
-    "ruri.exilium_scene_load", "Load Scene", _load,
-    description="Import this scene, exactly as the bundle browser would",
-    icon="IMPORT", poll=_has_selection, steps=True, status_state=STATE,
-    failure="Loading this scene failed")
-REVEAL = command.COMMANDS.define(
-    "ruri.exilium_scene_reveal", "Open Containing Folder", _reveal,
-    description="Switch to the bundle browser and open where this scene lives",
-    icon="FILE_FOLDER", poll=_has_selection)
 
 
 #: A scene row. One the install never downloaded is dimmed rather than hidden --
@@ -154,9 +125,10 @@ def draw(layout, context):
     # 与浏览器同一份导入选项 —— Load 走的本来就是浏览器自己的导入。
     app_browser.draw_import_options(options, context)
     actions = options.column(align=True)
-    actions.enabled = BOUND.picked(state) is not None
-    actions.operator(LOAD.id)
-    actions.operator(REVEAL.id)
+    entry = BOUND.picked(state)
+    actions.enabled = entry is not None
+    cast_panel.draw_row_verbs(actions, [entry.payload] if entry is not None and entry.payload else [],
+                              STATE, scene=True)
 
 
 def register():

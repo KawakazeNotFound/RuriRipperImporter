@@ -23,7 +23,6 @@ placement count runs into the hundreds of thousands and is only ever read in bul
 
 from __future__ import annotations
 
-from ...Kernel.app import loading
 from . import datasets
 
 # Holds the current window's discovered-but-not-yet-imported placements, so a
@@ -96,6 +95,7 @@ RESOLVED_CABS = []      # list[str] -- the seed CABs an import of it needs
 CLOSURE_CABS = 0        # how many CABs those seeds pull in, the real memory proxy
 CURRENT_MAP = ""
 CURRENT_WINDOW = ()     # (min_x, min_z, max_x, max_z, scene_state_id, detail_level)
+SEED = ""               # the seed the hook spells for exactly this discovery
 STATUS = "Refresh to read the game's scene list."
 
 
@@ -157,7 +157,7 @@ def discover_placements(map_name, rect, scene_state_id, detail_level):
     Resets state tied to whatever was discovered before -- a different
     selection's estimate is not meaningful once the placement set has changed."""
     global TABLE, MATERIALS_BY_ROW, COUNTS, SEED_PATHS, RESOLVED_CABS, CLOSURE_CABS
-    global CURRENT_MAP, CURRENT_WINDOW, STATUS
+    global CURRENT_MAP, CURRENT_WINDOW, SEED, STATUS
     min_x, min_z, max_x, max_z = rect
     # A scene state filter is a LIST on the wire; the panel picks one at a time,
     # and "no state chosen" is the empty list rather than a sentinel number.
@@ -168,6 +168,7 @@ def discover_placements(map_name, rect, scene_state_id, detail_level):
     TABLE = result["table"]
     MATERIALS_BY_ROW = result["materials_by_row"]
     SEED_PATHS = result["seed_paths"]
+    SEED = result["seed"]
     COUNTS = {key: result[key] for key in
               ("total_renderers", "no_transform", "detail_filtered", "stand_in_filtered",
                "no_renderers", "distinct_assets")}
@@ -222,47 +223,17 @@ def resolve_cabs(bridge):
     return RESOLVED_CABS
 
 
-def packages(label):
-    """The current discovery as the one statement a host materialises, or None
-    when nothing has been discovered or nothing resolved.
-
-    Nothing is turned into a per-row record on the way out: the table stays
-    columnar all the way to the host that batches it (see loading.SCENE_WINDOW).
-    What this DOES do is stop the building side reaching into this module's
-    globals -- a host that reads a game's module state is a host that knows the
-    game."""
+def seed():
+    """The seed the current discovery loads as, or "" when nothing has been discovered or
+    nothing resolved: the one the hook spelled for exactly the rect and states discovered."""
     if TABLE is None or len(TABLE) == 0 or not RESOLVED_CABS:
-        return None
-    # What each path IS -- a prefab or a loose mesh, and under which name -- is
-    # THIS GAME's addressable-path convention, asked once for the whole window.
-    # The host that builds may not ask: it would have to know whose convention.
-    paths = TABLE.values("assetPath")
-    named = datasets.ranked(sorted({*paths, *(path for materials in MATERIALS_BY_ROW.values()
-                                              for path in materials)}))
-    return loading.Packages(
-        CURRENT_MAP, label, loading.SCENE_WINDOW, list(RESOLVED_CABS),
-        seed=seed_of(CURRENT_MAP),
-        window={"table": TABLE, "materials_by_row": MATERIALS_BY_ROW,
-                "seeds": list(SEED_PATHS), "named": named, "label": label})
-
-
-def seed_of(map_name):
-    """这张地图作为一次导入的种子 —— hook 自己发布的那一列,原样带过去。
-    拼法住在 hook 里(EndfieldStatementSource.WindowSeed),这边拼一份就是让它漂开。"""
-    for rows in SCENES.values():
-        for scene in rows:
-            if scene["id"] == map_name:
-                return scene["seed"]
-    for places in LANDMARKS.values():
-        for place in places:
-            if place["id"] == map_name:
-                return place["seed"]
-    return ""
+        return ""
+    return SEED
 
 
 def reset():
     global SCENES, LANDMARKS, SUMMARIES, TABLE, MATERIALS_BY_ROW, COUNTS, SEED_PATHS
-    global RESOLVED_CABS, CLOSURE_CABS, CURRENT_MAP, CURRENT_WINDOW, STATUS
+    global RESOLVED_CABS, CLOSURE_CABS, CURRENT_MAP, CURRENT_WINDOW, SEED, STATUS
     SCENES = {SELF_CONTAINED: [], STREAMING: []}
     LANDMARKS = {}
     TABLES.clear()
@@ -275,4 +246,5 @@ def reset():
     CLOSURE_CABS = 0
     CURRENT_MAP = ""
     CURRENT_WINDOW = ()
+    SEED = ""
     STATUS = "Refresh to read the game's scene list."

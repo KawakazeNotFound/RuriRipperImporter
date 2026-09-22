@@ -42,8 +42,6 @@ DEFAULT_LAYER_NAME = "TextureRoles.json"
 COLOR_ROLES = ("base_color", "normal", "emission")
 CHANNEL_ROLES = ("metallic", "roughness", "smoothness", "occlusion", "specular", "opacity", "height")
 NONE_ROLE = "none"
-COLOR_VALUE_ROLES = ("base_color", "emission")
-FLOAT_VALUE_ROLES = ("metallic", "roughness", "smoothness", "normal_strength", "alpha_cutoff", "blend_mode")
 
 # (role id, label, what it feeds) -- the vocabulary a host offers its user.
 ROLES = (
@@ -117,102 +115,12 @@ class Resolution:
         return [texture for texture in self.textures if texture.channels]
 
 
-class RoleTable:
-    """The merged layers: later layers override earlier ones per property."""
-    __slots__ = ("textures", "colors", "floats", "proven_keyword", "sources")
-
-    def __init__(self):
-        self.textures = {}
-        self.colors = {}
-        self.floats = {}
-        self.proven_keyword = ""
-        self.sources = []
-
-    @classmethod
-    def load(cls, paths):
-        table = cls()
-        for path in paths:
-            if not path or not os.path.isfile(path):
-                continue
-            table.merge(read_layer(path))
-            table.sources.append(path)
-        return table
-
-    def merge(self, layer):
-        for name, entry in (layer.get("textures") or {}).items():
-            if isinstance(entry, dict):
-                self.textures[str(name)] = entry
-        for name, role in (layer.get("colors") or {}).items():
-            self.colors[str(name)] = str(role)
-        for name, role in (layer.get("floats") or {}).items():
-            # A float may need its UNIT stated as well as its role: a game whose shaders
-            # take an alpha threshold in 0-255 states the same role as one that takes 0-1,
-            # and only the layer knows which. The plain string form stays the common case.
-            if isinstance(role, dict):
-                self.floats[str(name)] = (str(role.get("role")), float(role.get("scale", 1.0)))
-            else:
-                self.floats[str(name)] = (str(role), 1.0)
-        keyword = layer.get("proven_keyword")
-        if isinstance(keyword, str) and keyword:
-            self.proven_keyword = keyword
-
-    def resolve(self, props):
-        proven = bool(self.proven_keyword) and self.proven_keyword in props.keywords
-        textures = []
-        unmapped = []
-        for name, guid in props.textures.items():
-            entry = self.textures.get(name)
-            if entry is None:
-                if not proven:
-                    unmapped.append(name)
-                continue
-            role = entry.get("role")
-            channels = {}
-            for channel_role, index in (entry.get("channels") or {}).items():
-                if channel_role in CHANNEL_ROLES:
-                    channels[channel_role] = int(index)
-            for channel_role, float_name in (entry.get("channels_from") or {}).items():
-                value = props.floats.get(str(float_name))
-                if channel_role in CHANNEL_ROLES and value is not None:
-                    channels[channel_role] = int(value)
-            if role == NONE_ROLE:
-                role = None
-            elif role not in COLOR_ROLES:
-                role = None
-            if role is None and not channels:
-                continue
-            textures.append(TextureRole(name, guid, role, channels, entry.get("encoding")))
-        colors = {}
-        for name, value in props.colors.items():
-            role = self.colors.get(name)
-            if role in COLOR_VALUE_ROLES and role not in colors:
-                colors[role] = value
-        floats = {}
-        for name, value in props.floats.items():
-            stated = self.floats.get(name)
-            if stated is None:
-                continue
-            role, scale = stated
-            if role in FLOAT_VALUE_ROLES and role not in floats:
-                floats[role] = value * scale
-        return Resolution(textures, colors, floats, unmapped, proven)
-
-
-def default_layer_path():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_LAYER_NAME)
-
-
 def read_layer(path):
     with open(path, "r", encoding="utf-8") as handle:
         layer = json.load(handle)
     if not isinstance(layer, dict):
         raise ValueError("texture role layer is not an object: {0}".format(path))
     return layer
-
-
-def layer_paths(game_layer, user_layer):
-    """The layers in override order: the default, the game's own, the user's."""
-    return [default_layer_path(), game_layer, user_layer]
 
 
 def entry_for(role, channel):

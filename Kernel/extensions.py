@@ -24,10 +24,6 @@ that states none is identified by what it registered, and the qualified name of
 a plain function is module-local by construction: two generated shading stacks
 each own a ``refresh_main_light_role``, and they are two entries rather than one
 collision. So the check runs on the stated key and on nothing else.
-
-A point may state the capability an entry needs. Entries whose capability the
-bound host does not answer are not registered-and-skipped: they are absent, so
-nothing downstream has to remember to check.
 """
 
 from __future__ import annotations
@@ -94,65 +90,72 @@ class ExtensionPoint:
     reshuffle a chain.
     """
 
-    __slots__ = ("name", "doc", "requires", "_entries", "_next")
+    __slots__ = ("name", "doc", "_entries", "_stated", "_next")
 
-    def __init__(self, name, doc="", requires=None):
+    def __init__(self, name, doc=""):
         self.name = name
         self.doc = doc
-        #: The capability protocol an entry presumes, or None when every host
-        #: can hold one. Stated as the protocol CLASS, never a host name.
-        self.requires = requires
         self._entries = {}
+        #: stated key -> the identity filed under it, so a lookup by name is one read.
+        self._stated = {}
         self._next = 0
 
-    def add(self, value, key=""):
+    def add(self, value, key="", module=""):
         """Register ``value``, replacing what the same module filed under the
-        same key. Returns the value, so a decorator form reads naturally."""
-        from . import capabilities
-
-        if self.requires is not None and capabilities.bound() \
-                and not capabilities.supports(self.requires):
-            return value
-        identity = (_module_of(value), key or _key_of(value))
+        same key. ``module`` is the declaring module, for a value that cannot say
+        so itself: an instance of a shared class reports that class's module, not
+        the one that made it. Returns the value, so a decorator form reads
+        naturally."""
+        identity = (module or _module_of(value), key or _key_of(value))
+        if key:
+            taken = self._stated.get(key)
+            if taken is not None and taken[0] != identity[0]:
+                raise ValueError(
+                    "two modules claim {0} entry {1!r}: {2} and {3}".format(
+                        self.name, key, taken[0], identity[0]))
+            self._stated[key] = identity
         existing = self._entries.get(identity)
         order = existing.order if existing is not None else self._next
         if existing is None:
             self._next += 1
-        if key:
-            taken = next((entry for entry in self._entries.values()
-                          if entry.key == key and entry.module != identity[0]), None)
-            if taken is not None:
-                raise ValueError(
-                    "two modules claim {0} entry {1!r}: {2} and {3}".format(
-                        self.name, key, taken.module, identity[0]))
         self._entries[identity] = Entry(value, identity[0], identity[1], order)
         return value
 
-    def remove(self, value, key=""):
+    def remove(self, value, key="", module=""):
         """Drop one registration. Silent when it is not there: an unregister
         that runs after a failed register must not raise over the first
         failure's shadow."""
-        self._entries.pop((_module_of(value), key or _key_of(value)), None)
+        identity = (module or _module_of(value), key or _key_of(value))
+        self._entries.pop(identity, None)
+        if key and self._stated.get(key) == identity:
+            del self._stated[key]
+
+    def discard(self, key):
+        """Drop whatever is filed under a stated key, whoever declared it."""
+        identity = self._stated.pop(key, None)
+        if identity is not None:
+            self._entries.pop(identity, None)
 
     def forget(self, module):
         """Drop everything one module declared -- what a module being unloaded
         (rather than reloaded) means."""
         for identity in [key for key in self._entries if key[0] == module]:
             del self._entries[identity]
+        for key in [key for key, identity in self._stated.items() if identity[0] == module]:
+            del self._stated[key]
 
     def clear(self):
         self._entries.clear()
+        self._stated.clear()
         self._next = 0
 
     def entries(self):
         return sorted(self._entries.values(), key=lambda entry: entry.order)
 
     def get(self, key):
-        """The value filed under ``key``, or None."""
-        for entry in self.entries():
-            if entry.key == key:
-                return entry.value
-        return None
+        """The value filed under a stated ``key``, or None."""
+        identity = self._stated.get(key)
+        return self._entries[identity].value if identity is not None else None
 
     def keys(self):
         return tuple(entry.key for entry in self.entries())
@@ -176,13 +179,13 @@ class ExtensionPoint:
 POINTS = {}
 
 
-def point(name, doc="", requires=None):
+def point(name, doc=""):
     """Declare (or fetch) a point. Declaring it twice is a reload of the module
     that declared it, and the entries already in it are kept -- the point is a
     place, and re-executing the file that named it did not empty it."""
     found = POINTS.get(name)
     if found is None:
-        found = POINTS[name] = ExtensionPoint(name, doc, requires)
+        found = POINTS[name] = ExtensionPoint(name, doc)
     return found
 
 

@@ -51,12 +51,11 @@ _CHARACTER_TAB = ("character", "Character",
                   "expressions she was built with",
                   ("chara", "draw_tab"), None)
 
-#: A face is no longer a section of its own: browsing a model's expression
-#: vocabulary is the ONE cast panel's Face pane, and what this family states about
-#: a head beyond that is arithmetic the character build reads directly (``face``).
+#: A face is not a section of its own: browsing a model's expressions and driving
+#: them is the ONE cast panel's Face pane, over what the hook states about the head.
 SECTIONS = (GameSection("scene"),
             GameSection("chara"),
-            GameSection("anime", host_port.ANIMATION))
+            GameSection("anime", host_port.Timeline))
 
 # The bpy classes are the PACKAGE's, shared by every title in it, and a class
 # registers exactly once -- so the first title carries the real register/unregister

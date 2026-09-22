@@ -2,9 +2,9 @@
 its add-on lifecycle, and the only place ``bpy`` is allowed to appear outside a
 game's own panels.
 
-A prefab imports as a full model here: armature from the transform hierarchy,
-skinned meshes at the chosen detail level, materials as node graphs, and every
-AnimationClip its Animator controller references as an action.
+A statement lands here as Blender data: its skeletons as armatures, its meshes
+at the level it states, its materials as node graphs, its performances as
+actions.
 """
 
 from __future__ import annotations
@@ -14,12 +14,10 @@ import os
 import sys
 
 import bpy
-from bpy.props import BoolProperty, IntProperty, StringProperty
-from bpy_extras.io_utils import ImportHelper
+from bpy.props import StringProperty
 
 from ...Kernel import bootstrap as kernel_bootstrap
 from ...Kernel import host as host_port
-from ...Kernel import options as kernel_options
 
 #: The add-on module name Blender registered, which is what an AddonPreferences
 #: is keyed by and what ``preferences.addons`` is looked up with. Derived from
@@ -45,25 +43,18 @@ def _preferences():
     return entry.preferences if entry is not None else None
 
 
-class BlenderHost(host_port.Host):
+class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, host_port.Rig,
+                  host_port.Timeline, host_port.MorphTargets, host_port.NodeMaterials):
     """What Blender can do, and where Blender keeps the one path that differs
-    per machine."""
+    per machine. A skeleton, an animation surface and morph targets, a scene of
+    separate objects with a compositor behind it, and node-graph materials; the
+    three Painter answers instead (a bake cache, texture sets, plugin-settable
+    display) are not Blender's to answer."""
 
     name = "Blender"
 
-    #: A skeleton, an animation surface and morph targets -- which is what the
-    #: tabs that pose a rig, play a performance or drive a face ask for. The
-    #: three Painter answers instead (a bake cache, texture sets, plugin-settable
-    #: display) are all no: Blender builds materials as node graphs in memory and
-    #: lights its own viewport.
-    capabilities = frozenset((
-        host_port.SKELETON,
-        host_port.ANIMATION,
-        host_port.MORPH_TARGETS,
-        host_port.COMPOSITOR,
-        host_port.SCENE_GRAPH,
-        host_port.NODE_MATERIALS,
-    ))
+    #: The reader's word for the basis Blender's geometry and transforms are in.
+    basis = "blender"
 
     def log(self, level, message):
         print("[RuriRipper] {0}".format(message))
@@ -118,8 +109,23 @@ class BlenderHost(host_port.Host):
                 area.tag_redraw()
 
     def selected_rig(self, context):
-        active = (context or bpy.context).object
-        return active if active is not None and active.type == "ARMATURE" else None
+        """The rig the active object stands for (a mesh stands for the armature its
+        modifier binds), else the one rig the selection resolves to, else the
+        scene's only armature. None when nothing resolves or the choice is
+        ambiguous."""
+        from . import rig_identity
+
+        context = context or bpy.context
+        active = rig_identity.armature_of(getattr(context, "active_object", None))
+        if active is not None:
+            return active
+        selected = {rig_identity.armature_of(obj)
+                    for obj in getattr(context, "selected_objects", ())}
+        selected.discard(None)
+        if selected:
+            return next(iter(selected)) if len(selected) == 1 else None
+        armatures = [obj for obj in context.scene.objects if obj.type == "ARMATURE"]
+        return armatures[0] if len(armatures) == 1 else None
 
     def clear_scene(self, context):
         """Empty the document: the objects, the collections holding them, and
@@ -136,9 +142,16 @@ class BlenderHost(host_port.Host):
 
         Selecting is also not the same as covering: a selection reaches what the
         view layer lets it, so anything in a hidden or excluded collection
-        survived a reset that claimed to have emptied the document."""
+        survived a reset that claimed to have emptied the document.
+
+        The collection the view layer had active is among the removed ones, and a
+        view layer left pointing at nothing gives the next import nowhere to link
+        into -- so the scene's own collection, which is what is left, becomes the
+        active one."""
         bpy.data.batch_remove(list(bpy.data.objects) + list(bpy.data.collections))
         bpy.data.orphans_purge(do_local_ids=True, do_linked_ids=True, do_recursive=True)
+        view_layer = (context or bpy.context).view_layer
+        view_layer.active_layer_collection = view_layer.layer_collection
 
     def apply_environment(self, context, ambient):
         from . import world_builder
@@ -192,10 +205,13 @@ class BlenderHost(host_port.Host):
         from . import cloth_writer
         return cloth_writer.write(context, rig, reading)
 
-    def rig_memory(self, rig):
-        """The object itself: Blender's custom properties ARE a mapping on it,
-        and they travel with the .blend, which is the whole point."""
-        return rig
+    def rig_paths(self, rig):
+        from . import rig_identity
+        return sorted(set(rig_identity.bone_paths(rig).values()))
+
+    def rig_avatar(self, rig):
+        from . import rig_identity
+        return rig_identity.avatar_of(rig)
 
     def rig_rest(self, context, rig):
         from . import bone_poses
@@ -235,11 +251,9 @@ class BlenderHost(host_port.Host):
         from . import blend_shapes
         return blend_shapes.drive(context, rig, weights)
 
-    def import_clips(self, context, clip_cab, clip_guids, database, options,
-                     display_names=None, activate=False):
-        from . import packages as materialiser
-        return materialiser.build_clips(context, clip_cab, clip_guids, database,
-                                        options, display_names, activate)
+    def play(self, context, rig, clips, options, activate=False):
+        from . import animation_builder
+        return animation_builder.play(context, rig, clips, options, activate)
 
     def register_state(self, name, schema, handlers, extra=None):
         from . import rna
@@ -256,24 +270,9 @@ class BlenderHost(host_port.Host):
         scene = (context or bpy.context).scene
         return getattr(scene, name)
 
-    def import_packages(self, context, packages, options=None, report=None,
-                        resolved=None):
-        from ...Kernel.app import loading
-        from . import packages as materialiser
-        if resolved is None and packages.kind != loading.PLACEMENTS:
-            resolved = loading.resolve_closure(
-                packages.cabs, export_class_ids=list(packages.export_class_ids) or None)
-        return materialiser.materialise(context, packages, resolved, options, report)
-
-    def import_performance(self, context, package, options=None):
-        from ...Kernel.bridge import cabmap_state
-        from . import prefab_importer, unreal_importer
-        if cabmap_state.BRIDGE is None:
-            return 0
-        built = unreal_importer.import_animations(
-            context, cabmap_state.BRIDGE, package,
-            prefab_importer.resolve_options(options))
-        return len(built or ())
+    def materialise(self, context, statement, options, report=None):
+        from . import materialise as materialiser
+        return materialiser.materialise(context, statement, options, report)
 
 
 #: Bound BEFORE this driver's own modules are imported, and long before
@@ -285,10 +284,9 @@ class BlenderHost(host_port.Host):
 HOST = host_port.bind(BlenderHost())
 
 from ... import Game                                                    # noqa: E402
-from . import (rna, render, coordinate, hierarchy, rig_identity, armature_builder,  # noqa: E402
-               mesh_builder, material_builder, material_panel, derived_state,
-               animation_builder, prefab_importer, filter_ui, step_loader, cabmap_panel,
-               cross_game_retarget, post_panel)
+from . import (rna, render, coordinate, rig_identity, material_builder,  # noqa: E402
+               material_panel, derived_state, animation_builder, step_loader, browser_panel,
+               post_panel)
 
 
 # ---------------------------------------------------------------------------
@@ -312,10 +310,8 @@ def _holds_process_state(module):
 #: not the module. Anything under this driver that is NOT listed is still
 #: reloaded, just after these, so forgetting one costs ordering rather than
 #: correctness.
-_DRIVER_ORDER = (rna, render, coordinate, hierarchy, rig_identity, armature_builder, mesh_builder,
-                 material_builder, material_panel, derived_state, animation_builder,
-                 prefab_importer, filter_ui, step_loader, cabmap_panel, cross_game_retarget,
-                 post_panel)
+_DRIVER_ORDER = (rna, render, coordinate, rig_identity, material_builder, material_panel,
+                 derived_state, animation_builder, step_loader, browser_panel, post_panel)
 
 
 def _reload_tree(root_name):
@@ -362,13 +358,12 @@ def reload_modules():
     """Re-import everything an edit can have changed, so a re-registration
     during development takes effect without restarting Blender.
 
-    Bottom-up: the data layer, then the kernel, then this driver, then the
-    games -- each layer picks up the new objects of the one below rather than
-    holding references to the previous generation. This module goes last of its
-    own tree, so the driver body re-binds against modules that are already new;
-    reloading it mutates it in place, which is why the caller's reference to it
-    stays valid and its register() is the fresh one."""
-    _reload_tree(ADDON + ".Kernel")
+    Bottom-up: the kernel, then this driver, then the games -- each layer picks
+    up the new objects of the one below rather than holding references to the
+    previous generation. This module goes last of its own tree, so the driver body
+    re-binds against modules that are already new; reloading it mutates it in
+    place, which is why the caller's reference to it stays valid and its
+    register() is the fresh one."""
     _reload_tree(ADDON + ".Kernel")
     for module in _DRIVER_ORDER:
         importlib.reload(module)
@@ -382,7 +377,7 @@ def reload_modules():
 
 
 # ---------------------------------------------------------------------------
-# Preferences and the File > Import entry
+# Preferences
 # ---------------------------------------------------------------------------
 def _on_paths_changed(self, context):
     kernel_bootstrap.republish_paths()
@@ -412,71 +407,11 @@ class RuriRipperImporterPreferences(bpy.types.AddonPreferences):
                           "(e.g. .../Ruri-RipperHook/Source/0Bins/Debug).", icon="INFO")
 
 
-def option_annotations(capabilities):
-    """Blender property annotations for every import option this host honours.
-
-    Generated rather than typed out: the schema (Kernel/options.py) is the one
-    place an option exists, and a widget that has drifted from what the pipeline
-    reads is a switch the user flips for nothing."""
-    annotations = {}
-    for entry in kernel_options.schema(capabilities):
-        if entry.kind == kernel_options.BOOL:
-            annotations[entry.key] = BoolProperty(
-                name=entry.label, description=entry.description, default=entry.default)
-        elif entry.kind == kernel_options.INT:
-            keywords = {}
-            if entry.minimum is not None:
-                keywords["min"] = entry.minimum
-            if entry.soft_maximum is not None:
-                keywords["soft_max"] = entry.soft_maximum
-            annotations[entry.key] = IntProperty(
-                name=entry.label, description=entry.description, default=entry.default,
-                **keywords)
-        else:
-            raise TypeError("no Blender property for option kind {0!r} ({1})".format(
-                entry.kind, entry.key))
-    return annotations
-
-
-class IMPORT_OT_unity_asset(bpy.types.Operator, ImportHelper):
-    """Import a Unity asset: prefab (full model + clips), mesh, anim, or controller."""
-
-    bl_idname = "import_scene.unity_asset"
-    bl_label = "Import Unity Asset"
-    bl_options = {"REGISTER", "UNDO"}
-    filename_ext = ".prefab"
-    filter_glob: StringProperty(
-        default="*.prefab;*.asset;*.anim;*.controller", options={"HIDDEN"})
-
-    def as_options(self):
-        return {entry.key: getattr(self, entry.key)
-                for entry in kernel_options.schema(HOST.capabilities)}
-
-    def execute(self, context):
-        report = prefab_importer.import_asset(context, self.filepath, self.as_options())
-        self.report({"INFO"}, "Unity asset import: " + report.summary())
-        for warning in report.warnings[:5]:
-            self.report({"WARNING"}, warning)
-        return {"FINISHED"}
-
-
-IMPORT_OT_unity_asset.__annotations__ = dict(
-    IMPORT_OT_unity_asset.__annotations__, **option_annotations(HOST.capabilities))
-
-
-def _menu_asset(self, context):
-    self.layout.operator(IMPORT_OT_unity_asset.bl_idname,
-                         text="Unity Asset (.prefab / .asset / .anim / .controller)")
-
-
-_CLASSES = (RuriRipperImporterPreferences, IMPORT_OT_unity_asset)
-
-
 def register():
-    for cls in _CLASSES:
-        bpy.utils.register_class(cls)
-    bpy.types.TOPBAR_MT_file_import.append(_menu_asset)
-    cabmap_panel.register()
+    bpy.utils.register_class(RuriRipperImporterPreferences)
+    # The records every panel state shares, before the first state that contains one.
+    rna.register_shared()
+    browser_panel.register()
     # 派生态调度器:导入产物、灯、相机的变更从这里统一收敛成一次重建。装在游戏之前,
     # 这样一个游戏的着色栈注册进来的阶段第一次被用到时,调度器已经在监听了。
     derived_state.register()
@@ -489,11 +424,11 @@ def register():
     # Drawn after Game so a stage registered by a game's shader package is
     # already there to be listed.
     post_panel.register()
-    # Every command anything declared, wrapped as an operator. After the games,
-    # because that is when every command exists.
-    render.register_commands()
+    # Every command and surface anything declared, as Blender classes. After the
+    # games, because that is when every one of them exists.
+    render.register()
     # Keymaps last of all: an entry sets properties on the operator it names.
-    cabmap_panel.register_keymaps()
+    browser_panel.register_keymaps()
     # Repairs "action assigned but no slot picked" states after any UI-driven
     # action assignment -- see animation_builder's slotted-action notes (the
     # imported data plays only through its slot, and most UI surfaces outside
@@ -507,15 +442,13 @@ def register():
 
 
 def unregister():
-    cabmap_panel.unregister_keymaps()
-    render.unregister_commands()
-    render.unregister_lists()
+    browser_panel.unregister_keymaps()
+    render.unregister()
     animation_builder.unregister_slot_autofix()
     post_panel.unregister()
     Game.unregister()
     material_panel.unregister()
     derived_state.unregister()
-    cabmap_panel.unregister()
-    bpy.types.TOPBAR_MT_file_import.remove(_menu_asset)
-    for cls in reversed(_CLASSES):
-        bpy.utils.unregister_class(cls)
+    browser_panel.unregister()
+    rna.unregister_shared()
+    bpy.utils.unregister_class(RuriRipperImporterPreferences)

@@ -32,7 +32,7 @@ from . import layout as vocabulary
 from . import state as app_state
 from ...Kernel.bridge import bootstrap, pythonnet_bridge, workspace
 from ...Kernel.bridge import cabmap_state
-from ...Kernel.unity import class_registry, texture_roles
+from ...Kernel.unity import texture_roles
 from ... import Game
 
 BROWSER_TAB_ID = schemas.BROWSER_TAB_ID
@@ -185,10 +185,8 @@ def _sync_window_selection(state):
         item.selected = item.cab in selected
 
 
-def _redraw_all(context):
-    screen = getattr(context, "screen", None)
-    for area in (screen.areas if screen else []):
-        area.tag_redraw()
+def _redraw():
+    host_port.current().redraw()
 
 
 def _reapply_and_refresh(context):
@@ -199,7 +197,7 @@ def _reapply_and_refresh(context):
     state = state_of(context)
     cabmap_state.refresh_visible(state.search, state.filter_rules)
     _rebuild_window(state)
-    _redraw_all(context)
+    _redraw()
 
 
 def _schedule_filter(query, on_ready):
@@ -233,7 +231,7 @@ def _schedule_filter(query, on_ready):
 
 def _on_search_edit(self, context):
     _schedule_filter(self.search,
-                     lambda: (_rebuild_window(state_of(context)), _redraw_all(context)))
+                     lambda: (_rebuild_window(state_of(context)), _redraw()))
 
 
 def _install_identity(root, source_options=None):
@@ -324,7 +322,7 @@ def _game_tabs(state):
     """The content tabs of the game the CURRENT TAB's install is -- one install's,
     not every open tab's. Each install has its own browser tab, so drawing the union
     would stack two games' Scene/Character tabs into one row."""
-    config = _active_config(state)
+    config = active_config(state)
     return Game.tabs_of(config.game_name, config.engine_family) if config is not None else []
 
 
@@ -365,7 +363,7 @@ def _find_config(state, key):
     return None
 
 
-def _active_config(state):
+def active_config(state):
     """The config entry the browser is currently on, or None -- read-only, so a
     draw/getter never mutates the collection."""
     return _find_config(state, state.current_tab)
@@ -470,29 +468,6 @@ def _rename_tab(state, config, new_key):
     config.key = new_key
     if state.current_tab == old_key:
         state.current_tab = new_key
-
-
-def _open_tab(state, key, context):
-    """Open a fresh unnamed tab and switch to it. The next folder typed into it is
-    what names it."""
-    _ensure_tab(state, key or _next_unnamed_key(state))
-    _switch_current_tab(state, key or _tab_keys(state)[-1], context)
-
-
-def _close_tab(state, key, context):
-    """Close one tab -- remove its scene config entry, release its browser session,
-    and hand focus to a remaining tab (a fresh unnamed one when none is left, so the
-    panel is never tabless)."""
-    for index, config in enumerate(state.games):
-        if config.key == key:
-            state.games.remove(index)
-            break
-    cabmap_state.drop(key or None)
-    remaining = _tab_keys(state)
-    if state.current_tab == key or not remaining:
-        _set_current_tab(state, remaining[0] if remaining
-                         else _ensure_tab(state, _next_unnamed_key(state)).key)
-    _reapply_and_refresh(context)
 
 
 #: What a filename may not carry, so an install's own product name can BE one.
@@ -796,17 +771,8 @@ def _clip_folder(path):
     return (path or "").rpartition("/")[0]
 
 
-def _format_size(num_bytes):
-    size = float(num_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024.0 or unit == "GB":
-            return f"~{size:.0f}{unit}" if unit == "B" else f"~{size:.1f}{unit}"
-        size /= 1024.0
-    return f"~{size:.1f}GB"
-
-
 def _get_game_root(self):
-    config = _active_config(self)
+    config = active_config(self)
     return config.game_root if config is not None else ""
 
 
@@ -817,7 +783,7 @@ def _set_game_root(self, value):
 
 
 def _get_cabmap_path(self):
-    config = _active_config(self)
+    config = active_config(self)
     return config.cabmap_path if config is not None else ""
 
 
@@ -839,7 +805,7 @@ def _default_shader_output(config):
 
 
 def _get_shader_output(self):
-    config = _active_config(self)
+    config = active_config(self)
     if config is None:
         return ""
     return config.shader_output or _default_shader_output(config)
@@ -850,7 +816,7 @@ def _set_shader_output(self, value):
 
 
 def _get_browsed_dir(self):
-    config = _active_config(self)
+    config = active_config(self)
     return config.browsed_dir if config is not None else ""
 
 
@@ -869,7 +835,7 @@ def _get_loaded(self):
     check any caller can be expected to repeat. Reading the session makes the flag
     mean the same thing in the first draw after opening a file as it did when it
     was set."""
-    config = _active_config(self)
+    config = active_config(self)
     if config is None:
         return False
     session = cabmap_state.SESSIONS.get(config.key)
@@ -884,7 +850,7 @@ def _seed_cabmap_default(state):
     filename box from the property's current string and cannot be told a default
     separately. A tab that already carries a cabmap (typed, or a loaded map) is left
     alone, and a loaded tab is never touched at all."""
-    config = _active_config(state)
+    config = active_config(state)
     if config is None or state.loaded:
         return
     if not config.cabmap_path and config.game_root:
@@ -906,7 +872,7 @@ def _on_game_root_set(state):
     Nothing moves between tabs: a tab is the install in front of it -- and when that
     install is already open on another tab, this one gives the folder back and the
     browser goes there, rather than minting a second identity for one folder."""
-    config = _active_config(state)
+    config = active_config(state)
     if config is None:
         return
     root = host_port.current().absolute_path(config.game_root) if config.game_root else ""
@@ -956,7 +922,7 @@ def _texture_role_layers(state):
     module -- one declared for THIS product -- owns its layer and takes the user's
     choices; a family module or no module at all leaves them to the preset folder."""
     game = _texture_role_game(state)
-    module = _module_of(_active_config(state))
+    module = _module_of(active_config(state))
     game_layer = (os.path.join(module.directory, texture_roles.DEFAULT_LAYER_NAME)
                   if module is not None and module.directory else None)
     user_layer = os.path.join(_texture_roles_user_dir(), (game or "unknown") + ".json")
@@ -969,14 +935,17 @@ def _texture_role_game(state):
     """The game a role layer is filed under: the PRODUCT the install published (a
     Unity game's productName, an Unreal project's name), not the family module that
     reads it -- two Unreal titles are two vocabularies, not one."""
-    config = _active_config(state)
+    config = active_config(state)
     product = (config.game_name if config is not None else "") or ""
     return product or _active_game_name(state)
 
 
-def _texture_role_table(state):
-    _game, game_layer, user_layer, _save = _texture_role_layers(state)
-    return texture_roles.RoleTable.load(texture_roles.layer_paths(game_layer, user_layer))
+def _reader_role_layers(state):
+    """The role layers a statement is read through, over the reader's own default: the layer
+    of the module declared for THIS product, then the user's own -- the files that exist."""
+    _game, game_layer, user_layer, save = _texture_role_layers(state)
+    owned = game_layer if save == game_layer else None
+    return [path for path in (owned, user_layer) if path and os.path.isfile(path)]
 
 
 def _sync_texture_roles(state):
@@ -1011,13 +980,12 @@ def as_options(self, scene=False):
     if scene and "game_shaders" in values:
         values["game_shaders"] = self.scene_shaders
     # THE game this session is looking at, resolved exactly once here and stamped
-    # onto every armature the import builds -- what a later cross-game retarget
-    # selects its table by.
+    # onto every armature the import builds.
     values["source_game"] = _active_game_name(self)
-    # Which property is which input, for THIS install: the default layer, the game
-    # module's own and the user's, merged in that order.
-    values["texture_roles"] = _texture_role_table(self)
-    values["texture_roles_game"] = _texture_role_game(self)
+    # The layers the reader resolves this install's materials through, over its own
+    # default, and the product the names none of them states are filed under.
+    values["role_layers"] = _reader_role_layers(self)
+    values["role_product"] = _texture_role_game(self)
     return values
 
 
@@ -1068,7 +1036,7 @@ its own loaded cabmap (the bridge switches between them per install)."""
     config = _ensure_active_config(state)
     config.decoder_id = arguments["decoder_id"]
     _set_current_tab(state, config.key)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1096,7 +1064,7 @@ are resolved again."""
     _set_current_tab(state, config.key)
     _auto_default_cabmap_filename(state)
     _say(context, "{0} · {1}".format(config.game_name or "no identity", decoder or "no decoder"))
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1128,7 +1096,7 @@ def _select_tab(context, arguments):
 Buttons rather than an expanded EnumProperty because which tabs exist depends on
 which game the current install is -- see RURI_PG_cabmap.active_tab."""
     state_of(context).active_tab = arguments["tab"]
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1142,7 +1110,7 @@ def _select_install(context, arguments):
     """Click a tab in the always-visible tab bar: point the browser (and the
 cabmap_state session behind it) at that install's cabmap."""
     _switch_current_tab(state_of(context), arguments["key"], context)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1165,7 +1133,7 @@ tab is unnamed until a folder is typed into it, which then names it after that
 build's own product. Nothing is preset and nothing is remembered -- which install
 a user wants is the folder they pick, not a list this add-on keeps."""
     _add_tab(state_of(context), arguments["key"], context)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1195,7 +1163,7 @@ def _close_tab(context, arguments):
     """The tab's x button: close one install's tab -- drop its config entry and its
 browser session, and hand focus to a remaining tab."""
     _drop_tab(state_of(context), arguments["key"], context)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1230,7 +1198,7 @@ then batch-importing them all at once keeps working."""
     state = state_of(context)
     cabmap_state.browse_dir(cabmap_state.CURRENT_DIR + (arguments["folder_name"],))
     _rebuild_window(state)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1252,7 +1220,7 @@ time."""
     state = state_of(context)
     cabmap_state.browse_dir(cabmap_state.CURRENT_DIR[:arguments["depth"]])
     _rebuild_window(state)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1309,7 +1277,7 @@ the funnel popover) -- same as unticking a rule's own checkbox there."""
             state.active_index = position
             break
 
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1343,7 +1311,7 @@ sidebar, and mirrored as the All/None/Invert buttons under the list."""
             else:
                 selection.add(cab)
     _sync_window_selection(state)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1395,16 +1363,6 @@ ANIMATION_SELECT_ALL = app_command.COMMANDS.define(
 
 
 # ---------------------------------------------------------------------------
-# The panel
-# ---------------------------------------------------------------------------
-#: Ids the description names for surfaces a host registers itself: the column
-#: width sliders (a popover), the per-row quick-filter and the decoder list
-#: (menus).
-COLUMN_WIDTHS_PANEL = "RURI_PT_column_widths_popover"
-DECODER_MENU = "RURI_MT_decoder"
-
-
-# ---------------------------------------------------------------------------
 # How this install is READ: the decoder's own options form
 # ---------------------------------------------------------------------------
 def _bridge_ready(context):
@@ -1421,7 +1379,7 @@ publishes no such dataset leaves the form empty."""
     except Exception as exc:
         _report_exception(context, "Load options form failed", exc)
         return {"CANCELLED"}
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1501,7 +1459,7 @@ afterwards. Everything it does is what typing the folder already does."""
         config.game_name or "no identity", config.game_version or "(no version)",
         config.engine_family or "Unity", config.engine_version or "unknown",
         decoder or "no decoder"))
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1546,7 +1504,7 @@ fields. Decoders are only for games with custom encryption/VFS/typetree drift.""
     cabmap_state.activate(config.key, _module_game_name(config))
     yield app_command.Read(
         lambda: cabmap_state.load_rows(cabmap_state.key_to_dir(state.browsed_dir)), 0.95)
-    loading.forget_archives()
+    cabmap_state.forget_archives()
     _reapply_and_refresh(context)
     if not len(cabmap_state.ROWS):
         # A game's bundles are only readable through that game's OWN decoder, and the
@@ -1587,9 +1545,9 @@ def _load_cabmap(context, arguments):
     # key left over from a different game is harmless.
     yield app_command.Read(
         lambda: cabmap_state.load_rows(cabmap_state.key_to_dir(state.browsed_dir)), 0.9)
-    loading.forget_archives()
+    cabmap_state.forget_archives()
     _reapply_and_refresh(context)
-    gone, rows = loading.unreachable_rows()
+    gone, rows = cabmap_state.unreachable_rows()
     if gone:
         _announce(context, (
             "{0} CAB(s) in this map live in {1} archive(s) the install no longer has -- "
@@ -1713,7 +1671,7 @@ def _cabmap_click(context, arguments):
     state.active_index = index
     state.cursor_cab = item.cab
     _sync_window_selection(state)
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -1741,15 +1699,11 @@ def _importable_rows(context, state, config):
 
 
 def _import_selected(context, arguments):
-    """Import every selected row, sharing ONE dependency closure.
+    """Import every selected row as ONE selection.
 
-    A mixed selection resolves one union closure rather than two: a clip row's
-    closure covers most of what a character row's does, so a second resolve
-    re-read everything the first had just read.
-
-    Nothing here builds anything. What a row IS -- a hierarchy, a loose asset, a
-    performance -- is read off the closure the same way on either host, and what
-    building it MEANS is the host's one import entry."""
+    The rows that place things are one statement, read once; the rows that hold only
+    performances play onto the rig in front of the user. What a row IS is the reader's
+    answer for its archive -- nothing here reads a closure or builds anything."""
     state = state_of(context)
     config = _ensure_active_config(state)
     rows, refused = _importable_rows(context, state, config)
@@ -1757,111 +1711,153 @@ def _import_selected(context, arguments):
         _announce(context, refused, host_port.ERROR)
         return
     host = host_port.current()
-    options = as_options(state)
-    if arguments["reset_scene"]:
-        if host_port.SCENE_GRAPH not in host.capabilities:
-            _announce(context, "This host has no scene to reset.", host_port.ERROR)
-            return
-        host.clear_scene(context)
-
-    module = _module_of(config)
-    if module is not None and module.importer is not None:
-        # A build this host does not read natively states its own importer: the
-        # closure road below is what a Unity build needs and pure overhead here.
-        packages = [row["cab"] for row in rows]
-        try:
-            built = module.importer(context, packages, options)
-        except Exception as exc:
-            _report_exception(context, "Import failed", exc)
-            return
-        # A module's importer answers HOW MANY it built, not what -- what it built
-        # belongs to the document by then, not to this announcement.
-        _announce(context, "{0} object(s) from {1} package(s).".format(
-            built, len(packages)) if built else
-            "The {0} selected package(s) built nothing.".format(len(packages)),
-            host_port.INFO if built else host_port.WARNING)
-        _redraw_all(context)
-        return
-
-    clips = [row for row in rows if _row_is_clip_only(row)]
-    assets = [row for row in rows if not _row_is_clip_only(row)]
-    if clips and host_port.ANIMATION not in host.capabilities:
+    things = [row["cab"] for row in rows if not _row_is_clip_only(row)]
+    clips = [row["cab"] for row in rows if _row_is_clip_only(row)]
+    if clips and host_port.Timeline not in host.capabilities:
         _announce(context, "{0} selected row(s) hold only animation, which this host "
                            "cannot put on anything.".format(len(clips)), host_port.WARNING)
         clips = []
-    if not assets and not clips:
+    if not things and not clips:
         return
-    if arguments["reset_scene"] and not assets:
+    if arguments["reset_scene"] and not things:
         _announce(context, "An animation needs an existing skeleton -- import without "
                            "resetting so the rig survives.", host_port.ERROR)
         return
+    yield from _load_steps(context, state, things, clips, arguments["reset_scene"], False)
 
-    asset_cabs = [row["cab"] for row in assets]
-    clip_cabs = list(dict.fromkeys(row["cab"] for row in clips))
-    if assets and clips:
-        resolved = yield app_command.Read(
-            lambda: loading.resolve_union(asset_cabs, clip_cabs), 0.6)
-        asset_closure = clip_closure = resolved
+
+def _load(context, arguments):
+    """Load seeds a panel handed over -- the payload of the row it has picked. Every panel's
+    load button is this one command, so no panel has a load of its own."""
+    state = state_of(context)
+    config = _ensure_active_config(state)
+    blocked = _blocking_required_options(config)
+    if blocked:
+        _announce(context, blocked, host_port.ERROR)
+        return
+    _sync_bridge_to_tab(config)
+    seeds = loading.seeds_in(arguments["seeds"])
+    if not seeds:
+        _announce(context, "That row states nothing this install can load.", host_port.WARNING)
+        return
+    yield from _load_steps(context, state, seeds, (), arguments["reset_scene"], arguments["scene"],
+                           arguments["panel"])
+
+
+def _reveal(context, arguments):
+    """Open where a picked row lives: the first archive its seed reads, as the reader resolves
+    it -- so a row reveals what loading it would open."""
+    host = host_port.current()
+    seeds = loading.seeds_in(arguments["seeds"])
+    target = host.panel_state(context, arguments["panel"]) if arguments["panel"] else state_of(context)
+    if not seeds:
+        target.status = "That row states nothing this install carries."
+        return {"CANCELLED"}
+    table = cabmap_state.BRIDGE.game_data("core.statement.archives", seed=seeds)
+    if len(table) == 0:
+        target.status = "The loaded map files nothing for that row."
+        return {"CANCELLED"}
+    cab = table.cell(0, "cab")
+    _open_location(context, table.cell(0, "container") or cab, cab)
+    return None
+
+
+def _open_location(context, query, cab):
+    """Switch to the browser and open where ``query`` lives, with ``cab`` under the cursor.
+
+    Every row carrying the query under one folder opens that folder and clears the search --
+    the "open file location" asked for. Hits spread across folders have no one right folder,
+    so the search stays on and shows them all; and a build whose containers carry no path
+    files everything at the root, where opening the root would be the whole map with the one
+    thing that found the row thrown away, so that too leaves the search standing."""
+    state = state_of(context)
+    state.active_tab = BROWSER_TAB_ID
+    for rule in state.filter_rules:
+        rule.enabled = False
+    cabmap_state.apply_filter(query)
+    matches = list(cabmap_state.VISIBLE)
+    folders = {cabmap_state.folder_of(row, query) for row in matches}
+    landing = folders.pop() if len(folders) == 1 else None
+    if landing:
+        state.search = ""
+        cabmap_state.browse_dir(landing)
     else:
-        asset_closure = clip_closure = None
-        if assets:
-            asset_closure = yield app_command.Read(
-                lambda: loading.resolve_closure(asset_cabs), 0.6)
-        if clips:
-            # Export-side allowlist: this flow reads nothing but the exported clips.
-            clip_closure = yield app_command.Read(
-                lambda: loading.resolve_closure(
-                    clip_cabs,
-                    export_class_ids=[class_registry.id_for_name("AnimationClip")]), 0.6)
+        state.search = query
+    if not matches:
+        state.status = "Nothing in the loaded cabmap carries '{0}'.".format(query)
+    _rebuild_window(state)
+    if cab and not _cursor_on(state, cab):
+        state.status = ("Opened where '{0}' lives, but the listing on screen does not carry it "
+                        "-- narrow it and it will be there.".format(cab))
+    _redraw()
 
+
+def _cursor_on(state, cab):
+    """Put the cursor on one archive of the listing drawn now, and say whether it was there."""
+    for position, item in enumerate(state.window):
+        if not item.is_folder and item.cab == cab:
+            state.active_index = position
+            state.cursor_cab = item.cab
+            cabmap_state.clear_selection()
+            cabmap_state.SELECTED_CABS.add(item.cab)
+            return True
+    return False
+
+
+def show_rules(context, rules):
+    """Switch to the browser and show exactly the rows a rule set selects.
+
+    The rules REPLACE whatever was there -- rules left over from another query would silently
+    AND into this one -- and the quick-search box is left empty, so it stays the user's own
+    narrowing on top of them."""
+    state = state_of(context)
+    state.active_tab = BROWSER_TAB_ID
+    state.filter_rules.clear()
+    state.search = ""
+    for spec in rules:
+        rule = state.filter_rules.add()
+        rule.spec_key = FILTER_SPEC.key
+        rule.field = spec["field"]
+        rule.relation = spec.get("relation", "contains")
+        rule.value = spec.get("value", "")
+        rule.action = spec.get("action", "include")
+        rule.enabled = True
+    state.filter_rules_active_index = len(state.filter_rules) - 1
+    _reapply_and_refresh(context)
+
+
+def _load_steps(context, state, seeds, clips, reset_scene, scene, panel=""):
+    """Read the statement off the main thread, place it, then play the performances."""
+    host = host_port.current()
+    options = as_options(state, scene=scene)
+    if reset_scene and host_port.SceneGraph in host.capabilities:
+        host.clear_scene(context)
+    stated = None
+    if seeds:
+        stated = yield app_command.Read(lambda: loading.read(seeds, options), 0.6)
     yield app_command.Mark(0.7)
     lines = []
-    imported = 0
-    if assets:
-        # Hierarchy/asset rows first: a co-selected character import may create the
-        # very rig the clip rows then attach onto.
-        built = host.import_packages(
-            context,
-            loading.Packages(assets[0]["cab"], assets[0]["name"], loading.PREFAB,
-                             asset_cabs, named_roots=arguments["only_root_names"]),
-            options, lines, asset_closure)
-        imported = built.imported
+    placed = 0
+    rig = None
+    if stated is not None:
+        built = loading.place(context, stated, options, lines)
+        placed = built.imported
+        rig = built.rig
         lines.extend(built.warnings)
+    played = 0
     if clips:
-        guids, missing = _clip_guids(clips, clip_closure["clips_by_cab"])
-        if missing:
-            lines.append("{0} selected row(s) exported no AnimationClip: {1}".format(
-                len(missing), ", ".join(missing[:3])))
-        if not guids:
-            lines.append("The resolved closure exported no AnimationClip for the "
-                         "selected row(s).")
-        else:
-            built, clip_lines = host.import_clips(
-                context, clips[0]["cab"], guids, clip_closure["db"], options)
-            imported += built
-            lines.extend(clip_lines)
-
+        played, clip_lines = loading.perform(context, clips, rig=rig, options=options,
+                                             activate=True)
+        lines.extend(clip_lines)
     _sync_texture_roles(state)
     _reapply_and_refresh(context)
-    _announce(context, "  ".join(
-        ["Imported {0} root(s) from {1} selected row(s).".format(imported, len(rows))]
-        + lines[:3]), host_port.INFO if imported else host_port.WARNING)
-    _redraw_all(context)
-
-
-def _clip_guids(clip_rows, clips_by_cab):
-    """The real clip guids the selected rows carry, through the cabmap's own CAB
-    identity, plus the rows that exported none."""
-    guids = []
-    missing = []
-    for row in clip_rows:
-        found = clips_by_cab.get(row["cab"].lower(), [])
-        if not found:
-            missing.append(row["name"])
-        for guid in found:
-            if guid not in guids:
-                guids.append(guid)
-    return guids, missing
+    message = "  ".join(["{0} object(s) placed, {1} performance(s) played from {2} seed(s).".format(
+        placed, played, len(seeds) + len(clips))] + lines[:3])
+    level = host_port.INFO if placed or played else host_port.WARNING
+    _announce(context, message, level)
+    if panel:
+        host.panel_state(context, panel).status = message
+    _redraw()
 
 
 #: What a row has to hold before there is anything to decompile about it. Both engines'
@@ -1990,16 +1986,35 @@ def _import_poll(context):
 
 IMPORT_SELECTED = app_command.COMMANDS.define(
     "ruri.import_selected", "Import Selected", _import_selected,
-    description="Resolve every selected row's dependency closure in memory and import them",
+    description="Import every selected row as one selection",
     icon="IMPORT", poll=_import_poll, steps=True, status_state=STATE,
     failure="Import failed",
+    arguments=(app_state.Field("reset_scene", app_state.BOOL, False),))
+
+REVEAL = app_command.COMMANDS.define(
+    "ruri.reveal", "Open Containing Folder", _reveal,
+    description="Switch to the bundle browser and open where the picked row lives",
+    icon="FILE_FOLDER", poll=_import_poll, internal=True,
     arguments=(
+        app_state.Field("seeds", app_state.STRING, "",
+                        description="What to reveal: the picked row's payload, one seed per line"),
+        app_state.Field("panel", app_state.STRING, "",
+                        description="The panel state an outcome is written into")))
+
+LOAD = app_command.COMMANDS.define(
+    "ruri.load", "Load", _load,
+    description="Load the picked row into the document",
+    icon="IMPORT", poll=_import_poll, steps=True, internal=True,
+    status_state=lambda arguments: arguments.get("panel") or STATE,
+    failure="Loading failed",
+    arguments=(
+        app_state.Field("seeds", app_state.STRING, "",
+                        description="What to load: the picked row's payload, one seed per line"),
         app_state.Field("reset_scene", app_state.BOOL, False),
-        app_state.Field("only_root_names", app_state.STRING, "",
-                        description="Semicolon-separated asset names. Set, the import keeps "
-                                    "only the roots that ARE those assets instead of every "
-                                    "root the closure exports -- what a caller that already "
-                                    "knows which asset it asked for means")))
+        app_state.Field("scene", app_state.BOOL, False,
+                        description="Load it as a scene: the scene-side game shaders answer"),
+        app_state.Field("panel", app_state.STRING, "",
+                        description="The panel state the outcome is written into")))
 
 
 def _import_with_dependents(context, arguments):
@@ -2033,9 +2048,7 @@ IMPORT_WITH_DEPENDENTS = app_command.COMMANDS.define(
                  "everything together in one step"),
     icon="LOOP_BACK", poll=_import_poll, steps=True, status_state=STATE,
     failure="Import failed",
-    arguments=(
-        app_state.Field("reset_scene", app_state.BOOL, False),
-        app_state.Field("only_root_names", app_state.STRING, "")))
+    arguments=(app_state.Field("reset_scene", app_state.BOOL, False),))
 
 
 def _import_secondary_motion(context, arguments):
@@ -2047,7 +2060,7 @@ def _import_secondary_motion(context, arguments):
     them nor which games have them."""
     state = state_of(context)
     host = host_port.current()
-    rig = host.selected_rig(context)
+    rig = host_port.selected_rig(context)
     if rig is None:
         _announce(context, "Select the armature to write onto.", host_port.ERROR)
         return {"CANCELLED"}
@@ -2071,7 +2084,7 @@ def _import_secondary_motion(context, arguments):
                   host_port.WARNING)
         return {"CANCELLED"}
     _announce(context, "  ".join(lines))
-    _redraw_all(context)
+    _redraw()
     return None
 
 
@@ -2080,7 +2093,66 @@ IMPORT_SECONDARY_MOTION = app_command.COMMANDS.define(
     description=("Write the selected model prefab's own hair/cloth/accessory chains "
                  "and their collision volumes onto the active armature, replacing "
                  "whatever it already carried"),
-    icon="MOD_CLOTH", requires=host_port.SKELETON, poll=_import_poll)
+    icon="MOD_CLOTH", requires=host_port.Rig, poll=_import_poll)
+
+
+def _discover_animations(context, arguments):
+    """List the clips the selected rows' dependency closure carries, off the loaded map's own
+    graph -- nothing is read or built -- so the ones worth playing can be checked first."""
+    state = state_of(context)
+    rows = _selected_target_rows(state)
+    if not rows:
+        _announce(context, "No rows selected.", host_port.WARNING)
+        return {"CANCELLED"}
+    seeds = [row["cab"] for row in rows]
+    by_cab = cabmap_state.rows_by_cab()
+    clips = sorted((by_cab[cab] for cab in cabmap_state.BRIDGE.resolve_closure_cab_names(seeds)
+                    if cab in by_cab and "AnimationClip" in by_cab[cab]["type_names"]),
+                   key=lambda row: (_clip_folder(row["container"]).lower(), row["name"].lower()))
+    state.available_clips.clear()
+    for row in clips:
+        item = state.available_clips.add()
+        item.seed = row["cab"]
+        item.name = row["name"]
+        item.folder = _clip_folder(row["container"])
+    state.animation_seeds = loading.seed_lines(seeds)
+    state.animation_character_name = (rows[0]["name"] if len(rows) == 1
+                                      else "{0} selected rows".format(len(rows)))
+    _apply_animation_filter(state)
+    _announce(context, "Found {0} clip(s) -- check the ones to play.".format(len(clips)) if clips
+              else "No animation clips in this selection's dependency closure.")
+    _redraw()
+    return None
+
+
+def _play_checked_animations(context, arguments):
+    """Play the checked clips onto the rig in front of the user -- and where there is none, load
+    the rows they were discovered from first, and play onto what that placed."""
+    state = state_of(context)
+    clips = [item.seed for item in state.available_clips if item.selected]
+    if not clips:
+        _announce(context, "No animations checked.", host_port.WARNING)
+        return
+    seeds = ([] if host_port.selected_rig(context) is not None
+             else loading.seeds_in(state.animation_seeds))
+    yield from _load_steps(context, state, seeds, clips, False, False)
+
+
+def _has_checked_clips(context):
+    return any(item.selected for item in state_of(context).available_clips)
+
+
+DISCOVER_ANIMATIONS = app_command.COMMANDS.define(
+    "ruri.discover_animations", "Discover Animations", _discover_animations,
+    description="List the selected rows' animation clips from the loaded map's own dependency "
+                "graph -- nothing is read or built yet",
+    icon="VIEWZOOM", requires=host_port.Timeline, poll=_import_poll)
+PLAY_CHECKED_ANIMATIONS = app_command.COMMANDS.define(
+    "ruri.play_checked_animations", "Import Checked Animations", _play_checked_animations,
+    description="Play the checked clips onto the rig in front of you -- loading the character "
+                "they were discovered from first when there is none",
+    icon="IMPORT", requires=host_port.Timeline, poll=_has_checked_clips, steps=True,
+    status_state=STATE, failure="Importing the checked animations failed")
 
 
 def draw_column_widths(layout, context):
@@ -2094,6 +2166,33 @@ def draw_column_widths(layout, context):
         column.prop(state, key, slider=True)
     column.separator()
     column.prop(state, "browser_rows")
+
+
+def _decoder_entries(context):
+    """The decoders this tab's install may be read through: every version its own product ships,
+    the family's beside them, and none at all."""
+    config = active_config(state_of(context))
+    product = config.game_name if config is not None else ""
+    family = config.engine_family if config is not None else ""
+    found = list(_decoders_of(product))
+    if family and family.lower() != product.lower():
+        found.extend(_decoders_of(family))
+    entries = [] if found else [{"separator": True,
+                                 "text": "No decoder ships for {0}".format(product or "this install")}]
+    for entry in found:
+        label = "{0} {1}".format(entry[0], entry[1])
+        if entry[2]:
+            label = "{0}  ·  {1}".format(label, entry[2])
+        entries.append({"text": label, "command": SET_DECODER.id,
+                        "values": {"decoder_id": _decoder_id(entry)}})
+    entries.append({"text": "None (plain Unity build)", "command": SET_DECODER.id,
+                    "values": {"decoder_id": ""}})
+    return entries
+
+
+COLUMN_WIDTHS_PANEL = vocabulary.declare_popover(
+    "RURI_PT_column_widths_popover", "Column Widths", draw_column_widths)
+DECODER_MENU = vocabulary.declare_menu("RURI_MT_decoder", "Decoder", _decoder_entries)
 
 
 #: The handful of options worth an icon on their row, and the two that only mean
@@ -2121,9 +2220,8 @@ def draw_import_options(layout, context, state=None):
     model draws the same switches, and drawing its own hand-picked subset is how
     it comes to name an option this host does not have."""
     state = state_of(context) if state is None else state
-    host = host_port.current()
     game_name = _active_game_name(state)
-    has_rig = host.selected_rig(context) is not None
+    has_rig = host_port.selected_rig(context) is not None
     for entry in kernel_options.schema():
         asks = _OPTION_ASKS_GAME.get(entry.key)
         if asks is not None and asks(game_name) is None:
@@ -2175,7 +2273,7 @@ def draw(layout, context):
     # What the install SAID it is, and which decoder reads it. Both are read from
     # the build itself when the folder is typed; the menu is the override, and it
     # moves this tab alone.
-    config = _active_config(state)
+    config = active_config(state)
     named = config is not None and bool(config.game_name)
     blocked = not named and bool(_IDENTITY_BLOCKED[0])
     identity = top.row(align=True)
@@ -2294,7 +2392,7 @@ def draw(layout, context):
     host = host_port.current()
     game_name = _active_game_name(state)
     batch = " {0}".format(selected_count) if selected_count > 1 else ""
-    resettable = host_port.SCENE_GRAPH in host.capabilities
+    resettable = host_port.SceneGraph in host.capabilities
     actions = gated.row(align=True)
     actions.operator(IMPORT_SELECTED.id,
                      text="Import{0}{1}".format(batch, " (Append)" if resettable else "")
@@ -2311,9 +2409,9 @@ def draw(layout, context):
     # of the game's tables ever names that model -- so the rows get their own way
     # in, beside the import that would have brought it along.
     if (Game.secondary_motion_of(game_name) is not None
-            and host_port.SKELETON in host.capabilities):
+            and host_port.Rig in host.capabilities):
         cloth_row = gated.row(align=True)
-        cloth_row.active = host.selected_rig(context) is not None
+        cloth_row.active = host_port.selected_rig(context) is not None
         cloth_row.operator(IMPORT_SECONDARY_MOTION.id)
 
     # Asking what a row is MADE of and asking what it was COMPILED as are two
@@ -2325,6 +2423,47 @@ def draw(layout, context):
     selected.active = len(_shader_rows(state)) > 0
     selected.operator(READ_SHADERS.id, icon="NODE_MATERIAL")
     shading.operator(READ_ALL_SHADERS.id, icon="SHADERFX")
+
+    if host_port.Timeline in host.capabilities:
+        _draw_animations(gated.box(), state)
+
+
+#: One discovered clip: its checkbox, its name, and the game's own folder for it -- dimmed,
+#: because a closure mixes a character's body library with cutscene clips that share nothing
+#: but a name pattern, and the folder is what tells them apart.
+_CLIP_COLUMNS = (
+    vocabulary.ListColumn("", width=0.08, prop="selected"),
+    vocabulary.ListColumn("name", width=0.6),
+    vocabulary.ListColumn(lambda item: item.folder.rpartition("/")[2], align=vocabulary.RIGHT,
+                          active=False),
+)
+
+
+def _draw_animations(layout, state):
+    """Discover what the selection plays, check, play. The filter HIDES rather than removes, so
+    the three counts differ for real reasons: a check made before the filter still plays."""
+    layout.operator(DISCOVER_ANIMATIONS.id, icon="VIEWZOOM")
+    if not state.available_clips:
+        layout.label(text="Select a row above, then Discover Animations.", icon="INFO")
+        return
+    layout.label(text="Clips for: {0}".format(state.animation_character_name),
+                 icon="ARMATURE_DATA")
+    layout.prop(state, "animation_search", icon="VIEWZOOM", text="")
+    picks = layout.row(align=True)
+    picks.operator(ANIMATION_SELECT_ALL.id, text="All Shown").select = True
+    picks.operator(ANIMATION_SELECT_ALL.id, text="None").select = False
+    layout.list(state, "available_clips", "available_clips_active_index", _CLIP_COLUMNS,
+                rows=8, identifier="animation_clips", visible_key="visible")
+    total = len(state.available_clips)
+    shown = sum(1 for item in state.available_clips if item.visible)
+    checked = sum(1 for item in state.available_clips if item.selected)
+    folders = len({item.folder for item in state.available_clips if item.folder})
+    layout.label(text="{0} clip(s){1}{2} · {3} checked".format(
+        total, "" if shown == total else " · {0} shown".format(shown),
+        "" if folders <= 1 else " · {0} folders".format(folders), checked))
+    layout.operator(PLAY_CHECKED_ANIMATIONS.id, icon="IMPORT",
+                    text="Import {0} Checked Animation(s)".format(checked) if checked
+                    else "Import Checked Animations")
 
 
 # ---------------------------------------------------------------------------
@@ -2355,7 +2494,7 @@ def unregister():
     filtering.ACTIVE_SPEC_KEY = None
     cabmap_state.reset()
     _INSTALL_IDENTITY.clear()
-    loading.forget_archives()
+    cabmap_state.forget_archives()
 
 
 #: What the browser's own list can be filtered by, straight off cabmap_state's

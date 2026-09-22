@@ -20,91 +20,7 @@ from ...Kernel import statement as kernel_statement
 from . import rig_identity
 
 import bpy
-from mathutils import Matrix, Quaternion
-
-
-class _HermiteCurve:
-    """A single scalar Unity AnimationCurve channel."""
-
-    def __init__(self):
-        self.times = []
-        self.values = []
-        self.in_slopes = []
-        self.out_slopes = []
-
-    def add(self, t, v, in_s, out_s):
-        self.times.append(t)
-        self.values.append(v)
-        self.in_slopes.append(in_s)
-        self.out_slopes.append(out_s)
-
-    def finalize(self):
-        order = np.argsort(self.times)
-        self.times = np.asarray(self.times, dtype=np.float64)[order]
-        self.values = np.asarray(self.values, dtype=np.float64)[order]
-        self.in_slopes = np.asarray(self.in_slopes, dtype=np.float64)[order]
-        self.out_slopes = np.asarray(self.out_slopes, dtype=np.float64)[order]
-
-    def evaluate(self, t):
-        times = self.times
-        n = len(times)
-        if n == 0:
-            return 0.0
-        if t <= times[0]:
-            return float(self.values[0])
-        if t >= times[-1]:
-            return float(self.values[-1])
-        i = int(np.searchsorted(times, t) - 1)
-        i = max(0, min(i, n - 2))
-        t0, t1 = times[i], times[i + 1]
-        dt = t1 - t0
-        if dt <= 1e-9:
-            return float(self.values[i])
-        u = (t - t0) / dt
-        v0, v1 = self.values[i], self.values[i + 1]
-        m0 = self.out_slopes[i] * dt
-        m1 = self.in_slopes[i + 1] * dt
-        u2 = u * u
-        u3 = u2 * u
-        h00 = 2 * u3 - 3 * u2 + 1
-        h10 = u3 - 2 * u2 + u
-        h01 = -2 * u3 + 3 * u2
-        h11 = u3 - u2
-        return float(h00 * v0 + h10 * m0 + h01 * v1 + h11 * m1)
-
-
-def _read_vector_curve(curve_entry, components):
-    """Build a dict component -> _HermiteCurve from one m_RotationCurves entry."""
-    out = {c: _HermiteCurve() for c in components}
-    keys = (curve_entry.get("curve") or {}).get("m_Curve") or []
-    for k in keys:
-        t = k.get("time", 0.0)
-        value = k.get("value")
-        in_s = k.get("inSlope")
-        out_s = k.get("outSlope")
-        if isinstance(value, dict):
-            for c in components:
-                out[c].add(t, value.get(c, 0.0),
-                           (in_s or {}).get(c, 0.0) if isinstance(in_s, dict) else 0.0,
-                           (out_s or {}).get(c, 0.0) if isinstance(out_s, dict) else 0.0)
-        else:
-            c = components[0]
-            out[c].add(t, value or 0.0,
-                       in_s if isinstance(in_s, (int, float)) else 0.0,
-                       out_s if isinstance(out_s, (int, float)) else 0.0)
-    for c in out.values():
-        c.finalize()
-    return out
-
-
-def _max_time(*curve_dicts):
-    m = 0.0
-    for cd in curve_dicts:
-        for curve in cd.values():
-            for entry in curve.values():
-                if len(entry.times):
-                    m = max(m, float(entry.times[-1]))
-    return m
+from mathutils import Matrix
 
 
 # ── vectorized pose math ──────────────────────────────────────────────────────
@@ -228,7 +144,7 @@ def _matrices_to_quats(matrices):
     return quats / norms[:, None]
 
 
-def _conjugated_pose_arrays(locs, quats_wxyz, scales, l_rest_inv, conv):
+def conjugated_pose_arrays(locs, quats_wxyz, scales, l_rest_inv, conv):
     """The whole-channel form of the per-frame bake identity
 
         basis(f) = conv @ (l_rest_inv @ (T(loc) R(quat) S(scale))) @ conv
@@ -338,17 +254,16 @@ def build_action(clip, armature_obj, maps, path_to_meshobjects=None, options=Non
     action[SAMPLE_RATE_KEY] = float(sample_rate)
     # action.name, not the clip name: Blender has already uniquified it against every
     # existing action, which is exactly the guarantee the slot identifier needs (see
-    # _prepare_channels). Importing the same clip twice would otherwise mint a second
+    # prepare_channels). Importing the same clip twice would otherwise mint a second
     # slot with an identical identifier and re-arm the 5.1.2 crash.
-    bone_fcurves, slot = _prepare_channels(action, action.name, "OBJECT")
+    bone_fcurves, slot = prepare_channels(action, action.name, "OBJECT")
 
     animated_paths = set(rot) | set(pos) | set(scale) | set(euler)
     conv = Matrix(kernel_statement.basis(kernel_statement.BLENDER)["matrix"].tolist())
 
     # Every clip reaching here is generic: any muscle encoding was already resolved into these
-    # same per-bone transform curves by the C# solver, against the target armature's own stamped
-    # avatar (prefab_importer._solve_humanoid_curves), so there is one kind of curve to bake and
-    # no muscle solver in this importer at all.
+    # same per-bone transform curves by the reader, against the target armature's own stamped
+    # avatar, so there is one kind of curve to bake and no muscle solver in this importer at all.
     frames = times * sample_rate
     for path in animated_paths:
         bone_name = path_to_bone.get(path)
@@ -396,9 +311,9 @@ def build_action(clip, armature_obj, maps, path_to_meshobjects=None, options=Non
             rest_scale = node.local.to_scale()
             scales = np.tile((rest_scale.x, rest_scale.y, rest_scale.z), (n_frames, 1))
 
-        out_locs, out_quats, out_scales = _conjugated_pose_arrays(
+        out_locs, out_quats, out_scales = conjugated_pose_arrays(
             locs, quats, scales, l_rest_inv, conv)
-        _write_bone_fcurves(bone_fcurves, bone_name, frames,
+        write_bone_fcurves(bone_fcurves, bone_name, frames,
                             out_locs, out_quats, out_scales)
 
     if path_to_meshobjects:
@@ -408,7 +323,7 @@ def build_action(clip, armature_obj, maps, path_to_meshobjects=None, options=Non
 
 
 
-def _prepare_channels(action, slot_name, id_type):
+def prepare_channels(action, slot_name, id_type):
     """Return (fcurves_collection, slot) for the new slotted Action API,
     falling back to legacy ``action.fcurves`` on older Blender.
 
@@ -670,7 +585,7 @@ def unregister_slot_autofix():
         bpy.app.handlers.depsgraph_update_post.remove(_repair_on_depsgraph)
 
 
-def _write_bone_fcurves(fcurves, bone_name, frames, locs, quats, scales):
+def write_bone_fcurves(fcurves, bone_name, frames, locs, quats, scales):
     """Write one pose bone's location/rotation/scale channels.
 
     Every transform a clip binds comes through here, the ANIMATOR ROOT included: it is a
@@ -735,7 +650,7 @@ def _apply_float_curves(action, clip, path_to_meshobjects, sample_rate, times):
                               if shape_keys.animation_data is not None else None)
                 if key_action is None:
                     key_action = bpy.data.actions.new(action.name + "_shapekeys")
-                fcurves, slot = _prepare_channels(key_action, shape_name, "KEY")
+                fcurves, slot = prepare_channels(key_action, shape_name, "KEY")
                 # The shape-key half of THIS clip: assigned through the one
                 # adopter like everything else, but never retiming -- the caller
                 # aims the scene once, at the clip's own transform action.

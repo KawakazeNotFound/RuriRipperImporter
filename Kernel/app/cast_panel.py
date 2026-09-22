@@ -9,18 +9,18 @@ because only it knows what a row is made of.
 So the shape is here and stated once, and a game fills the slots:
 
 ``options``          its own toggles under the list (an outfit, a model family)
-``actions``          its own buttons (Import, Load, Build -- whatever it calls it)
-``seeds``            what the picked row IS, as archive names
+``seed``             the seed of the picked row UNDER those toggles, asked of the
+                     game's hook -- only for a game whose toggles change what loads
+``actions``          its own buttons for verbs that are NOT loading
 ``animation_rules``  where the picked row's animations live, as a browser query
 ``animations`` /
 ``expressions``      what the Anim and Face panes list from
 
-``seeds`` is the trick. A shared button cannot know how a row resolves -- one
-game's row is a package path, another's is a template id joined through three
-tables -- but every game can answer "what archives is this one made of", and two
-shared buttons are questions asked of exactly that: the shaders the row shades
-with, and the expression vocabulary its meshes were built with. Both read the
-SAME dependency closure an import of that row would load.
+Loading is not a slot. A row's payload IS its seed -- whatever the game's own
+statement source makes of it, a package path or a template id joined through
+three tables -- so Load and Reveal are the kernel's buttons over that seed, and
+the shared questions (the shaders a row shades with, the expressions its meshes
+were built with) are asked of the same seed a load reads.
 
 ANIMATIONS are not one of them, deliberately. Asking the build what a row plays
 means loading the closure of every archive those clips live in -- hundreds, for
@@ -34,14 +34,14 @@ Nothing here imports a host.
 
 from __future__ import annotations
 
-import json
 
 from . import command as app_command
-from . import filtering
+from . import filtering, loading
 from . import layout as app_layout
 from . import state as app_state
 from . import view as app_view
 from .state import Field, Schema
+from .. import extensions
 from .. import host as host_port
 from ...Kernel.bridge import cabmap_state
 
@@ -66,7 +66,7 @@ ENGINE = "engine"
 #: module states it. An engine whose decoder words it differently says so on its
 #: own panel (``face_dataset``) -- the QUESTION is the same one and so is
 #: everything drawn around the answer.
-BLEND_SHAPES_DATASET = ("unity.blendshapes", "cab")
+BLEND_SHAPES_DATASET = ("unity.blendshapes", "seed")
 
 #: What a cast panel remembers -- ALL of it, the Actor list included. Every game's
 #: schema includes this and adds only what is its own (an outfit, a model family,
@@ -110,7 +110,7 @@ CAST_STATE = Schema("CastState", """The cast panel's shared state.""", (
 
 #: Panel key -> Panel. A shared button is one command for every game, so it is told
 #: WHICH panel pressed it rather than guessing from whatever tab is on screen.
-PANELS = {}
+PANELS = extensions.point("cast panels", "Panel key -> the cast panel a game declared.")
 
 #: Panel key -> the list the Face pane draws. Not panel state: a column table is
 #: not something a host's property system can hold, and re-reading one to redraw
@@ -154,11 +154,11 @@ class Panel:
     """One game's cast tab: the shared shape, and the slots this game fills."""
 
     __slots__ = ("bound", "columns", "identifier", "refresh", "group_column", "rows",
-                 "options", "actions", "seeds", "shaders", "state_for", "state_name",
+                 "options", "seed", "actions", "shaders", "state_for", "state_name",
                  "animations", "expressions", "animation_rules", "face_dataset", "facet")
 
     def __init__(self, bound, columns, identifier, refresh, state_for, state_name,
-                 seeds=None, group_column=None, rows=10, options=None, actions=(),
+                 group_column=None, rows=10, options=None, seed=None, actions=(),
                  shaders=None, animations=(), expressions=(ENGINE_SHAPES,),
                  animation_rules=None, face_dataset=BLEND_SHAPES_DATASET, facet=""):
         self.bound = bound
@@ -169,14 +169,15 @@ class Panel:
         self.refresh = refresh
         #: (context) -> this panel's state record.
         self.state_for = state_for
-        #: (context, state) -> the archive names the picked row is made of, or ()
-        #: when the game states none. What every shared button below is asked of.
-        self.seeds = seeds
         self.group_column = group_column
         self.rows = rows
         #: (layout, context, state) -> draws this game's own options.
         self.options = options
-        #: This game's own buttons, as command ids.
+        #: (context, state, payload) -> the seed the picked row loads as under this
+        #: panel's own options, spelled by the game's hook; None when the options
+        #: change nothing about what loads and the payload IS the seed.
+        self.seed = seed
+        #: This game's own buttons for verbs that are not loading, as command ids.
         self.actions = tuple(actions)
         #: (state, output) -> rows, for a game whose shaders are NOT Unity shader
         #: assets. Unreal ships none: a material's program is blobs in an archive
@@ -198,13 +199,19 @@ class Panel:
         self.face_dataset = face_dataset
         #: The kind this list opens on before the user has picked one.
         self.facet = facet
-        PANELS[bound.key] = self
+        PANELS.add(self, key=bound.key, module=getattr(state_for, "__module__", ""))
 
     def picked(self, context):
         return self.bound.picked(self.state_for(context))
 
     def seeds_of(self, context, state):
-        return list(self.seeds(context, state)) if self.seeds is not None else []
+        """The picked row's seed -- its payload -- or none when nothing is picked or the row
+        states nothing this install can load."""
+        entry = self.bound.picked(state)
+        payload = entry.payload if entry is not None else ""
+        if payload and self.seed is not None:
+            payload = self.seed(context, state, payload)
+        return [payload] if payload else []
 
     def sources(self, pane):
         return self.animations if pane == ANIM else self.expressions
@@ -250,7 +257,7 @@ def _picked_anything(context):
     panel argument decide when it is actually pressed."""
     if cabmap_state.BRIDGE is None:
         return False
-    return any(panel.picked(context) is not None for panel in PANELS.values())
+    return any(panel.picked(context) is not None for panel in PANELS)
 
 
 def _read_shaders(context, arguments):
@@ -309,8 +316,8 @@ def _find_animations(context, arguments):
         return {"CANCELLED"}
     rules, said = asked
     state.status = said
-    return app_command.COMMANDS.get("ruri.cabmap_show_rules").run(
-        context, {"rules": json.dumps(list(rules))})
+    app_browser.show_rules(context, list(rules))
+    return None
 
 
 def _read_expressions(context, arguments):
@@ -346,7 +353,7 @@ def _drive_face(context, arguments):
         return {"CANCELLED"}
     state = panel.state_for(context)
     host = host_port.current()
-    rig = host.selected_rig(context)
+    rig = host_port.selected_rig(context)
     if rig is None:
         state.status = "Select the character's rig first."
         return {"CANCELLED"}
@@ -372,7 +379,7 @@ def _clear_face(context, arguments):
         return {"CANCELLED"}
     state = panel.state_for(context)
     host = host_port.current()
-    rig = host.selected_rig(context)
+    rig = host_port.selected_rig(context)
     if rig is None:
         state.status = "Select the character's rig first."
         return {"CANCELLED"}
@@ -405,20 +412,20 @@ EXPRESSIONS = app_command.COMMANDS.define(
     "ruri.cast_expressions", "Find Expressions", _read_expressions,
     description="List every named blend shape the selected row's meshes carry, in the Face pane",
     icon="SHAPEKEY_DATA", poll=_picked_anything, steps=True,
-    requires=host_port.MORPH_TARGETS,
+    requires=host_port.MorphTargets,
     failure="Reading this one's expressions failed",
     status_state=_status_state, arguments=PANEL_ARGUMENT)
 
 DRIVE_FACE = app_command.COMMANDS.define(
     "ruri.cast_drive_face", "Show On Rig", _drive_face,
     description="Set the selected expression on the rig in front of you",
-    icon="SHAPEKEY_DATA", poll=_picked_anything, requires=host_port.MORPH_TARGETS,
+    icon="SHAPEKEY_DATA", poll=_picked_anything, requires=host_port.MorphTargets,
     arguments=PANEL_ARGUMENT)
 
 CLEAR_FACE = app_command.COMMANDS.define(
     "ruri.cast_clear_face", "Clear All", _clear_face,
     description="Set every expression in this list back to zero on the rig",
-    icon="X", poll=_picked_anything, requires=host_port.MORPH_TARGETS,
+    icon="X", poll=_picked_anything, requires=host_port.MorphTargets,
     arguments=PANEL_ARGUMENT)
 
 
@@ -436,9 +443,9 @@ def handlers(bound, owner, rebuild, **extra):
     def cast_panes(state, context):
         panel = PANELS.get(bound.key)
         made = [(ACTOR, "Actor", "Everyone this game ships a model for")]
-        if panel is not None and panel.animations and host_port.supports(host_port.ANIMATION):
+        if panel is not None and panel.animations and host_port.supports(host_port.Timeline):
             made.append((ANIM, "Anim", "The animations the selected one plays"))
-        if panel is not None and panel.expressions and host_port.supports(host_port.MORPH_TARGETS):
+        if panel is not None and panel.expressions and host_port.supports(host_port.MorphTargets):
             made.append((FACE, "Face", "The expressions the selected one was built with"))
         return made
 
@@ -533,12 +540,32 @@ def forget(bound):
     made = _LISTS.pop((bound.key, FACE), None)
     if made is not None:
         made.close()
-    PANELS.pop(bound.key, None)
+    PANELS.discard(bound.key)
 
 
 # ---------------------------------------------------------------------------
 # What it looks like
 # ---------------------------------------------------------------------------
+def draw_load(layout, seeds, state_name, text="", scene=False, reset_scene=False):
+    """The kernel's Load over these seeds -- the one button anything loads through."""
+    from . import browser as app_browser
+    load = layout.operator(app_browser.LOAD.id, text=text, icon="IMPORT") if text         else layout.operator(app_browser.LOAD.id, icon="IMPORT")
+    load.seeds = loading.seed_lines(seeds)
+    load.panel = state_name
+    load.scene = scene
+    load.reset_scene = reset_scene
+
+
+def draw_row_verbs(layout, seeds, state_name, scene=False, reset_scene=False):
+    """Load and Reveal for a picked row -- the kernel's two verbs over its seed, drawn the same
+    way by every panel that lists loadable rows, cast or scene alike."""
+    from . import browser as app_browser
+    draw_load(layout, seeds, state_name, scene=scene, reset_scene=reset_scene)
+    reveal = layout.operator(app_browser.REVEAL.id, icon="FILE_FOLDER")
+    reveal.seeds = loading.seed_lines(seeds)
+    reveal.panel = state_name
+
+
 def _source(panel, pane, state):
     """The source this pane is showing, as the game declared it."""
     wanted = getattr(state, "anim_source" if pane == ANIM else "face_source", "")
@@ -575,9 +602,9 @@ def draw(panel, layout, context, state):
 
 def _pane_items(panel):
     made = [ACTOR]
-    if panel.animations and host_port.supports(host_port.ANIMATION):
+    if panel.animations and host_port.supports(host_port.Timeline):
         made.append(ANIM)
-    if panel.expressions and host_port.supports(host_port.MORPH_TARGETS):
+    if panel.expressions and host_port.supports(host_port.MorphTargets):
         made.append(FACE)
     return made
 
@@ -607,9 +634,10 @@ def draw_actor(panel, layout, context, state):
     options.enabled = picked is not None
     if panel.options is not None:
         panel.options(options, context, state)
-    # 与浏览器同一份导入选项 —— 每个游戏的导入走的都是宿主那一个入口。
+    # 与浏览器同一份导入选项 —— 每个游戏的导入走的都是同一个加载命令。
     from . import browser as app_browser
     app_browser.draw_import_options(options, context)
+    draw_row_verbs(options, panel.seeds_of(context, state), panel.state_name)
     for action in panel.actions:
         options.operator(action)
 
@@ -621,7 +649,7 @@ def draw_actor(panel, layout, context, state):
     asked.operator(SHADERS.id, icon="NODE_MATERIAL").panel = panel.bound.key
     if panel.animation_rules is not None:
         asked.operator(ANIMATIONS.id, icon="ANIM_DATA").panel = panel.bound.key
-    if panel.asks_the_engine(FACE) and host_port.supports(host_port.MORPH_TARGETS):
+    if panel.asks_the_engine(FACE) and host_port.supports(host_port.MorphTargets):
         asked.operator(EXPRESSIONS.id, icon="SHAPEKEY_DATA").panel = panel.bound.key
 
 

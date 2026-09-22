@@ -45,18 +45,6 @@ BONE_PATH_PROP = "ruri_unity_path"
 # flat because that is exactly the node.local build_action's rest math consumes.
 REST_PROP = "ruri_unity_rig"
 
-# Stamped on a bone whose rest AXES are load-bearing: something outside this file
-# states per-bone deltas in them, so re-aiming the bone silently invalidates that
-# data instead of breaking anything a tool could notice.
-#
-# A game's facial table is the case that forced it. Those deltas are 97.6%
-# TRANSLATION, written in each bone's own axes, so a bone re-aimed by a rigging
-# convenience pass (connecting bones to their children, aligning rolls) plays every
-# expression along the wrong vectors -- and nothing errors, the face is just wrong.
-# The name is deliberately game-blind: any tool that re-aims bones can honour it
-# without knowing who wrote it or why (ShiyumeBlender's auto_bone_orientation does).
-LOCKED_ORIENTATION_PROP = "ruri_locked_orientation"
-
 # The avatar this rig was built with, in the form the humanoid solver reads back.
 # Stamped on the OBJECT and handed straight back to the kernel when a clip is
 # asked for, so a muscle-encoded performance is solved against the rig it is
@@ -68,12 +56,6 @@ AVATAR_PROP = "ruri_avatar"
 # under -- read off the rig because the panel state is gone a session later
 # while the character is still in the document.
 SOURCE_PROP = "ruri_source"
-
-# The SEED this rig was built from -- the one handle a later question about this
-# character is asked with. Stamped on the OBJECT and handed back to the kernel
-# verbatim; this side never reads into it, because how a seed is spelled is the
-# claiming reader's own answer.
-SEED_PROP = "ruri_seed"
 
 # The key a builder hands ``stamp`` the bone name under. It exists only to FIND
 # the bone being described and is never written to the file, which is the whole
@@ -216,6 +198,22 @@ class RigIdentity:
             len(self.bone_to_path), len(self.rest_by_path))
 
 
+def armature_of(obj):
+    """The armature ``obj`` stands for -- the ONE rule a rig is resolved by, so "which skeleton
+    did I pick" never means two things. An Armature modifier pointing at a rig IS the binding, so a
+    mesh carrying one stands for that rig; an armature parent is the structural answer for
+    something hung off a bone with no modifier of its own."""
+    if obj is None:
+        return None
+    if obj.type == "ARMATURE":
+        return obj
+    for modifier in getattr(obj, "modifiers", ()):
+        if modifier.type == "ARMATURE" and modifier.object is not None:
+            return modifier.object
+    parent = obj.parent
+    return parent if parent is not None and parent.type == "ARMATURE" else None
+
+
 def unity_name_of_path(path):
     return path.rsplit("/", 1)[-1] if path else ""
 
@@ -319,31 +317,6 @@ def stamp(arm_obj, paths):
     arm_obj[REST_PROP] = json.dumps({"paths": rests}, separators=(",", ":"))
 
 
-def lock_orientation(arm_obj, bone_names):
-    """Mark these bones' rest axes as load-bearing (LOCKED_ORIENTATION_PROP).
-
-    Called by whoever KNOWS -- the side holding the per-bone table that states
-    deltas in those axes -- because nothing about a bone itself says whether its
-    orientation is a rigging convenience or part of a contract. Returns how many
-    bones were marked."""
-    if arm_obj is None:
-        return 0
-    marked = 0
-    for name in bone_names:
-        bone = arm_obj.data.bones.get(name)
-        if bone is not None and not bone.get(LOCKED_ORIENTATION_PROP):
-            bone[LOCKED_ORIENTATION_PROP] = True
-            marked += 1
-    return marked
-
-
-def orientation_locked(arm_obj):
-    """The bones whose rest axes are marked load-bearing."""
-    if arm_obj is None or arm_obj.type != "ARMATURE":
-        return set()
-    return {bone.name for bone in arm_obj.data.bones if bone.get(LOCKED_ORIENTATION_PROP)}
-
-
 def merge(target, source, added_bone_names):
     """Fold ``source``'s identity into ``target``'s as its bones come across.
 
@@ -390,20 +363,3 @@ def stamp_source(arm_obj, source):
 
 def source_of(arm_obj):
     return "" if arm_obj is None else str(arm_obj.get(SOURCE_PROP) or "")
-
-
-def stamp_seed(arm_obj, seed):
-    """Note on the rig the SEED it was built from.
-
-    What a later question about this character is asked WITH: a face library, a
-    secondary-motion reading, a retarget all answer about "this character", and
-    the only handle a document holds is the rig standing in it. A panel that
-    re-derived the seed from the rig's NAME got it wrong the moment somebody
-    renamed it, which is exactly what people do to an imported character."""
-    if arm_obj is None or not seed:
-        return
-    arm_obj[SEED_PROP] = str(seed)
-
-
-def seed_of(arm_obj):
-    return "" if arm_obj is None else str(arm_obj.get(SEED_PROP) or "")

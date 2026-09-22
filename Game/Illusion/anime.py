@@ -8,18 +8,17 @@ partner -- so that kind is drawn as two index-aligned lists instead.
 Resolving a catalog row to actual clips is pure topology on the scan graph
 (controller -> state machines -> states -> blend trees -> clips), which is this
 game's filing and nothing about a host. Building those clips onto a rig is the
-host's one clip entry (:meth:`Kernel.host.Host.import_clips`).
+kernel's one clip entry (:func:`Kernel.app.loading.perform`).
 
 Nothing here imports a host.
 """
 
 from __future__ import annotations
 
-import re
 
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
-from ...Kernel.app import command, filtering
+from ...Kernel.app import command, filtering, loading
 from ...Kernel.app import layout as app_layout
 from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
@@ -135,29 +134,6 @@ def current_row(state):
 
 
 # ---------------------------------------------------------------------------
-# Resolving a catalog row to clips
-# ---------------------------------------------------------------------------
-def _catalog_label(row, state_name):
-    """What the panel row says, as the action's name.
-
-    These clips are named after internal controller states (`L_SLoop1`,
-    `M_IN_Loop`) which say nothing about what the animation is; the catalog is
-    where the readable Japanese identity lives, and it is what the user picked
-    from. ``state_name`` only contributes the part that separates one member of
-    a state family from another (the L/M/S camera tier and its index), because
-    the family as a whole IS the catalog row."""
-    variant = ""
-    match = re.match(r"^(?:([A-Za-z]+)_)?{0}(\d*)$".format(re.escape(str(row["clip"]))),
-                     state_name)
-    if match:
-        variant = (match.group(1) or "") + (match.group(2) or "")
-    parts = [str(row["groupName"]), str(row["categoryName"]), str(row["name"])]
-    if variant:
-        parts.append(variant)
-    return "_".join(part for part in parts if part)
-
-
-# ---------------------------------------------------------------------------
 # What the buttons do
 # ---------------------------------------------------------------------------
 def _loaded(context):
@@ -189,8 +165,7 @@ def _import_rows(context, rows):
     position -- the reader resolves that to exactly this family's clips (never the
     two-thousand-clip bundle) and hands them back already anchored on the rig."""
     state = state_of(context)
-    host = host_port.current()
-    if host.selected_rig(context) is None:
+    if host_port.selected_rig(context) is None:
         state.status = "Select the character's armature first."
         return
     options = app_browser.as_options(app_browser.state_of(context))
@@ -204,9 +179,8 @@ def _import_rows(context, rows):
         if not seed:
             lines.append("'{0}' states no seed to load.".format(row.get("name") or "?"))
             continue
-        built, warnings = yield command.Read(
-            lambda _seed=seed: host.import_clips(context, "", [_seed], None, options,
-                                                 activate=True), 0.8)
+        built, warnings = loading.perform(context, [seed], options=options, activate=True)
+        yield command.Mark(0.8)
         lines.extend(warnings[:3])
         total += built
         labels.append(str(row.get("name") or seed))
@@ -230,12 +204,12 @@ REFRESH = command.COMMANDS.define(
 IMPORT = command.COMMANDS.define(
     "ruri.kk_anime_import", "Import Animation", _import,
     description="Build this animation as an action on the selected rig",
-    icon="ANIM_DATA", requires=host_port.ANIMATION, poll=_has_selection, steps=True,
+    icon="ANIM_DATA", requires=host_port.Timeline, poll=_has_selection, steps=True,
     status_state=STATE, failure="Animation import failed")
 IMPORT_SIDE = command.COMMANDS.define(
     "ruri.kk_hanime_import", "Import", _import_side,
     description="Build this partner's selected animation as an action on the selected rig",
-    icon="ANIM_DATA", requires=host_port.ANIMATION, poll=_loaded, steps=True,
+    icon="ANIM_DATA", requires=host_port.Timeline, poll=_loaded, steps=True,
     status_state=STATE, failure="Animation import failed",
     arguments=(Field("side", app_state.STRING, "male"),))
 

@@ -26,7 +26,6 @@ import re
 
 import bpy
 
-from ...Kernel import capabilities
 from ...Kernel import statement as kernel_statement
 from . import animation_builder, rig_identity
 
@@ -50,20 +49,6 @@ _EULER_SIGN_CANDIDATES = tuple((x, y, z) for x in (1.0, -1.0)
 #: Session-lived, keyed by armature name so a stale binding from a deleted or
 #: replaced rig can never be applied to the wrong object.
 _BINDING = {"rig": "", "table": None, "binding": None}
-
-
-def resolve_rig(context):
-    """The armature to drive, by the add-on's ONE rig rule -- the host's own
-    :meth:`Kernel.capabilities.Rig.selected_rig`: the active object's rig, which
-    a skinned MESH stands for just as well as the skeleton does.
-    Returns (armature, error message); this only words the failure."""
-    rig = capabilities.current().selected_rig(context)
-    if rig is not None:
-        return rig, ""
-    if not any(obj.type == "ARMATURE" for obj in context.scene.objects):
-        return None, "No armature in the scene -- import a character first."
-    return None, ("Ambiguous rig -- select the one whose face you want to drive: its "
-                  "skeleton, or any mesh skinned to it.")
 
 
 def rig_meshes(rig):
@@ -513,7 +498,7 @@ def _bake_shape_keys(shape_binding, tracks, fps, name):
         action = bpy.data.actions.new(name)
         if hasattr(action, "use_fake_user"):
             action.use_fake_user = True
-        fcurves, slot = animation_builder._prepare_channels(action, action.name, "KEY")
+        fcurves, slot = animation_builder.prepare_channels(action, action.name, "KEY")
         for keys, target in pairs:
             _write_weight_fcurve(fcurves, keys, target, fps)
         # A shape-key action is one HALF of a face animation (the bone half lands
@@ -593,7 +578,7 @@ def _bake_bones(bone_binding, tracks, frames, fps, name, into):
         action = bpy.data.actions.new(name)
         if hasattr(action, "use_fake_user"):
             action.use_fake_user = True
-        fcurves, slot = animation_builder._prepare_channels(action, action.name, "OBJECT")
+        fcurves, slot = animation_builder.prepare_channels(action, action.name, "OBJECT")
 
     for bone_name in sorted(bones):
         locations = np.empty((frame_count, 3), dtype=np.float32)
@@ -605,7 +590,7 @@ def _bake_bones(bone_binding, tracks, frames, fps, name, into):
             locations[index] = (location.x, location.y, location.z)
             quaternions[index] = (rotation.w, rotation.x, rotation.y, rotation.z)
             scales[index] = (scale.x, scale.y, scale.z)
-        animation_builder._write_bone_fcurves(fcurves, bone_name, frame_numbers,
+        animation_builder.write_bone_fcurves(fcurves, bone_name, frame_numbers,
                                               locations, quaternions, scales)
 
     # Writing into a clip's own action: it is already assigned and already spans the

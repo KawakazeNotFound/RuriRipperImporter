@@ -29,17 +29,15 @@ from __future__ import annotations
 import importlib
 
 from .. import GameModule, GameSection, GameTab
-from ...Kernel.app import prefabs as app_prefabs
-from . import mesh_resolver
 
 #: The parts the two tabs are composed of, each with the capability its host must
 #: answer. Imported and registered ONLY when that answer is yes: a panel module is
 #: where its host classes live, and importing one to then not show it is how a
 #: plugin ends up requiring a host feature it never uses.
 #: Both tabs of this game are the same act -- pick one of the things the game's
-#: own catalog names, and run the browser's own import over what it resolved to.
-#: That needs nothing of the host the browser does not already need, so both
-#: cross and neither declares a capability.
+#: own catalog names, and load its seed through the kernel's own verb. That needs
+#: nothing of the host the browser does not already need, so both cross and
+#: neither declares a capability.
 SECTIONS = (GameSection("roster"), GameSection("scene"))
 
 _LOADED = []
@@ -50,18 +48,9 @@ def _register():
                   for one in SECTIONS if one.available]
     for module in _LOADED:
         module.register()
-    # A character prefab here carries renderers with no mesh in them: the geometry
-    # is listed beside the rig and attached at run time. The ONE prefab path asks
-    # whoever owns the prefab for the missing mesh; this is that answer, and a
-    # prefab keeping no such list simply declines.
-    app_prefabs.register_mesh_resolver(mesh_resolver.provide)
-    app_prefabs.register_detail_rule(mesh_resolver.detail)
 
 
 def _unregister():
-    app_prefabs.unregister_detail_rule(mesh_resolver.detail)
-    app_prefabs.unregister_mesh_resolver(mesh_resolver.provide)
-    mesh_resolver.forget()
     for module in reversed(_LOADED):
         module.unregister()
     _LOADED[:] = []

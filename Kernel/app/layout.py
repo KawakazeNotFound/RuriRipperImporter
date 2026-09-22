@@ -23,6 +23,8 @@ missing.
 
 from __future__ import annotations
 
+from .. import extensions
+
 COLUMN = "column"
 ROW = "row"
 BOX = "box"
@@ -315,3 +317,42 @@ def describe(draw, context):
     root = Layout()
     draw(root, context)
     return root.node
+
+
+class Popover:
+    """A panel a description opens from a button: its body is a ``draw(layout, context)``."""
+
+    __slots__ = ("id", "label", "draw", "width")
+
+    def __init__(self, surface_id, label, draw, width):
+        self.id = surface_id
+        self.label = label
+        self.draw = draw
+        self.width = width
+
+
+class Menu:
+    """A dropdown a description opens: its body is ``entries(context)``, each entry either a
+    command (``text``, ``command``, ``values``) or a caption (``text``, ``separator``)."""
+
+    __slots__ = ("id", "label", "entries")
+
+    def __init__(self, surface_id, label, entries):
+        self.id = surface_id
+        self.label = label
+        self.entries = entries
+
+
+#: Every surface a description opens by id, declared by the module that owns it. A host renders
+#: each of them from here and writes no body of its own.
+SURFACES = extensions.point("surfaces", "Surface id -> the popover or menu a description opens.")
+
+
+def declare_popover(surface_id, label, draw, width=14):
+    SURFACES.add(Popover(surface_id, label, draw, width), key=surface_id, module=draw.__module__)
+    return surface_id
+
+
+def declare_menu(surface_id, label, entries):
+    SURFACES.add(Menu(surface_id, label, entries), key=surface_id, module=entries.__module__)
+    return surface_id

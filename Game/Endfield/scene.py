@@ -17,10 +17,10 @@ A third half, ``UI``, browses the lit little stages an interface stands a model 
 and loads one AROUND a character already in the scene -- which is the one thing
 here that needs a scene to put it around, so it appears only where there is one.
 
-What a window IS gets stated here (``scene_state.packages``) and BUILT by the
-host: one real object per placement where there is a scene to hold them, one glTF
-whose nodes share their meshes where the project is a file. Neither is a lesser
-version of the other, and this module contains no branch for either.
+What a window IS is the hook's statement of its seed (``scene_state.seed``), loaded
+through the kernel's one load and BUILT by the host: one real object per placement
+where there is a scene to hold them, one glTF whose nodes share their meshes where
+the project is a file. This module contains no branch for either.
 
 Nothing here imports a host.
 """
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from ...Kernel import host as host_port
 from ...Kernel.app import browser as app_browser
-from ...Kernel.app import command, filtering
+from ...Kernel.app import command, filtering, loading
 from ...Kernel.app import layout as app_layout
 from ...Kernel.app import schemas
 from ...Kernel.app.state import Field, Schema
@@ -316,24 +316,24 @@ def _import(context, arguments):
     window = rect + (state_id, detail)
     if scene_state.CURRENT_MAP != map_name or scene_state.CURRENT_WINDOW != window:
         yield from _discover(context, arguments)
-    packages = scene_state.packages(_label(state))
-    if packages is None:
+    seed = scene_state.seed()
+    if not seed:
         state.status = "This selection resolves to nothing importable."
         return
     host = host_port.current()
-    if state.reset_scene and host_port.SCENE_GRAPH in host.capabilities:
+    if state.reset_scene and host_port.SceneGraph in host.capabilities:
         host.clear_scene(context)
     # The level's own sky goes up before anything that samples it is built.
     ambient = datasets.scene_ambient(map_name)
-    if ambient is not None and host_port.SCENE_GRAPH in host.capabilities:
+    if ambient is not None and host_port.SceneGraph in host.capabilities:
         host.apply_environment(context, ambient)
     yield command.Mark(0.15)
-    built = host.import_packages(context, packages, options)
+    built = loading.load(context, [seed], options)
     notes = list(built.warnings[:2])
     # Everything the level states for every material, as one state the stacks read live: its
     # static globals (fog, the default sky SH) and its baked irradiance, rebuilt as the game's
     # camera clipmaps around wherever the document is looked at from.
-    if host_port.SCENE_GRAPH in host.capabilities:
+    if host_port.SceneGraph in host.capabilities:
         anchor = host.source_view_position(context)
         if anchor is None:
             notes.append("nothing in the scene to centre the level's lighting on")
@@ -344,7 +344,7 @@ def _import(context, arguments):
                 notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
     # The level states its own colour grading; a host with a display chain takes it.
     grading = datasets.scene_grading(map_name)
-    if grading is not None and host_port.COMPOSITOR in host.capabilities:
+    if grading is not None and host_port.Compositor in host.capabilities:
         host.apply_post_inputs(context, grading["inputs"])
         if grading["white_balance"] > 0.5:
             notes.append("white balance is on in this volume and is not graded")
@@ -352,7 +352,7 @@ def _import(context, arguments):
             notes.append("this volume adapts its exposure automatically; only its "
                          "compensation is applied")
     state.status = "{0}: {1} object(s). {2}".format(
-        packages.label, built.imported, "  ".join(notes))
+        _label(state), built.imported, "  ".join(notes))
 
 
 def _label(state):
@@ -449,13 +449,13 @@ def _draw_actions(layout, context, state, enabled):
     # 与浏览器同一份导入选项 —— 场景导入读的也是它。一个场景窗口是几百上千张材质,
     # 所以第二个记忆值(Game Shaders)画在按 Import 的地方,别让人跑去另一个 tab 找。
     app_browser.draw_import_options(options, context)
-    if host_port.NODE_MATERIALS in host_port.current().capabilities:
+    if host_port.NodeMaterials in host_port.current().capabilities:
         options.prop(app_browser.state_of(context), "scene_shaders")
     options.operator(DISCOVER.id, icon="VIEWZOOM")
     _draw_estimate(layout, state)
     tail = layout.column(align=True)
     tail.enabled = enabled
-    if host_port.SCENE_GRAPH in host_port.current().capabilities:
+    if host_port.SceneGraph in host_port.current().capabilities:
         tail.prop(state, "reset_scene")
     tail.operator(IMPORT.id, icon="IMPORT")
 

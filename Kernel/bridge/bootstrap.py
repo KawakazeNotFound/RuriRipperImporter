@@ -349,20 +349,3 @@ def ensure_async(report_fn=None, on_ready=None):
     _install_thread = threading.Thread(
         target=_worker, name="RuriRipperRuntimeInstall", daemon=True)
     _install_thread.start()
-
-
-def ensure_blocking(report_fn=None, on_ready=None):
-    """Synchronous variant, for a headless script or the moment a user presses
-    a button that needs the bridge and wants a definite yes/no."""
-    global _ready
-    if report_fn is not None:
-        set_reporter(report_fn)
-    if probe():
-        with _state_lock:
-            _ready = True
-        _call_on_ready(on_ready)
-        return True
-    specs = missing_specs()
-    _report("[RuriRipper] installing {0} ...".format(", ".join(specs)))
-    ok, err = _install(specs)
-    return _finish(ok, err, on_ready)

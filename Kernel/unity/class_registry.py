@@ -36,20 +36,9 @@ def canonical_name(class_id):
     return _load()["canonical"].get(str(class_id))
 
 
-def names_for_id(class_id):
-    """Every historical name a class id has had."""
-    if class_id is None:
-        return []
-    return _load()["id_to_names"].get(str(class_id), [])
-
-
 def id_for_name(name):
     """Numeric class id for any historical class name, or None."""
     if name is None:
         return None
     cid = _load()["name_to_id"].get(name)
     return int(cid) if cid is not None else None
-
-
-def is_loaded():
-    return bool(_load()["name_to_id"])
