@@ -323,6 +323,10 @@ def _import(context, arguments):
     host = host_port.current()
     if state.reset_scene and host_port.SCENE_GRAPH in host.capabilities:
         host.clear_scene(context)
+    # The level's own sky goes up before anything that samples it is built.
+    ambient = datasets.scene_ambient(map_name)
+    if ambient is not None and host_port.SCENE_GRAPH in host.capabilities:
+        host.apply_environment(context, ambient)
     yield command.Mark(0.15)
     built = host.import_packages(context, packages, options)
     notes = list(built.warnings[:2])

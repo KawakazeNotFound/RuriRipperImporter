@@ -238,6 +238,19 @@ class Host(abc.ABC):
         it is absent there rather than doing nothing."""
 
     @abc.abstractmethod
+    def apply_environment(self, context, ambient):
+        """Stand a level's own sky up as the document's world. ``ambient`` is
+        ``{"label", "coefficients"}``: the sky irradiance as the source's shading
+        stack samples it, nine spherical-harmonic coefficients per channel. Returns
+        how many already-built materials were re-answered against it.
+
+        Called BEFORE the level's content is built: a material samples the world
+        that exists when it is built, and one built against a default world keeps
+        reflecting that default. Only ever called on a host that answers
+        :data:`SCENE_GRAPH` -- a project that IS one mesh has no world to stand a
+        sky up in."""
+
+    @abc.abstractmethod
     def apply_post_inputs(self, context, values):
         """Drive the display chain's host-side inputs from a level's own data --
         the colour grading a scene states, keyed by the chain's own input names.

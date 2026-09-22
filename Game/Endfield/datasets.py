@@ -63,6 +63,7 @@ STORY_QUESTS = "endfield.story.quests"
 STORY_LINES = "endfield.story.lines"
 STORY_STAGE = "endfield.story.stage"
 SCENE_ENVIRONMENT = "endfield.scene.environment"
+SCENE_AMBIENT = "endfield.scene.ambient"
 
 
 def _table(dataset_id, **args):
@@ -256,6 +257,23 @@ def landmarks(language):
              "rect": (row["minX"], row["minZ"], row["maxX"], row["maxZ"]),
              "seed": row["seed"]}
             for row in _rows(LANDMARKS, language=language)]
+
+
+def scene_ambient(map_name):
+    """The sky irradiance this map bakes, off the volume that applies everywhere --
+    nine coefficients per channel, red then green then blue, as the source's own
+    shading stack samples them. The decoder already resolved which of a volume's two
+    blocks is the live one."""
+    rows = _rows(SCENE_AMBIENT, map=map_name)
+    if not rows:
+        return None
+    marked = [row for row in rows if float(row.get("global") or 0) > 0.5]
+    volume = (marked or rows)[0]["volume"]
+    picked = sorted((row for row in rows if row["volume"] == volume),
+                    key=lambda row: int(float(row["index"])))
+    return {"label": volume,
+            "coefficients": [[float(row[channel]) for row in picked]
+                             for channel in ("r", "g", "b")]}
 
 
 def scene_grading(map_name):
