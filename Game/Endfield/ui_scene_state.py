@@ -105,43 +105,31 @@ def discover(bridge):
         paths.sort()
 
     cabs = sorted(set(cab_of_path.values()))
-    assets, _roots, seed_roots, _clips, _scene_roots = bridge.import_cabs(
-        cabs, [MONO_BEHAVIOUR_CLASS_ID, MONO_SCRIPT_CLASS_ID])
-    exported = dict(bridge.asset_paths_by_guid)
+    # The serialized text of what those archives carry, WITH the path each was
+    # written under: one published dataset, so there is no second way to open an
+    # archive here and no guid attribution to get wrong.
+    written = bridge.game_data("core.assets.text", cab=cabs)
+    entries = [(str(written.cell(index, "path")), str(written.cell(index, "text")))
+               for index in range(len(written))]
 
-    # guid -> class, for the MonoScripts the closure brought along.
     class_of_guid = {}
-    for guid, path in exported.items():
+    for path, text in entries:
         class_name = _class_of_script(path)
         if class_name:
-            class_of_guid[guid] = class_name
+            class_of_guid[path] = class_name
 
-    # Which container path an imported asset came from. seed_roots answers it
-    # directly when the bridge could attribute a seed to its own asset; the
-    # remainder join on the game's own file name, which for these config assets
-    # IS the asset's m_Name (charinfo/qianneng_env.asset <-> Qianneng_Env) --
-    # and only ever within the 17 candidates, never across the library.
-    guid_of_cab = {str(k).lower(): str(v).lower() for k, v in dict(seed_roots).items()}
-    path_of_guid = {}
-    for path, cab in cab_of_path.items():
-        guid = guid_of_cab.get(cab.lower())
-        if guid:
-            path_of_guid[guid] = path
     path_of_stem = {}
     for path in candidates:
         stem = path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
         path_of_stem.setdefault(stem.lower(), []).append(path)
 
-    # Every MonoBehaviour in the closure, by guid -- a VolumeProfile's own
-    # components have no container path of their own, so they are reachable
-    # only through the profile's `components` list, which is the game's own
-    # link and the only correct way to say which overrides a stage applies.
+    # Every scripted asset that was written, keyed by its own path -- a
+    # VolumeProfile's own components have no path of their own, so they stay
+    # reachable only through the profile's ``components`` list, which is the
+    # game's own link and the only correct way to say which overrides a stage
+    # applies.
     behaviours = {}
-    for guid, blob in assets.items():
-        try:
-            text = blob.decode("utf-8")
-        except UnicodeDecodeError:
-            continue
+    for path, text in entries:
         if not text.lstrip().startswith("%YAML"):
             continue
         unity_file = unity_yaml.UnityFile(None, unity_yaml.parse_text(text))
@@ -149,8 +137,9 @@ def discover(bridge):
         if parsed is None:
             continue
         name, script_guid, data = parsed
-        behaviours[guid] = {"name": name, "guid": guid, "data": data,
+        behaviours[path] = {"name": name, "guid": path, "data": data,
                             "class": class_of_guid.get(script_guid, "")}
+    path_of_guid = {path: path for path in behaviours}
 
     environments, volumes = [], []
     documents = {}

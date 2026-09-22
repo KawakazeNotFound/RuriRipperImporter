@@ -168,21 +168,19 @@ def seeds_for(address, cabs, asset_name):
 
 
 def _prefab_text(cabs, asset_name):
-    """The prefab document itself, out of a closure exported for GameObjects only."""
-    from ...Kernel.unity import class_registry
-
-    game_object = class_registry.id_for_name("GameObject")
+    """The prefab document itself, by the name the game files it under."""
+    cabs = [cab for cab in cabs if cab]
+    if not cabs or cabmap_state.BRIDGE is None:
+        return ""
     try:
-        assets, roots, _seeds, _clips, _scenes = cabmap_state.BRIDGE.import_cabs(
-            list(cabs), [game_object] if game_object is not None else None)
+        table = cabmap_state.BRIDGE.game_data("core.assets.text", cab=cabs)
     except Exception:
         return ""
-    paths = cabmap_state.BRIDGE.asset_paths_by_guid or {}
     wanted = (asset_name or "").lower() + ".prefab"
-    for guid in roots:
-        leaf = (paths.get(guid) or "").replace("\\", "/").rsplit("/", 1)[-1]
-        if leaf.lower() == wanted:
-            return assets[guid].decode("utf-8", "replace")
+    for index in range(len(table)):
+        path = str(table.cell(index, "path")).replace("\\", "/").rsplit("/", 1)[-1]
+        if path.lower() == wanted:
+            return str(table.cell(index, "text"))
     return ""
 
 

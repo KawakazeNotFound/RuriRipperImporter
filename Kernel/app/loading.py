@@ -91,15 +91,20 @@ class Packages:
     __slots__ = ("key", "label", "kind", "cabs", "manifest", "meshes",
                  "missing", "dressing", "paths", "skeleton", "named_roots",
                  "seeded_only", "parts", "export_class_ids", "placements",
-                 "library", "materials", "textures", "window")
+                 "library", "materials", "textures", "window", "seed")
 
     def __init__(self, key, label, kind, cabs, manifest=None, meshes=(),
                  missing=(), dressing=None, paths=(), skeleton=None,
                  named_roots="", seeded_only=False, parts=(), export_class_ids=(),
                  placements=(), library=None, materials=None, textures=None,
-                 window=None):
+                 window=None, seed=""):
         #: The game's own identifier for this thing.
         self.key = key
+        #: What the READER knows this thing by, when the game states one. A row
+        #: that carries a seed already says what it is -- which parts, which
+        #: skeleton, which materials -- so a resolver on this side would be a
+        #: second answer to a question already answered.
+        self.seed = seed
         #: What to call it on screen.
         self.label = label
         #: How the game files it -- a prefab, an assembly of parts, ...

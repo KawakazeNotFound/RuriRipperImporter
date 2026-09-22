@@ -13,24 +13,19 @@ application, not about this game. Nothing here imports a host.
 from __future__ import annotations
 
 from ...Kernel.bridge import cabmap_state
-from ...Kernel.unity import class_registry
 from . import cloth
 
 
 def _prefab_texts(cabs):
-    mono_behaviour = class_registry.id_for_name("MonoBehaviour")
-    assets, _roots, _seeds, _clips, _scenes = cabmap_state.BRIDGE.import_cabs(
-        cabs, [mono_behaviour] if mono_behaviour is not None else None)
-    paths = cabmap_state.BRIDGE.asset_paths_by_guid
-    texts = []
-    for guid, blob in assets.items():
-        if not str(paths.get(guid, "")).lower().endswith(".prefab"):
-            continue
-        try:
-            texts.append(blob.decode("utf-8"))
-        except UnicodeDecodeError:
-            continue
-    return texts
+    """The serialized text of what those archives carry -- what the cloth reader
+    parses its fields out of. One published dataset, so there is no second way to
+    open an archive on this side."""
+    cabs = [cab for cab in cabs if cab]
+    if not cabs or cabmap_state.BRIDGE is None:
+        return []
+    table = cabmap_state.BRIDGE.game_data("core.assets.text", cab=cabs)
+    return [str(table.cell(index, "text")) for index in range(len(table))
+            if str(table.cell(index, "path")).lower().endswith(".prefab")]
 
 
 def read(cabs):

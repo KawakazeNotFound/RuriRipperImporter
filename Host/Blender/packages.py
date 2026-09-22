@@ -23,6 +23,8 @@ from . import materialise as materialiser
 def seeds_of(packages):
     """What to ask the reader about. Paths first: a path names one asset, while
     an archive names everything that shares it."""
+    if getattr(packages, "seed", ""):
+        return [packages.seed]
     paths = [path for path in (packages.paths or {}).values() if path]
     if paths:
         return sorted(set(paths))

@@ -26,7 +26,6 @@ from ...Kernel.app.state import Field, Schema
 from ...Kernel.app import state as app_state
 from ...Kernel.app import view as app_view
 from ...Kernel.bridge import cabmap_state
-from ...Kernel.unity import bridge_asset_db, class_registry
 from . import datasets
 
 STATE = "ruri_illusion_anime"
@@ -138,48 +137,6 @@ def current_row(state):
 # ---------------------------------------------------------------------------
 # Resolving a catalog row to clips
 # ---------------------------------------------------------------------------
-def _resolve_state_family(bridge, cabs, controller_name, family):
-    """(clip asset keys, state names) for one catalog row.
-
-    A row names a position's controller (overrideAsset, or the base asset) and a
-    state FAMILY (`clip`): the controller's states are `<prefix>_<family><digit?>`
-    variants (L_/M_/S_ camera-intensity tiers in KK's H controllers). Resolution
-    is pure topology on the scan graph -- controller -> state machines -> states,
-    each family state's motion clips collected through blend trees -- and the
-    returned keys materialize exactly those clips, never the 2000-clip bundle."""
-    graph = bridge.scan_cabs(cabs)
-    controller_id = class_registry.id_for_name("AnimatorController")
-    override_id = class_registry.id_for_name("AnimatorOverrideController")
-    machine_id = class_registry.id_for_name("AnimatorStateMachine")
-    state_id = class_registry.id_for_name("AnimatorState")
-    blend_tree_id = class_registry.id_for_name("BlendTree")
-    clip_id = class_registry.id_for_name("AnimationClip")
-
-    controllers = graph.find(controller_id, controller_name)
-    if len(controllers) != 1:
-        present = sorted(graph.name(i) for i in graph.indices_of_class(controller_id))
-        raise LookupError(
-            "controller {0!r} matches {1} assets in {2} -- controllers present: {3}".format(
-                controller_name, len(controllers), ", ".join(cabs), ", ".join(present)))
-    states = graph.reachable(controllers[0], {controller_id, override_id, machine_id}, state_id)
-    pattern = re.compile(r"^(?:[A-Za-z]+_)?{0}\d*$".format(re.escape(family)))
-    family_states = [i for i in states if pattern.match(graph.name(i))]
-    if not family_states:
-        raise LookupError(
-            "no state of {0!r} matches family {1!r} -- states present: {2}".format(
-                controller_name, family, ", ".join(sorted(graph.name(i) for i in states))))
-    clip_keys = {}
-    for state_index in family_states:
-        for clip_index in graph.reachable(state_index, {blend_tree_id}, clip_id):
-            clip_keys[graph.key(clip_index)] = graph.name(state_index)
-    if not clip_keys:
-        raise LookupError(
-            "family states {0} reference no AnimationClip -- the controller wires "
-            "these states to something this resolver does not follow yet.".format(
-                sorted(graph.name(i) for i in family_states)))
-    return clip_keys, sorted(graph.name(i) for i in family_states)
-
-
 def _catalog_label(row, state_name):
     """What the panel row says, as the action's name.
 
@@ -226,51 +183,33 @@ def _refresh(context, arguments):
 
 def _import_rows(context, rows):
     """Build every catalog row onto the rig the user has in front of them. The one
-    import body; both the flat list and the paired male/female lists call it."""
+    import body; both the flat list and the paired male/female lists call it.
+
+    A row carries its own seed: which controller, which state family, which
+    position -- the reader resolves that to exactly this family's clips (never the
+    two-thousand-clip bundle) and hands them back already anchored on the rig."""
     state = state_of(context)
     host = host_port.current()
     if host.selected_rig(context) is None:
         state.status = "Select the character's armature first."
         return
     options = app_browser.as_options(app_browser.state_of(context))
-    bridge = cabmap_state.BRIDGE
     total = 0
     labels = []
     lines = []
     for row in rows:
         if row is None:
             continue
-        bundle = str(row.get("overrideBundle") or row["bundle"])
-        controller_name = str(row.get("overrideAsset") or row["asset"])
-        cabs = datasets.cabs_for([bundle])
-        if not cabs:
-            lines.append("'{0}' is not in the loaded cabmap.".format(bundle))
+        seed = str(row.get("id") or "")
+        if not seed:
+            lines.append("'{0}' states no seed to load.".format(row.get("name") or "?"))
             continue
-        try:
-            resolved = yield command.Read(
-                lambda _cabs=cabs, _name=controller_name, _family=str(row["clip"]):
-                _resolve_state_family(bridge, _cabs, _name, _family), 0.3)
-        except LookupError as exc:
-            lines.append(str(exc))
-            continue
-        clip_keys, family_states = resolved
-        assets = yield command.Read(
-            lambda _cabs=cabs, _keys=clip_keys: bridge.import_cabs(
-                _cabs, export_asset_keys=sorted(_keys))[0], 0.6)
-        database = bridge_asset_db.BridgeAssetDatabase(
-            assets, clip_curve_blobs=bridge.clip_curves_by_guid,
-            asset_paths=bridge.asset_paths_by_guid,
-            texture_srgb=bridge.texture_srgb_by_guid)
-        guid_by_key = bridge.clip_guid_by_key
-        display_names = {guid_by_key[key]: _catalog_label(row, state_name)
-                         for key, state_name in clip_keys.items() if key in guid_by_key}
-        yield command.Mark(0.8)
-        built, warnings = host.import_clips(
-            context, cabs[0], sorted(guid_by_key.values()), database, options,
-            display_names=display_names, activate=True)
+        built, warnings = yield command.Read(
+            lambda _seed=seed: host.import_clips(context, "", [_seed], None, options,
+                                                 activate=True), 0.8)
         lines.extend(warnings[:3])
         total += built
-        labels.append("{0} ({1})".format(row["name"], ", ".join(family_states)))
+        labels.append(str(row.get("name") or seed))
     state.status = "{0} action(s): {1}{2}".format(
         total, " | ".join(labels), "  " + "  ".join(lines[:3]) if lines else "")
 

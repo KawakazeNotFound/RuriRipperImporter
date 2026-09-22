@@ -334,18 +334,22 @@ def load(context, stage, options):
 def _load_art(context, prefabs, options):
     """The stage's own prefab, built the ordinary way -- one closure, the shared
     prefab importer, whatever hierarchy the game authored."""
-    bridge = cabmap_state.BRIDGE
-    cabs = list(bridge.resolve_cabs_for_paths(list(prefabs)))
-    if not cabs:
-        return ["the install carries no CAB for this stage's art"]
-    assets, roots, _seed_roots, _clips, _scene_roots = bridge.import_cabs(cabs)
-    database = bridge_asset_db.BridgeAssetDatabase(
-        assets, clip_curve_blobs=bridge.clip_curves_by_guid,
-        mesh_blobs=bridge.mesh_blobs_by_guid, asset_paths=bridge.asset_paths_by_guid,
-        texture_srgb=bridge.texture_srgb_by_guid)
-    reports = import_stage(context, database, roots, options)
-    meshes = sum(len(report.mesh_objects) for report in reports)
-    cameras = [obj for report in reports for obj in report.cameras]
+    from . import packages as materialiser
+    from ...Kernel.app import loading
+
+    seeds = [path for path in prefabs if path]
+    if not seeds:
+        return ["this stage names no art to build"]
+    before = set(bpy.data.objects)
+    report = materialiser.materialise(
+        context, loading.Packages(seeds[0], "", loading.PREFAB, [],
+                                  paths={str(index): path
+                                         for index, path in enumerate(seeds)}),
+        None, options)
+    placed = [obj for obj in bpy.data.objects if obj not in before]
+    meshes = len([obj for obj in placed if obj.type == "MESH"])
+    cameras = [obj for obj in placed if obj.type == "CAMERA"]
+    reports = [report]
     done = ["{0} mesh(es), {1} camera(s)".format(meshes, len(cameras))]
     chosen = adopt_camera(context, cameras)
     if chosen is not None:

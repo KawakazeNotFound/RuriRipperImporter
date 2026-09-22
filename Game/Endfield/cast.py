@@ -124,63 +124,6 @@ def character_tag(token):
     return 0
 
 
-def _templet_skeleton(info):
-    """``(world_rests, paths, leaf_names, avatar_data)`` for an npc's shared
-    skeleton, read from the avatar template the manifest names.
-
-    The skeleton is the Avatar asset the template's own bundle carries: its
-    ``m_AvatarSkeleton`` posed by the pose array ``avatar.py`` selects is the whole
-    rig's world rest and its ``m_TOS`` the name/parent table -- the authoritative
-    pose a part mesh is bind-baked against, exactly what a shipped rig gets from its
-    prefab transform hierarchy. The template MonoBehaviour beside it contributes
-    ``bonePathsStr``, the leaf-name vocabulary for any part-specific bone the
-    table does not name.
-
-    Both are materialized by their own identity out of a bundle that carries a
-    thousand other assets -- never the whole closure."""
-    templet = (info.get("avatar_templet") or "").rsplit("/", 1)[-1]
-    if not templet:
-        return {}, [], [], None
-    stem = "data_npc_avatartemplet_" + templet.lower()
-    rows = datasets.named_rows(stem)
-    if not rows:
-        return {}, [], [], None
-    from ...Kernel.unity import bridge_asset_db, class_registry
-    cab = rows[0]["cab"]
-    try:
-        graph = cabmap_state.BRIDGE.scan_cabs([cab])
-        avatar_id = class_registry.id_for_name("Avatar")
-        mono_behaviour_id = class_registry.id_for_name("MonoBehaviour")
-        keys = [graph.key(index) for index in graph.indices_of_class(avatar_id)]
-        keys += [graph.key(index) for index in graph.find(mono_behaviour_id, stem)]
-        if not keys:
-            return {}, [], [], None
-        assets, _r, _s, _c, _sc = cabmap_state.BRIDGE.import_cabs(
-            [cab], export_asset_keys=sorted(set(keys)))
-    except Exception:
-        return {}, [], [], None
-    db = bridge_asset_db.BridgeAssetDatabase(
-        assets, asset_paths=cabmap_state.BRIDGE.asset_paths_by_guid,
-        texture_srgb=cabmap_state.BRIDGE.texture_srgb_by_guid)
-
-    world_rests, paths, leaves, avatar_data = {}, [], [], None
-    for guid in db.all_guids():
-        loaded = db.load_guid(guid)
-        if loaded is None:
-            continue
-        avatar_doc = loaded.first("Avatar")
-        if not world_rests and avatar_doc is not None:
-            world_rests, paths = loading.avatar_skeleton(db, loaded)
-            # The whole document travels with the rig, exactly as a shipped
-            # character's does: it is what a muscle-encoded clip solves against.
-            avatar_data = avatar_doc.data
-            continue
-        doc = loaded.first("MonoBehaviour")
-        if doc is not None and "bonePathsStr" in (doc.data or {}):
-            leaves = [str(name) for name in (doc.data.get("bonePathsStr") or [])]
-    return world_rests, paths, leaves, avatar_data
-
-
 def _avatar_mesh_cab(info):
     """The CAB holding this npc's avatar-mesh family table (``data_npc_avatarmesh_
     <leaf>``, named by the manifest's own avatarMeshName). That table is what says
@@ -448,11 +391,15 @@ def _as_template(member, lod):
     if manifest is None or not hits:
         return None
     dressing = _npc_materials(None, manifest, template)
+    # The reader claims this seed: it resolves the recipe's parts, the skeleton
+    # the template names and the materials it is dressed in, all at once. The
+    # manifest stays because the panel reports what the game stated and what of
+    # it went missing.
     return Loadable(template, member.get("label") or template, PARTS,
                     [cab for cab, _meshes in hits] + material_cabs(dressing),
                     manifest=manifest, meshes=hits, missing=missing, dressing=dressing,
                     paths=_mesh_paths(manifest, lod),
-                    skeleton=lambda info=manifest: _templet_skeleton(info))
+                    seed="template:" + template)
 
 
 def _as_bound_prefab(member, lod):
