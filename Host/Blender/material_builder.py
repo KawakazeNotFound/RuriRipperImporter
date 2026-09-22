@@ -96,6 +96,14 @@ LEVEL_GLOBALS = extensions.point(
     "blender.level_globals",
     "Per-level engine globals a shading stack reads live from scene properties.")
 
+#: ``volume_texture_layouts() -> {name: layout}``. 3D textures a stack samples
+#: through 2D atlases (the host's material nodes only sample 2D images): per name,
+#: the atlas image, its size, how the slices are laid out, the texel format and the
+#: in-slice address modes that decide what the ring around each slice holds.
+VOLUME_TEXTURES = extensions.point(
+    "blender.volume_textures",
+    "3D textures a shading stack samples through 2D atlases the host fills.")
+
 #: Custom property stamped on every material this module or a stack builds.
 SOURCE_KEY_PROPERTY = "ruri_source_key"
 #: Marker on an image datablock: its colour space is already what the ASSET
@@ -174,6 +182,14 @@ def register_level_globals(bases):
 
 def unregister_level_globals(bases):
     LEVEL_GLOBALS.remove(bases)
+
+
+def register_volume_textures(layouts):
+    VOLUME_TEXTURES.add(layouts)
+
+
+def unregister_volume_textures(layouts):
+    VOLUME_TEXTURES.remove(layouts)
 
 
 def register_material_panel(panel):
@@ -289,7 +305,38 @@ def apply_post_inputs(scene, values):
     return written
 
 
-def apply_level_globals(scene, values):
+def apply_level_resources(scene, values, payloads):
+    """Apply everything one level states for every material: its engine globals and
+    the 3D textures its stacks sample.
+
+    ``values`` holds globals already in hand, keyed by the engine's own names;
+    ``payloads`` are level-resources blobs (named globals plus named 3D textures, see
+    :func:`_level_resources`). They are merged before anything is written -- the
+    completeness rule below is about the level's whole state, and a level states it
+    through more than one source (fog is static, the irradiance clipmaps follow the
+    camera). A name two sources both state with different values is refused.
+
+    Returns ``(written, unclaimed)``: the names written, and the supplied names no
+    registered stack reads."""
+    merged = {name: tuple(value) for name, value in values.items()}
+    volumes = {}
+    for payload in payloads:
+        stated_globals, stated_volumes = _level_resources(payload)
+        for name, value in stated_globals.items():
+            if name in merged and merged[name] != value:
+                raise ValueError("[material] level global {0} stated twice: {1} and {2}".format(
+                    name, merged[name], value))
+            merged[name] = value
+        for name, volume in stated_volumes.items():
+            if name in volumes:
+                raise ValueError("[material] level volume {0} stated twice".format(name))
+            volumes[name] = volume
+    written, unclaimed = _apply_level_globals(scene, merged)
+    filled, unread = _apply_volume_textures(volumes)
+    return written + filled, unclaimed + unread
+
+
+def _apply_level_globals(scene, values):
     """Write one level's engine globals where the stacks read them live.
 
     ``values`` is keyed by the engine's own global names, each the level's value in
@@ -301,10 +348,7 @@ def apply_level_globals(scene, values):
     missing ones would silently stay at the recipe default and the picture would be
     quietly wrong. A stack handed none of them is not this level's consumer (another
     game's stack) and is left alone. Two stacks declaring different defaults for one
-    name cannot share a scene property, so that is refused too.
-
-    Returns ``(written, unclaimed)`` -- the names written and the supplied names no
-    registered stack reads."""
+    name cannot share a scene property, so that is refused too."""
     bases = {}
     for provider in LEVEL_GLOBALS:
         declared = provider()
@@ -329,6 +373,138 @@ def apply_level_globals(scene, values):
         written.append(name)
     scene.update_tag()
     return written, sorted(name for name in values if name not in bases)
+
+
+_LEVEL_RESOURCES_MAGIC = 0x52564C52
+_TEXEL_FORMATS = {1: "<f2", 2: "u1"}
+
+
+def _level_resources(payload):
+    """``(globals, volumes)`` from one level-resources blob: little-endian ``"RLVR",
+    version``, then named four-component globals, then named 3D textures (``width,
+    height, depth, channels``, a format byte -- 1 = half, 2 = unorm8 -- and the texels,
+    x fastest, then y, then z). Volumes come back as float32 arrays shaped (depth,
+    height, width, channels), unorm8 already divided by 255."""
+    import struct
+    import numpy
+    view = memoryview(payload)
+    magic, _version = struct.unpack_from("<II", view, 0)
+    if magic != _LEVEL_RESOURCES_MAGIC:
+        raise ValueError("[material] not a level-resources payload")
+    cursor = 8
+
+    def name():
+        nonlocal cursor
+        length = struct.unpack_from("<H", view, cursor)[0]
+        text = bytes(view[cursor + 2:cursor + 2 + length]).decode("utf-8")
+        cursor += 2 + length
+        return text
+
+    stated_globals = {}
+    count = struct.unpack_from("<i", view, cursor)[0]
+    cursor += 4
+    for _ in range(count):
+        key = name()
+        stated_globals[key] = struct.unpack_from("<4f", view, cursor)
+        cursor += 16
+    volumes = {}
+    count = struct.unpack_from("<i", view, cursor)[0]
+    cursor += 4
+    for _ in range(count):
+        key = name()
+        width, height, depth, channels = struct.unpack_from("<4i", view, cursor)
+        texel_format = _TEXEL_FORMATS[view[cursor + 16]]
+        cursor += 17
+        total = width * height * depth * channels
+        texels = numpy.frombuffer(view, dtype=texel_format, count=total, offset=cursor)
+        cursor += texels.nbytes
+        texels = texels.astype(numpy.float32)
+        if texel_format == "u1":
+            texels /= 255.0
+        volumes[key] = texels.reshape(depth, height, width, channels)
+    if cursor != len(view):
+        raise ValueError("[material] level-resources payload has {0} trailing bytes".format(len(view) - cursor))
+    return stated_globals, volumes
+
+
+def volume_image(layout):
+    """The one image a stack samples a 3D texture through, laid out as ``layout``
+    says (a generated product's volume-texture row). The only place such an image is
+    made: a stack asks for it when it builds a template, the level writes into it.
+    A size that no longer matches is rebuilt -- the stack's coordinates are the
+    layout's constants, and sampling another size would shift every slice."""
+    width, height = (int(value) for value in layout["atlas"])
+    image = bpy.data.images.get(layout["image"])
+    if image is not None and (int(image.size[0]), int(image.size[1])) != (width, height):
+        bpy.data.images.remove(image)
+        image = None
+    if image is None:
+        float_buffer = layout["format"] == "HALF"
+        image = bpy.data.images.new(layout["image"], width, height, alpha=True, float_buffer=float_buffer)
+        image.colorspace_settings.name = "Non-Color"
+        image.file_format = "OPEN_EXR" if float_buffer else "PNG"
+    return image
+
+
+def _address(index, count, mode):
+    """One texel index under a sampler address mode (the same rule the stacks lower)."""
+    if mode == "WRAP":
+        return index % count
+    if mode == "MIRROR":
+        period = index % (2 * count)
+        return period if period < count else 2 * count - 1 - period
+    if mode == "MIRRORONCE":
+        folded = -index - 1 if index < 0 else index
+        return min(folded, count - 1)
+    return min(max(index, 0), count - 1)
+
+
+def _atlas_pixels(texels, layout):
+    """``texels`` (depth, height, width, channels) laid out as the stack reads them:
+    slice z at grid cell (z % columns, z // columns), row 0 at the bottom (Blender's
+    own pixel order), each cell ringed by ``pad`` texels holding the neighbours the
+    stack's in-slice address mode would reach."""
+    import numpy
+    width, height, depth = (int(value) for value in layout["size"])
+    if texels.shape[:3] != (depth, height, width):
+        raise ValueError("[material] volume {0}: texels {1} against a {2}x{3}x{4} layout".format(
+            layout["image"], texels.shape, width, height, depth))
+    columns, pad = int(layout["columns"]), int(layout["pad"])
+    atlas_width, atlas_height = (int(value) for value in layout["atlas"])
+    mode_u, mode_v = layout["address"]
+    xs = [_address(i, width, mode_u) for i in range(-pad, width + pad)]
+    ys = [_address(j, height, mode_v) for j in range(-pad, height + pad)]
+    ringed = texels[:, ys][:, :, xs]
+    channels = texels.shape[3]
+    pixels = numpy.zeros((atlas_height, atlas_width, 4), dtype=numpy.float32)
+    tile_width, tile_height = width + 2 * pad, height + 2 * pad
+    for z in range(depth):
+        row, column = divmod(z, columns)
+        pixels[row * tile_height:(row + 1) * tile_height,
+               column * tile_width:(column + 1) * tile_width, :channels] = ringed[z]
+    return pixels
+
+
+def _apply_volume_textures(volumes):
+    """Fill the atlas behind every stated 3D texture some registered stack samples.
+    Two stacks laying one texture out differently cannot share its image, so that is
+    refused. Returns ``(filled, unread)``."""
+    layouts = {}
+    for provider in VOLUME_TEXTURES:
+        for name, layout in provider().items():
+            known = layouts.setdefault(name, layout)
+            if known != layout:
+                raise ValueError("[material] volume texture {0} has two layouts".format(name))
+    filled = []
+    for name, texels in volumes.items():
+        layout = layouts.get(name)
+        if layout is None:
+            continue
+        image = volume_image(layout)
+        image.pixels.foreach_set(_atlas_pixels(texels, layout).ravel())
+        image.pack()
+        filled.append(name)
+    return filled, sorted(name for name in volumes if name not in layouts)
 
 
 # ---------------------------------------------------------------------------

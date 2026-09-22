@@ -148,9 +148,41 @@ class BlenderHost(host_port.Host):
         from . import material_builder
         return material_builder.apply_post_inputs(context.scene, values)
 
-    def apply_level_globals(self, context, values):
+    def apply_level_resources(self, context, values, payloads):
         from . import material_builder
-        return material_builder.apply_level_globals(context.scene, values)
+        return material_builder.apply_level_resources(context.scene, values, payloads)
+
+    def source_view_position(self, context):
+        """Where the document is being looked at from, in the source's world: the scene
+        camera, else the first 3D view's own viewpoint, else the middle of what is in
+        the scene. A level's camera-centred state (its irradiance clipmaps) is built
+        around this point, the way the source builds it around its camera."""
+        from mathutils import Vector
+        from . import material_builder
+        scene = context.scene
+        position = None
+        if scene.camera is not None:
+            position = scene.camera.matrix_world.translation.copy()
+        else:
+            manager = context.window_manager
+            for window in (manager.windows if manager is not None else ()):
+                for area in window.screen.areas:
+                    if area.type == "VIEW_3D":
+                        region = area.spaces.active.region_3d
+                        position = region.view_matrix.inverted().translation.copy()
+                        break
+                if position is not None:
+                    break
+        if position is None:
+            corners = [obj.matrix_world @ Vector(corner) for obj in scene.objects
+                       if obj.type == "MESH" for corner in obj.bound_box]
+            if not corners:
+                return None
+            low = Vector([min(c[i] for c in corners) for i in range(3)])
+            high = Vector([max(c[i] for c in corners) for i in range(3)])
+            position = (low + high) * 0.5
+        basis = material_builder.world_basis()
+        return tuple(sum(basis[row][column] * position[row] for row in range(3)) for column in range(3))
 
     def load_display_stage(self, context, stage, options):
         from . import ui_stage

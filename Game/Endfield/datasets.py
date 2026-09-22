@@ -65,6 +65,7 @@ STORY_STAGE = "endfield.story.stage"
 SCENE_ENVIRONMENT = "endfield.scene.environment"
 SCENE_AMBIENT = "endfield.scene.ambient"
 SCENE_GLOBALS = "endfield.scene.globals"
+SCENE_IRRADIANCE = "endfield.scene.irradiance"
 
 
 def _table(dataset_id, **args):
@@ -288,6 +289,14 @@ def scene_globals(map_name):
     volume = (marked or rows)[0]["volume"]
     return {row["name"]: tuple(float(row[axis]) for axis in ("x", "y", "z", "w"))
             for row in rows if row["volume"] == volume}
+
+
+def scene_irradiance(map_name, anchor):
+    """The map's baked irradiance rebuilt around ``anchor`` (a point in the game's own
+    world) as the game's camera clipmaps -- a level-resources payload the host applies
+    as it is."""
+    x, y, z = anchor
+    return cabmap_state.BRIDGE.game_data_blob(SCENE_IRRADIANCE, map=map_name, x=x, y=y, z=z)
 
 
 def scene_grading(map_name):

@@ -130,11 +130,17 @@ class SubstanceHost(host_port.Host):
         raise NotImplementedError(
             "Painter has no world to light -- see Host.apply_environment")
 
-    def apply_level_globals(self, context, values):
+    def apply_level_resources(self, context, values, payloads):
         """Unreachable: this host's project IS one mesh, with no level for a level's
-        globals to shade. It does not declare SCENE_GRAPH."""
+        state to shade. It does not declare SCENE_GRAPH."""
         raise NotImplementedError(
-            "Painter has no level to shade -- see Host.apply_level_globals")
+            "Painter has no level to shade -- see Host.apply_level_resources")
+
+    def source_view_position(self, context):
+        """Unreachable: a project that IS one mesh has no viewpoint in a level. It does
+        not declare SCENE_GRAPH."""
+        raise NotImplementedError(
+            "Painter has no level to look at -- see Host.source_view_position")
 
     def apply_post_inputs(self, context, values):
         """Unreachable: this host's display settings are a fixed set of choices, not

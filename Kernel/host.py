@@ -251,17 +251,28 @@ class Host(abc.ABC):
         sky up in."""
 
     @abc.abstractmethod
-    def apply_level_globals(self, context, values):
-        """Hand the shading stacks a level's engine globals -- values the source's
-        pipeline sets once per level for every material (its fog, say), keyed by the
-        engine's own global names and in the source's own convention. A stack reads
-        them live, so they may be written before or after the level's content is
-        built. Returns ``(written, unclaimed)``: the names written and the supplied
-        names no stack reads.
+    def apply_level_resources(self, context, values, payloads):
+        """Hand the shading stacks everything a level states for every material: the
+        engine globals in ``values`` (keyed by the engine's own names, in the source's
+        own convention) plus the level-resources ``payloads`` -- blobs of further named
+        globals and named 3D textures (a level's baked lighting around a camera). All
+        of it is applied as ONE state, because a stack is refused a partial set of its
+        globals and a level states them through more than one source. A stack reads it
+        live, so it may be applied before or after the level's content is built.
+        Returns ``(written, unclaimed)``: the names written and the supplied names no
+        stack reads.
 
-        Only ever called on a host that answers :data:`SCENE_GRAPH`: what these
-        globals shade is distance and height through a level, and a project that IS
-        one mesh has neither."""
+        Only ever called on a host that answers :data:`SCENE_GRAPH`: what this state
+        shades is distance, height and light through a level, and a project that IS one
+        mesh has none of them."""
+
+    @abc.abstractmethod
+    def source_view_position(self, context):
+        """Where the document is being looked at from, as a point in the SOURCE's
+        world, or None when the document holds nothing to look at. Camera-centred
+        level state is built around it, as the source builds it around its camera.
+
+        Only ever called on a host that answers :data:`SCENE_GRAPH`."""
 
     @abc.abstractmethod
     def apply_post_inputs(self, context, values):

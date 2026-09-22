@@ -327,16 +327,21 @@ def _import(context, arguments):
     ambient = datasets.scene_ambient(map_name)
     if ambient is not None and host_port.SCENE_GRAPH in host.capabilities:
         host.apply_environment(context, ambient)
-    # The globals the level sets for every material (its fog) are read live by the stacks.
-    unread = []
-    level_globals = datasets.scene_globals(map_name)
-    if level_globals and host_port.SCENE_GRAPH in host.capabilities:
-        _written, unread = host.apply_level_globals(context, level_globals)
     yield command.Mark(0.15)
     built = host.import_packages(context, packages, options)
     notes = list(built.warnings[:2])
-    if unread:
-        notes.append("{0} level global(s) no shading stack reads".format(len(unread)))
+    # Everything the level states for every material, as one state the stacks read live: its
+    # static globals (fog, the default sky SH) and its baked irradiance, rebuilt as the game's
+    # camera clipmaps around wherever the document is looked at from.
+    if host_port.SCENE_GRAPH in host.capabilities:
+        anchor = host.source_view_position(context)
+        if anchor is None:
+            notes.append("nothing in the scene to centre the level's lighting on")
+        else:
+            _written, unread = host.apply_level_resources(
+                context, datasets.scene_globals(map_name), [datasets.scene_irradiance(map_name, anchor)])
+            if unread:
+                notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
     # The level states its own colour grading; a host with a display chain takes it.
     grading = datasets.scene_grading(map_name)
     if grading is not None and host_port.COMPOSITOR in host.capabilities:
