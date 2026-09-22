@@ -236,6 +236,18 @@ def post_stages_installed(scene):
     return [stage for stage in POST_STAGES if stage.installed(scene)]
 
 
+def world_basis():
+    """The source-world -> Blender-world basis every generated shading stack computes
+    in, row-major (b = M @ u): the reflection plus the once-only top-level turn, off the
+    one coordinate space the importer places everything with. A stack's kernel works in
+    the SOURCE's world, not in each object's local frame -- the local frame is the world
+    only for an object whose transform IS that turn, and a scene's placements each carry
+    their own. The generator states the same matrix in its recipe (it builds templates
+    with no plugin loaded); a stack checks it against this at registration."""
+    from .coordinate import SPACE
+    return (SPACE.root_rotation @ SPACE.matrix)[:3, :3].tolist()
+
+
 def apply_post_inputs(scene, values):
     """Drive the host-side inputs of every post stage that declares any.
 
