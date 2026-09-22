@@ -1,0 +1,302 @@
+"""Browse the game's cast the way the game itself lists it -- in any host.
+
+Two panes over one dataset: ``Characters`` are the units the game lets you field,
+named through whichever text package the HOST's own locale reads (so switching the
+application's language switches the roster with no reload of anything else);
+``Models`` is every model the config declares -- a character's outfits, the
+enemies, the summons -- each already resolved to the address the catalog knows it
+by.
+
+The list behaves like the bundle browser next door: type to filter, click to
+select, Load to bring it in, and one button reveals where the selection lives over
+in that browser. Loading is deliberately not its own importer: it resolves the
+row's own address to the CABs the loaded map holds, puts them in the browser's own
+selection and runs the browser's own import, so a fix there is a fix here.
+
+Nothing here imports a host.
+"""
+
+from __future__ import annotations
+
+from ...Kernel import host as host_port
+from ...Kernel.app import browser as app_browser
+from ...Kernel.app import cast_panel
+from ...Kernel.app import command, filtering
+from ...Kernel.app import layout as app_layout
+from ...Kernel.app import schemas
+from ...Kernel.app.state import Field, Schema
+from ...Kernel.app import state as app_state
+from ...Kernel.app import view as app_view
+from ...Kernel.bridge import cabmap_state
+from . import datasets, mesh_resolver
+
+STATE = "ruri_exilium_roster"
+SPEC_KEY = "EXILIUM:character"
+
+CHARACTERS = datasets.CHARACTERS
+MODELS = datasets.MODELS
+
+#: Loaded row tables, by (kind, language). Module scope, not panel state:
+#: rebuilding the drawn list must not cost a re-read, and a column table is not
+#: something a host's property system can hold anyway.
+_ROWS = {}
+
+
+def state_of(context):
+    return host_port.current().panel_state(context, STATE)
+
+
+# ---------------------------------------------------------------------------
+# What the panel remembers
+# ---------------------------------------------------------------------------
+#: This tab's live view and the seats that draw it. The kind is not a facet:
+#: this game keeps its two casts in two tables, so the switch picks the TABLE
+#: and the view narrows nothing. Which column is the name, the id, the role or
+#: the "downloaded" test is each column's own statement, made in the hook.
+BOUND = app_view.Bound(SPEC_KEY)
+
+ROSTER = Schema("ExiliumRoster", """What this game's cast tab remembers beyond
+the shared record: which text package it read the names through.""", (
+    Field("language", app_state.STRING, ""),
+), include=(schemas.FILTER_STATE, schemas.LOADING_STATE, cast_panel.CAST_STATE))
+
+
+
+
+FILTER_SPEC = filtering.register_spec(filtering.FilterSpec(
+    key=SPEC_KEY, fields=BOUND.fields,
+    state_for=state_of,
+    apply=lambda context: rebuild(state_of(context))))
+
+
+# ---------------------------------------------------------------------------
+# The rows
+# ---------------------------------------------------------------------------
+def language(state):
+    return datasets.language_for_locale("")
+
+
+def rows(state):
+    return _ROWS.get(language(state))
+
+
+def rebuild(state):
+    """Rebuild the drawn line list.
+
+    The filter is NOT evaluated here: the search text and the Include/Exclude rules
+    go to the same C# engine the bundle browser searches with, over the very buffers
+    this table was built from. This side receives row ids and reads cells."""
+    with filtering.rebuilding():
+        BOUND.open(rows(state), state, note=language(state))
+
+
+HANDLERS = cast_panel.handlers(BOUND, "EXILIUM.roster", rebuild)
+
+
+# ---------------------------------------------------------------------------
+# What the buttons do
+# ---------------------------------------------------------------------------
+def _loaded(context):
+    return app_browser.state_of(context).loaded and cabmap_state.BRIDGE is not None
+
+
+def _has_selection(context):
+    return _loaded(context) and BOUND.picked(state_of(context)) is not None
+
+
+def _refresh(context, arguments):
+    """Read the cast out of the game's own config tables."""
+    state = state_of(context)
+    tongue = language(state)
+    state.language = tongue
+    try:
+        table = datasets.cast(tongue)
+    except Exception as exc:
+        state.status = "{0}: {1}".format(type(exc).__name__, exc)
+        return {"CANCELLED"}
+    _ROWS[tongue] = table
+    rebuild(state)
+    cast_panel.opened(BOUND, state)
+    return None
+
+
+def archives_for(address):
+    """Which archives one catalog address IS.
+
+    This title addresses everything by a catalog ADDRESS, and which archives one
+    address lives in is the hook's own join. A character's renderers carry no mesh
+    of their own and the meshes its list names live in OTHER archives, so a prefab
+    reaches those too -- or a closure resolved from it has nothing for the resolver
+    to find (see mesh_resolver). Stated once: Load seeds with this, and so does
+    every question the shared buttons ask about a row."""
+    cabs = [row["cab"] for row in datasets.cabs_for([address]) if row["cab"]]
+    if not cabs or not str(address).lower().endswith(".prefab"):
+        return cabs
+    return list(mesh_resolver.seeds_for(address, cabs, _asset_name(address)))
+
+
+def _asset_name(address):
+    """The asset an address names, by the game's own leaf. This game builds every
+    asset under its GUID, so the exported file is named after the asset itself and
+    the leaf of the address is the one thing both sides agree on."""
+    leaf = str(address).replace("\\", "/").rsplit("/", 1)[-1]
+    return leaf.rsplit(".", 1)[0]
+
+
+def load_address(context, address, label):
+    """Put whatever one address resolves to in the browser's own selection and run
+    its own import, as steps.
+
+    Shared by both tabs, because "load this one thing" is the same act whether the
+    thing is a model or a scene."""
+    state = state_of(context)
+    if not address:
+        state.status = "'{0}' has no address in the game's own catalog.".format(label)
+        return
+    found = yield command.Read(lambda: datasets.cabs_for([address]), 0.2)
+    cabs = [row["cab"] for row in found if row["cab"]]
+    if not cabs:
+        known = any(row["container"] for row in found)
+        state.status = (
+            "'{0}' is in the catalog but this install carries no archive for it -- "
+            "download it in the game first.".format(label) if known else
+            "'{0}' is not in this install's catalog.".format(label))
+        return
+    name = _asset_name(address)
+    seeds = archives_for(address)
+    cabmap_state.clear_selection()
+    for cab in seeds:
+        cabmap_state.SELECTED_CABS.add(cab)
+    # This game pools dozens of unrelated archives into one file, so one cab's
+    # resolved closure exports over a thousand roots that have nothing to do with
+    # what was asked for -- loading one character used to bring in a scene's worth
+    # of strangers. The address named exactly one asset, so name it to the import.
+    yield from app_browser.IMPORT_SELECTED.run(
+        context, {"reset_scene": False, "only_root_names": name})
+    state.status = "Loaded '{0}' from {1} cab(s).".format(label, len(cabs))
+
+
+def _load(context, arguments):
+    entry = BOUND.picked(state_of(context))
+    if entry is None:
+        return
+    yield from load_address(context, entry.payload, entry.label)
+
+
+def reveal_address(context, address, fallback):
+    """Reveal what one address resolves to. The query is the asset the GAME's own
+    catalog named, never a path this add-on invented."""
+    reveal = command.COMMANDS.get("ruri.cabmap_reveal")
+    for row in (datasets.cabs_for([address]) if address else []):
+        if row["cab"]:
+            return reveal.run(context, {"query": row["container"], "cab": row["cab"],
+                                        "folder": ""})
+    return reveal.run(context, {"query": fallback, "cab": "", "folder": ""})
+
+
+def _reveal(context, arguments):
+    entry = BOUND.picked(state_of(context))
+    if entry is None:
+        return {"CANCELLED"}
+    return reveal_address(context, entry.payload, entry.key)
+
+
+def _outfits(context, arguments):
+    """List the selected character's own models, in the Models pane."""
+    state = state_of(context)
+    entry = BOUND.picked(state)
+    if entry is None:
+        return {"CANCELLED"}
+    wanted = entry.key
+    state.facet = MODELS
+    if rows(state) is None:
+        _refresh(context, {})
+    state.filter_rules.clear()
+    rule = state.filter_rules.add()
+    # A rule offers the fields of the list it belongs to, and it learns which list
+    # that is from its own spec_key -- stamp it before naming a field, or the enum
+    # still holds the empty fallback vocabulary and the assignment raises.
+    rule.spec_key = SPEC_KEY
+    rule.field = "character"
+    rule.relation = "is"
+    rule.value = wanted
+    rule.action = "include"
+    rule.enabled = True
+    rebuild(state)
+    return None
+
+
+def _outfits_poll(context):
+    """Only a CHARACTER has models of her own to show -- which the picked row says
+    itself, in the game's own filing."""
+    if not _has_selection(context):
+        return False
+    entry = BOUND.picked(state_of(context))
+    return entry is not None and entry.cell("kind") == CHARACTERS
+
+
+REFRESH = command.COMMANDS.define(
+    "ruri.exilium_roster_refresh", "Refresh Roster", _refresh,
+    description="Read the cast out of the game's own config tables",
+    icon="FILE_REFRESH", poll=_loaded)
+LOAD = command.COMMANDS.define(
+    "ruri.exilium_roster_load", "Load Model", _load,
+    description="Import this one's model, exactly as the bundle browser would",
+    icon="IMPORT", poll=_has_selection, steps=True, status_state=STATE,
+    failure="Loading this one's model failed")
+REVEAL = command.COMMANDS.define(
+    "ruri.exilium_roster_reveal", "Open Containing Folder", _reveal,
+    description="Switch to the bundle browser and open where this one's assets live",
+    icon="FILE_FOLDER", poll=_has_selection)
+OUTFITS = command.COMMANDS.define(
+    "ruri.exilium_roster_outfits", "Show Outfits", _outfits,
+    description="Switch to the Models pane and list only the models this one wears",
+    icon="MOD_CLOTH", poll=_outfits_poll)
+
+
+# ---------------------------------------------------------------------------
+# What it looks like
+# ---------------------------------------------------------------------------
+#: A cast row: the name, the id when the game gives it one of its own, and
+#: whatever detail that projection carries. A row the install never downloaded is
+#: dimmed rather than hidden while the filter says to show it -- it is real data
+#: with nothing behind it here.
+_COLUMNS = (
+    BOUND.column("", width=0.55,
+                 icon=lambda seat: ("OUTLINER_OB_ARMATURE" if BOUND.shipped(seat)
+                                    else "LIBRARY_DATA_BROKEN"),
+                 active=BOUND.shipped),
+    BOUND.key_column("({0})", width=0.5, enabled=False),
+    BOUND.column("detail", align=app_layout.RIGHT, enabled=False),
+)
+_GROUP_COLUMN = BOUND.column("", icon="OUTLINER_COLLECTION")
+
+
+
+def _seeds(_context, state):
+    """What the picked one IS, as archive names -- the same set Load seeds with, so
+    what the shared buttons read about a row is what loading that row would read."""
+    entry = BOUND.picked(state)
+    return [] if entry is None or not entry.payload else archives_for(entry.payload)
+
+
+PANEL = cast_panel.Panel(
+    BOUND, _COLUMNS, "exilium_roster", REFRESH.id, state_of, STATE, seeds=_seeds,
+    group_column=_GROUP_COLUMN, actions=(LOAD.id, REVEAL.id, OUTFITS.id),
+    facet=CHARACTERS)
+
+
+def draw(layout, context):
+    cast_panel.draw(PANEL, layout, context, state_of(context))
+
+
+def register():
+    host_port.current().register_state(
+        STATE, ROSTER, HANDLERS, extra={"FILTER_SPEC_KEY": SPEC_KEY})
+
+
+def unregister():
+    host_port.current().unregister_state(STATE)
+    cast_panel.forget(BOUND)
+    BOUND.close()
+    _ROWS.clear()
