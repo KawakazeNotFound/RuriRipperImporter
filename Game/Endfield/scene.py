@@ -345,6 +345,7 @@ def _import(context, arguments):
             context, datasets.scene_globals(map_name, anchor, states),
             [datasets.scene_irradiance(map_name, anchor),
              datasets.scene_reflection(map_name, anchor, states),
+             datasets.scene_cookies(map_name, states),
              datasets.render_pipeline()])
         if unread:
             notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))

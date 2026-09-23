@@ -67,6 +67,7 @@ SCENE_REFLECTION = "endfield.scene.reflection"
 SCENE_FOG = "endfield.scene.fog"
 RENDER_PIPELINE = "endfield.render.pipeline"
 SCENE_LIGHTS = "endfield.scene.lights"
+SCENE_COOKIES = "endfield.scene.cookies"
 
 
 def _table(dataset_id, **args):
@@ -327,6 +328,13 @@ def scene_lights(map_name, anchor, states):
                   for vector in range(vectors)]
         records[table.cell(index, "name")] = (_int(table.cell(index, "visible")) != 0, record)
     return records
+
+
+def scene_cookies(map_name, states):
+    """The light cookie atlas the map's lamps sample their cookies from, in the given scene states
+    -- a level-resources payload the host applies as it is."""
+    return cabmap_state.BRIDGE.game_data_blob(
+        SCENE_COOKIES, map=map_name, states=[str(state) for state in states])
 
 
 def scene_reflection(map_name, anchor, states):
