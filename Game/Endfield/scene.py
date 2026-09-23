@@ -338,12 +338,14 @@ def _import(context, arguments):
     notes.extend(built.warnings[:2])
     # Everything the level states for every material, as one state the stacks read live: its
     # globals (fog, the default sky SH), its baked irradiance rebuilt as the game's camera
-    # clipmaps and the reflection probes the game's camera would use.
+    # clipmaps, the reflection probes the game's camera would use and what the render pipeline
+    # itself binds for every material.
     if anchor is not None:
         _written, unread = host.apply_level_resources(
             context, datasets.scene_globals(map_name, anchor, states),
             [datasets.scene_irradiance(map_name, anchor),
-             datasets.scene_reflection(map_name, anchor, states)])
+             datasets.scene_reflection(map_name, anchor, states),
+             datasets.render_pipeline()])
         if unread:
             notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
         # The level's volumetric fog, integrated by the host the way the game integrates it.

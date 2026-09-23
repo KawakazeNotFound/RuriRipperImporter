@@ -97,9 +97,9 @@ LEVEL_GLOBALS = extensions.point(
     "Per-level engine globals a shading stack reads live from scene properties.")
 
 #: ``level_image_layouts() -> {name: layout}``. The images a stack reads level
-#: state through, since the host's material nodes only sample 2D images: 3D
-#: textures and 2D texture arrays laid out as atlases, uniform struct arrays as
-#: data tables. Per name, the image, its kind and size, how it is laid out and the
+#: state through, since the host's material nodes only sample 2D images: a 2D
+#: texture as itself, 3D textures and 2D texture arrays laid out as atlases,
+#: uniform struct arrays as data tables. Per name, the image, its kind and size, how it is laid out and the
 #: texel format -- plus, for a volume, the in-slice address modes that decide what
 #: the ring around each slice holds.
 LEVEL_IMAGES = extensions.point(
@@ -254,12 +254,15 @@ def refresh_light_roles():
     chosen = {}
     for refresh in LIGHT_ROLE_REFRESHERS:
         light = refresh()
-        chosen[light.name if light is not None else None] = refresh
+        chosen[light.name if light is not None else None] = light
     if len(chosen) > 1:
         raise RuntimeError(
             "[material] the loaded shading stacks pick different main lights {0}; they come "
             "from different generator builds -- redeploy the stale ones".format(
                 sorted(name or "(none)" for name in chosen)))
+    if chosen:
+        from . import shadow_casting
+        shadow_casting.bind_main_light(next(iter(chosen.values())))
     return len(LIGHT_ROLE_REFRESHERS)
 
 
@@ -593,6 +596,20 @@ def _array_pixels(levels, layout):
     return pixels
 
 
+def _texture_pixels(levels, layout):
+    """A 2D texture as the stack reads it: one image, row 0 at the bottom. It is stated
+    as a one-slice, one-mip array."""
+    import numpy
+    width, height = (int(value) for value in layout["size"])
+    if len(levels) != 1 or levels[0].shape[:3] != (1, height, width):
+        raise ValueError("[material] texture {0}: stated {1}, the layout says one {2}x{3} image".format(
+            layout["image"], [level.shape for level in levels], width, height))
+    texels = levels[0][0]
+    pixels = numpy.zeros((height, width, 4), dtype=numpy.float32)
+    pixels[:, :, :texels.shape[2]] = texels
+    return pixels
+
+
 def _table_pixels(levels, layout):
     """A uniform struct array as the stack reads it: element i on row i from the
     bottom, its four-component fields left to right."""
@@ -604,7 +621,8 @@ def _table_pixels(levels, layout):
     return numpy.ascontiguousarray(levels[0][0], dtype=numpy.float32)
 
 
-_LEVEL_PIXELS = {"volume": _volume_pixels, "array": _array_pixels, "table": _table_pixels}
+_LEVEL_PIXELS = {"texture": _texture_pixels, "volume": _volume_pixels, "array": _array_pixels,
+                 "table": _table_pixels}
 
 
 def _apply_level_images(blocks):

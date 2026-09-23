@@ -24,7 +24,7 @@ import bpy
 from mathutils import Matrix, Quaternion, Vector
 
 from ...Kernel import statement as kernel_statement
-from . import derived_state, material_builder, rig_identity
+from . import derived_state, material_builder, rig_identity, shadow_casting
 
 #: The custom property a placed object carries its stated tag under, so a camera
 #: the game tagged is found again by what the game called it.
@@ -326,15 +326,26 @@ class _Materialisation:
             made.hide_render = True
 
     def _cast_shadows(self, made, node):
-        """Whether the object throws a shadow is its materials' fact: a renderer draws
-        into a light's shadow map only with a shader that has an enabled shadow-caster
-        pass (water, decals, effects and light beams have none). Materials that state no
-        passes -- an engine without them -- leave the host's default standing."""
+        """Whether the object throws a shadow, and whether it shows at all.
+
+        The renderer states how it draws into shadow maps. Off throws none. A casting
+        renderer still needs a material with an enabled shadow-caster pass (water,
+        decals, effects and light beams have none); materials that state no passes -- an
+        engine without them -- leave the host's default standing, as does a source that
+        states nothing of the renderer. Shadows-only throws one and draws nothing else:
+        no camera, reflection or light probe sees it. A casting renderer whose shadow
+        stays out of the directional light's cascades blocks local lights only."""
         verdicts = [stated.casts_shadow for stated in
                     (self.statement.materials.get(key) for key in node.materials)
                     if stated is not None and stated.casts_shadow is not None]
-        if verdicts:
+        if node.shadows == kernel_statement.SHADOWS_OFF:
+            made.visible_shadow = False
+        elif verdicts:
             made.visible_shadow = any(verdicts)
+        if node.shadows == kernel_statement.SHADOWS_ONLY:
+            shadow_casting.shadow_only(made)
+        if node.shadows > kernel_statement.SHADOWS_OFF and not node.main_light_shadows:
+            shadow_casting.exclude_from_main_light(made)
 
     def _needs_empty(self, node):
         """Whether a transform with nothing on it still has to exist: because the

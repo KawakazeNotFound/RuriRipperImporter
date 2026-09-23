@@ -54,6 +54,14 @@ SKINNED = "skinned"
 LIGHT = "light"
 CAMERA = "camera"
 
+#: How a renderer draws into shadow maps -- Unity's own ShadowCastingMode values --
+#: and the value of a node the source states nothing about.
+SHADOWS_UNSTATED = -1
+SHADOWS_OFF = 0
+SHADOWS_ON = 1
+SHADOWS_TWO_SIDED = 2
+SHADOWS_ONLY = 3
+
 #: Material row kinds.
 _MATERIAL = "m"
 _KEYWORD = "k"
@@ -143,7 +151,7 @@ class Node:
 
     __slots__ = ("index", "parent", "name", "path", "kind", "active", "mesh",
                  "skeleton", "materials", "anchor", "position", "rotation", "scale",
-                 "light", "camera", "tag")
+                 "light", "camera", "tag", "shadows", "main_light_shadows")
 
     def __init__(self, row):
         self.index = int(row["node"])
@@ -174,6 +182,12 @@ class Node:
             "fov": row["fov"], "near": row["near"], "far": row["far"],
             "orthographic": bool(row["ortho"]), "ortho_size": row["ortho_size"]})
         self.tag = row["tag"]
+        #: How the node's renderer draws into shadow maps (SHADOWS_*): the renderer's
+        #: fact, not its mesh's. SHADOWS_UNSTATED where the source states nothing.
+        self.shadows = int(row["cast_shadows"])
+        #: Whether a casting renderer's shadow falls in the directional light's
+        #: cascades; a streamed renderer can cast for local lights only.
+        self.main_light_shadows = bool(row["main_light_shadows"])
 
     @property
     def renders(self):
@@ -188,7 +202,7 @@ class Mesh:
 
     __slots__ = ("key", "name", "positions", "normals", "tangents", "colors",
                  "uvs", "triangles", "sections", "weights", "bone_indices",
-                 "bone_paths", "bindposes", "skeleton", "lod", "shadow_only", "baked")
+                 "bone_paths", "bindposes", "skeleton", "lod", "baked")
 
     def __init__(self, row):
         self.key = row["key"]
@@ -215,7 +229,6 @@ class Mesh:
                           else np.zeros((0, 4, 4), dtype=np.float32))
         self.skeleton = row["skeleton"]
         self.lod = int(row["lod"])
-        self.shadow_only = bool(row["shadow_only"])
         #: Whether the geometry arrived already baked to the skeleton's rest.
         self.baked = bool(row["baked"])
 

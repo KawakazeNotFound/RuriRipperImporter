@@ -65,6 +65,7 @@ SCENE_GLOBALS = "endfield.scene.globals"
 SCENE_IRRADIANCE = "endfield.scene.irradiance"
 SCENE_REFLECTION = "endfield.scene.reflection"
 SCENE_FOG = "endfield.scene.fog"
+RENDER_PIPELINE = "endfield.render.pipeline"
 
 
 def _table(dataset_id, **args):
@@ -304,6 +305,13 @@ def scene_irradiance(map_name, anchor):
     as it is."""
     x, y, z = anchor
     return cabmap_state.BRIDGE.game_data_blob(SCENE_IRRADIANCE, map=map_name, x=x, y=y, z=z)
+
+
+def render_pipeline():
+    """What the game's render pipeline makes on the CPU and binds for every material,
+    whatever the level (its multiscattering energy table) -- a level-resources payload
+    the host applies as it is."""
+    return cabmap_state.BRIDGE.game_data_blob(RENDER_PIPELINE)
 
 
 def scene_reflection(map_name, anchor, states):
