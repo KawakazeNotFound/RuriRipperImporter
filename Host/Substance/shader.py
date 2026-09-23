@@ -35,36 +35,46 @@ def game_name():
 
 
 def stack():
-    """The stack for the game this session is reading.
+    """The stack for the game this session is reading, or None when there is none to wire --
+    no install identified yet, or a game the generator ships no stack for this application for.
+    Never another game's: a set wired against another game's shader is a wrong result."""
+    game = game_name()
+    return shaderstack.stack_for(game) if game else None
 
-    Raises rather than guessing when no install has been identified yet: an
-    import wired against another game's shader is not a degraded result, it is a
-    wrong one."""
+
+def absence():
+    """Why :func:`stack` answered None, worded for the report."""
     game = game_name()
     if not game:
-        raise RuntimeError(
-            "no install has been identified yet -- type this game's folder into the "
-            "RuriRipper panel first, so the game's own shader stack can be resolved.")
-    return shaderstack.require(game)
+        return ("no install has been identified yet -- type this game's folder into the "
+                "RuriRipper panel first")
+    return "the generator ships no shader stack for {0} to this application".format(game)
+
+
+def _required():
+    found = stack()
+    if found is None:
+        raise RuntimeError(absence())
+    return found
 
 
 def name():
-    return stack().shader_name()
+    return _required().shader_name()
 
 
 def source_path():
-    return stack().asset(name() + ".glsl")
+    return _required().asset(name() + ".glsl")
 
 
 def manifest_path():
-    return stack().manifest_path()
+    return _required().manifest_path()
 
 
 def environment_path():
     """The reflection cubemap the ported shader documents as a requirement."""
-    return stack().asset("CharCubemap.exr")
+    return _required().asset("CharCubemap.exr")
 
 
 def color_lut_path():
     """The grading strip shipped beside the shader."""
-    return stack().asset("CharShowLut3D.tga")
+    return _required().asset("CharShowLut3D.tga")

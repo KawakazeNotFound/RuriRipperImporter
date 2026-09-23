@@ -24,7 +24,7 @@ import substance_painter.event
 import substance_painter.project
 
 from ...Kernel import statement as kernel_statement
-from . import gltf_writer, manifest_plan, settings, shader, sp_apply
+from . import gltf_writer, planning, settings, shader, sp_apply
 
 _UNSAFE = set('<>:"/\\|?*')
 
@@ -169,6 +169,7 @@ def _plan(job):
     shader's own projection manifest where that shader claims the material, and
     against what the role layers say its textures mean where it does not."""
     materials = job.statement.materials
+    textures = job.statement.textures
     by_name = {}
     for key, stated in materials.items():
         by_name.setdefault(stated.name or key, (key, stated))
@@ -177,10 +178,7 @@ def _plan(job):
         if found is None:
             continue
         key, stated = found
-        plan = manifest_plan.plan_for(
-            name, key, stated,
-            texture_exists=lambda one: one in job.statement.textures,
-            shader_named=lambda _one, stated=stated: stated.shader_name)
+        plan = planning.plan_for(name, key, stated, texture_exists=lambda one: one in textures)
         job.plans[name] = plan
         for warning in plan.warnings:
             job.report.append("!! " + warning)
@@ -198,7 +196,7 @@ def _plan(job):
             "!! {0} is here but claims none of them: it knows the surfaces {1}, and these "
             "materials point at {2}. Until its part vocabulary names them, every one of "
             "them is wired from its roles.".format(
-                stack.shader_name(), manifest_plan.claimable_shaders() or "<none by name>",
+                stack.shader_name(), planning.claimable_shaders() or "<none by name>",
                 ", ".join(sorted({(stated.shader_name or "<unnamed>")
                                   for stated in materials.values()})) or "<nothing>"))
 
@@ -288,12 +286,3 @@ def _on_ready(_event):
         return
     sp_apply.apply(job.plans, job.channels, job.parameters, job.report, job.options)
 
-
-def plan(statement, options):
-    """How the stated materials fall into this host's texture sets, WITHOUT
-    writing anything -- what a surface asks to show a person what an import
-    would produce before they ask for it."""
-    job = _Job("plan", statement, options)
-    job.plans = {(stated.name or key): None for key, stated in statement.materials.items()}
-    _plan(job)
-    return {name: made for name, made in job.plans.items() if made is not None}

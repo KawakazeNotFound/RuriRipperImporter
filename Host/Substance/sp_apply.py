@@ -32,7 +32,7 @@ import substance_painter.ui
 
 import substance_painter.display as _display
 
-from . import settings, shader, unity_material
+from . import planning, settings, shader
 
 FILL_LAYER_NAME = "RuriAutoTex"
 LOG_CHANNEL = "RuriRipper"
@@ -228,12 +228,13 @@ def _existing_channels(stack):
     return None
 
 
-def ensure_channel(ts_obj, stack, set_name, channel_key, channel_type, report):
+def ensure_channel(ts_obj, stack, set_name, js_token, spec, channel_type, report):
+    """Add one channel with the storage the plan states for it, unless the set already has it."""
     existing = _existing_channels(stack)
     if existing is not None and channel_type in existing:
         return True
 
-    _candidates, js_token, js_format, srgb, js_label = unity_material.CHANNELS[channel_key]
+    js_format, srgb, js_label = spec.format, spec.srgb, spec.label
 
     # 1) Preferred: the JS API, which takes an explicit storage format (and a
     #    label for the user channels).
@@ -265,7 +266,7 @@ def ensure_channel(ts_obj, stack, set_name, channel_key, channel_type, report):
 
     if existing is not None:
         report.append("    !! channel {0} missing and the API refused to add it "
-                      "-- add it by hand and re-run".format(channel_key))
+                      "-- add it by hand and re-run".format(js_token))
         return False
     return True
 
@@ -522,13 +523,9 @@ def setup_shader_instances(set_payloads, report):
                     bad_keys.append(key)
         if bad_keys:
             all_ok = False
-        part = payload.get(unity_material.PART_UNIFORM)
-        report.append("* {0}: instance#{1} {7}={2}({3}) wrote {4}/{5} params{6}".format(
-            set_name, instance_id, part,
-            unity_material.PART_NAMES.get(part, "?"),
-            len(ok_keys), len(payload),
-            "; failed: " + ", ".join(bad_keys) if bad_keys else "",
-            unity_material.PART_UNIFORM))
+        report.append("* {0}: instance#{1} wrote {2}/{3} params{4}".format(
+            set_name, instance_id, len(ok_keys), len(payload),
+            "; failed: " + ", ".join(bad_keys) if bad_keys else ""))
 
     # -- 4) verify --
     try:
@@ -630,7 +627,8 @@ def apply_display_settings(report, options=None):
 # ---------------------------------------------------------------------------
 def wire_texture_set(ts_obj, set_name, plan, channel_files, param_files, report,
                      set_payloads):
-    report.append("* {0}  [{1} {2}]".format(set_name, plan.part, plan.part_name()))
+    report.append("* {0}  [{1}]".format(
+        set_name, "{0} {1}".format(plan.part, plan.part_label) if plan.shaded else "by role"))
 
     stack = _get_stack(ts_obj, set_name)
     if stack is None:
@@ -640,15 +638,18 @@ def wire_texture_set(ts_obj, set_name, plan, channel_files, param_files, report,
     # -- engine channels -> fill layer --
     wanted = {}
     for channel_key, path in sorted(channel_files.items()):
-        spec = unity_material.CHANNELS.get(channel_key)
-        if spec is None:
+        candidates = planning.CHANNEL_TYPES.get(channel_key)
+        if candidates is None:
+            report.append("    !! this application has no channel {0} -- {1} skipped".format(
+                channel_key, os.path.basename(path)))
             continue
-        channel_type = _channel_type(spec[0])
+        channel_type = _channel_type(candidates)
         if channel_type is None:
             report.append("    !! no ChannelType enum for {0} -- {1} skipped".format(
-                spec[0], os.path.basename(path)))
+                candidates, os.path.basename(path)))
             continue
-        if not ensure_channel(ts_obj, stack, set_name, channel_key, channel_type, report):
+        if not ensure_channel(ts_obj, stack, set_name, channel_key, plan.channels[channel_key],
+                              channel_type, report):
             continue
         wanted[channel_type] = (channel_key, path)
 
@@ -675,7 +676,10 @@ def wire_texture_set(ts_obj, set_name, plan, channel_files, param_files, report,
                 report.append("    !! could not wire {0} (see the API dump above)".format(
                     os.path.basename(path)))
 
-    # -- sampler textures -> shader uniforms --
+    # -- sampler textures -> shader uniforms: the generated shader's, so a set planned by role
+    #    keeps this application's own shader and has none --
+    if not plan.shaded:
+        return
     payload = dict(plan.uniforms)
     for sampler, path in sorted(param_files.items()):
         try:
@@ -723,22 +727,26 @@ def apply(plans, baked_channels, baked_params, report, options=None):
             report.append("    !! exception: " + traceback.format_exc(limit=3))
         report.append("")
 
+    if not set_payloads:
+        # No set is on the generated shader, so nothing here states its requirements either:
+        # every set keeps this application's own shader and display.
+        report.append("== result: every texture set wired by role on this application's own "
+                      "shader ==")
+        for line in report:
+            log(line)
+        return True
     shader_ok = False
-    if set_payloads:
-        try:
-            shader_ok = setup_shader_instances(set_payloads, report)
-        except Exception:
-            report.append("!! shader stage raised: " + traceback.format_exc(limit=3))
-        report.append("")
-        if shader_ok:
-            report.append("== result: {0} texture set(s) bound to their own EndField_Uber "
-                          "instance with textures and parameters written ==".format(
-                              len(set_payloads)))
-        else:
-            report.append("== result: some steps failed (see !!/FAIL above) -- the whole pass "
-                          "is idempotent, run it again to top up ==")
+    try:
+        shader_ok = setup_shader_instances(set_payloads, report)
+    except Exception:
+        report.append("!! shader stage raised: " + traceback.format_exc(limit=3))
+    report.append("")
+    if shader_ok:
+        report.append("== result: {0} texture set(s) bound to their own {1} instance with "
+                      "textures and parameters written ==".format(len(set_payloads), shader.name()))
     else:
-        report.append("== result: no texture set matched a Unity material ==")
+        report.append("== result: some steps failed (see !!/FAIL above) -- the whole pass "
+                      "is idempotent, run it again to top up ==")
 
     try:
         apply_display_settings(report, options)

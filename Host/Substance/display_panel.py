@@ -47,9 +47,9 @@ def state_of(context):
 
 
 def _identified(context):
-    """A shader stack is resolved from the install in front of the panel, so
-    until one is identified there is nothing to state requirements."""
-    return bool(shader.game_name())
+    """A shader stack is resolved from the install in front of the panel, so until one is
+    identified -- and the game ships one -- there is nothing to state requirements."""
+    return shader.stack() is not None
 
 
 def _apply(context, arguments):
@@ -93,8 +93,8 @@ def draw(layout, context):
     box = layout.box()
     box.label(text="Display", icon="SHADING_RENDERED")
     if not _identified(context):
-        box.label(text="No install has been identified yet, so no shader states a "
-                       "requirement.", icon="INFO")
+        box.label(text="No generated shader states a requirement: {0}.".format(shader.absence()),
+                  icon="INFO")
         return
 
     try:
