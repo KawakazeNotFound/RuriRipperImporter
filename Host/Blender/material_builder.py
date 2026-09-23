@@ -106,6 +106,14 @@ LEVEL_IMAGES = extensions.point(
     "blender.level_images",
     "Images a shading stack reads level state through, which the host fills.")
 
+#: ``light_record_attributes() -> [name, ...]``. The LIGHT attributes a stack's light
+#: loop reads a source's own per-light record through, one per record vector in record
+#: order; the host stamps each light's record under them (:mod:`light_records`). A stack
+#: that lights through the host's own light evaluation reads none.
+LIGHT_RECORDS = extensions.point(
+    "blender.light_records",
+    "Per-light records of a source's own light table a shading stack reads as light attributes.")
+
 #: Custom property stamped on every material this module or a stack builds.
 SOURCE_KEY_PROPERTY = "ruri_source_key"
 #: Marker on an image datablock: its colour space is already what the ASSET
@@ -199,6 +207,14 @@ def register_volume_textures(layouts):
 
 def unregister_volume_textures(layouts):
     LEVEL_IMAGES.remove(layouts)
+
+
+def register_light_records(attributes):
+    LIGHT_RECORDS.add(attributes)
+
+
+def unregister_light_records(attributes):
+    LIGHT_RECORDS.remove(attributes)
 
 
 def register_material_panel(panel):

@@ -66,6 +66,7 @@ SCENE_IRRADIANCE = "endfield.scene.irradiance"
 SCENE_REFLECTION = "endfield.scene.reflection"
 SCENE_FOG = "endfield.scene.fog"
 RENDER_PIPELINE = "endfield.render.pipeline"
+SCENE_LIGHTS = "endfield.scene.lights"
 
 
 def _table(dataset_id, **args):
@@ -312,6 +313,20 @@ def render_pipeline():
     whatever the level (its multiscattering energy table) -- a level-resources payload
     the host applies as it is."""
     return cabmap_state.BRIDGE.game_data_blob(RENDER_PIPELINE)
+
+
+def scene_lights(map_name, anchor, states):
+    """The map's point and spot lights as its light culling packs them for a viewer at ``anchor``,
+    in the shape :meth:`Kernel.host.SceneGraph.apply_light_records` takes: per light, whether the
+    game draws it from there and its record, one ``(x, y, z, w)`` per vector."""
+    table = _table(SCENE_LIGHTS, **_viewer(map_name, anchor, states))
+    vectors = sum(1 for name in table.names if name.startswith("d") and name.endswith("x"))
+    records = {}
+    for index in range(len(table)):
+        record = [tuple(float(table.cell(index, "d{0}{1}".format(vector, axis))) for axis in "xyzw")
+                  for vector in range(vectors)]
+        records[table.cell(index, "name")] = (_int(table.cell(index, "visible")) != 0, record)
+    return records
 
 
 def scene_reflection(map_name, anchor, states):

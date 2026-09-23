@@ -172,6 +172,10 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         from . import material_builder
         return material_builder.apply_level_resources(context.scene, values, payloads)
 
+    def apply_light_records(self, context, records):
+        from . import light_records
+        return light_records.apply(context.scene, records)
+
     def apply_medium(self, context, medium):
         from . import medium as medium_builder
         return medium_builder.apply(context, medium)
