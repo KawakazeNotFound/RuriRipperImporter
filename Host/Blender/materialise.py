@@ -300,6 +300,7 @@ class _Materialisation:
             return
         made = bpy.data.objects.new(node.name, data)
         self.context.collection.objects.link(made)
+        self._draws_now(made, node)
         if isinstance(data, bpy.types.Mesh):
             self._cast_shadows(made, node)
         parent = self.built.get(node.parent)
@@ -313,6 +314,16 @@ class _Materialisation:
         self.built[node.index] = made
         self.objects.append(made)
         derived_state.announce(made)
+
+    @staticmethod
+    def _draws_now(made, node):
+        """Whether the object draws right now is the source's fact. An inactive object or a
+        disabled renderer is stated so that the title's run-time toggle has something to turn
+        on, and it draws nothing until then -- so it arrives hidden from the viewport and the
+        render, present and one click from showing."""
+        if not node.active:
+            made.hide_viewport = True
+            made.hide_render = True
 
     def _cast_shadows(self, made, node):
         """Whether the object throws a shadow is its materials' fact: a renderer draws
@@ -353,6 +364,7 @@ class _Materialisation:
             return
         made = bpy.data.objects.new(node.name, data)
         self.context.collection.objects.link(made)
+        self._draws_now(made, node)
         self._cast_shadows(made, node)
         self.built[node.index] = made
         self.objects.append(made)
