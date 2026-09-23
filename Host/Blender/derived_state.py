@@ -63,7 +63,7 @@ MATERIALS = "materials"        # 有新材质进场
 CAMERA = "camera"              # 活动相机的身份/位姿/投影/输出分辨率
 LIGHT_SET = "light_set"        # 灯的增删/类型/可见性(只影响谁是主光,零重接)
 LIGHT_VALUES = "light_values"  # 灯的位姿/颜色/强度/锥角(宿主自己读灯,这里只重挑主光)
-WORLD = "world"                # 世界被换(环境采样是建组时快照,只有这件事还要重接兑现面)
+WORLD = "world"                # 世界被换或被改(环境采样是建组时快照,只有这件事还要重接兑现面)
 RIG = "rig"                    # 骨架的骨骼名册变了(顶点腿的骨骼基座按名字接进几何节点)
 ENGINE = "engine"              # 渲染引擎被换(表面闭包与能力答案按引擎建;灯只有宿主自己的原生灯节点)
 
@@ -350,9 +350,22 @@ def _light_set_signature(scene):
 
 
 def _world_signature(scene):
-    """世界的身份。环境采样是各材质建组时的快照,换世界是唯一还需要重接兑现面的事件
+    """世界的身份。环境采样是各材质建组时的快照,换世界与改世界是仅有的两件还需要重接兑现面的事
     —— 所以它是独立事实,不再混在灯集合签名里(混着的时候,加一盏灯也会触发全场重接)。"""
     return scene.world.name_full if scene.world is not None else None
+
+
+def _world_edited(scene, depsgraph):
+    """当前世界自己的数据块(或它的节点树)这一拍被改过。环境辐照与环境镜面的答案都是按世界的
+    值建的快照,改了颜色、强度、环境图或它的 Mapping 而不重接,画面就停在旧世界上。"""
+    world = scene.world
+    if world is None:
+        return False
+    for update in depsgraph.updates:
+        block = getattr(update.id, "original", update.id)
+        if block == world or (world.node_tree is not None and block == world.node_tree):
+            return True
+    return False
 
 
 def _light_values_signature(scene):
@@ -463,7 +476,7 @@ def _on_depsgraph_update(scene, depsgraph):
             _mark((RIG,), whole_scene=True)
     if _lights_touched(depsgraph):
         world = _world_signature(scene)
-        if world != _world:
+        if world != _world or _world_edited(scene, depsgraph):
             _world = world
             _mark((WORLD,), whole_scene=True)
         light_set = _light_set_signature(scene)
