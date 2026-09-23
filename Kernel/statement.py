@@ -58,12 +58,16 @@ CAMERA = "camera"
 _MATERIAL = "m"
 _KEYWORD = "k"
 _PASS = "p"
+_SHADER_PASS = "s"
 _TEXTURE = "t"
 _SCALAR = "f"
 _VECTOR = "c"
 _ROLE = "r"
 _UNCLAIMED = "u"
 _ENCODING = "n"
+
+#: The pass a renderer draws into a light's shadow map with (the engine's word, compared case-blind).
+SHADOW_CASTER_PASS = "shadowcaster"
 
 
 BASES = "core.bases"
@@ -394,7 +398,7 @@ class Material:
     table on the kernel side."""
 
     __slots__ = ("key", "name", "shader_name", "textures", "texture_st", "floats",
-                 "colors", "keywords", "disabled_passes", "roles")
+                 "colors", "keywords", "disabled_passes", "shader_passes", "roles")
 
     def __init__(self, key):
         self.key = key
@@ -406,7 +410,23 @@ class Material:
         self.colors = {}
         self.keywords = []
         self.disabled_passes = []
+        #: ``(name, light_mode)`` per pass its shader draws with; empty for an engine
+        #: whose materials have no shader passes to state.
+        self.shader_passes = []
         self.roles = None
+
+    @property
+    def casts_shadow(self):
+        """Whether its shader draws a shadow-caster pass this material leaves on. The
+        engine finds a pass by its LightMode tag, or by its name when untagged, and a
+        material disables one by that same word, case-blind. None when no passes are
+        stated: the engine behind it has none, and the host keeps its own default."""
+        if not self.shader_passes:
+            return None
+        disabled = {name.lower() for name in self.disabled_passes}
+        return any((light_mode or name).lower() == SHADOW_CASTER_PASS
+                   and (light_mode or name).lower() not in disabled
+                   for name, light_mode in self.shader_passes)
 
     @property
     def shader_ref(self):
@@ -778,6 +798,8 @@ def _materials(table):
             material.keywords.append(name)
         elif kind == _PASS:
             material.disabled_passes.append(name)
+        elif kind == _SHADER_PASS:
+            material.shader_passes.append((name, row["texture"]))
         elif kind == _TEXTURE:
             material.textures[name] = row["texture"]
             material.texture_st[name] = [row["x"], row["y"], row["z"], row["w"]]

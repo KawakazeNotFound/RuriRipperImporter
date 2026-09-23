@@ -300,6 +300,8 @@ class _Materialisation:
             return
         made = bpy.data.objects.new(node.name, data)
         self.context.collection.objects.link(made)
+        if isinstance(data, bpy.types.Mesh):
+            self._cast_shadows(made, node)
         parent = self.built.get(node.parent)
         if parent is not None:
             made.parent = parent
@@ -311,6 +313,17 @@ class _Materialisation:
         self.built[node.index] = made
         self.objects.append(made)
         derived_state.announce(made)
+
+    def _cast_shadows(self, made, node):
+        """Whether the object throws a shadow is its materials' fact: a renderer draws
+        into a light's shadow map only with a shader that has an enabled shadow-caster
+        pass (water, decals, effects and light beams have none). Materials that state no
+        passes -- an engine without them -- leave the host's default standing."""
+        verdicts = [stated.casts_shadow for stated in
+                    (self.statement.materials.get(key) for key in node.materials)
+                    if stated is not None and stated.casts_shadow is not None]
+        if verdicts:
+            made.visible_shadow = any(verdicts)
 
     def _needs_empty(self, node):
         """Whether a transform with nothing on it still has to exist: because the
@@ -340,6 +353,7 @@ class _Materialisation:
             return
         made = bpy.data.objects.new(node.name, data)
         self.context.collection.objects.link(made)
+        self._cast_shadows(made, node)
         self.built[node.index] = made
         self.objects.append(made)
         rig, bone_names = self.rigs.get(node.skeleton, (None, {}))

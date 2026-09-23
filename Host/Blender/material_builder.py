@@ -296,7 +296,11 @@ def apply_post_inputs(scene, values):
 
     A stage whose inputs are not all supplied is refused rather than part-written: the
     missing one would silently fall back to identity and the picture would be quietly
-    wrong with nothing to show for it."""
+    wrong with nothing to show for it.
+
+    The inputs live on the installed stage, so a stage not installed yet is installed
+    here first: an import states its grading before the derived-state pass would get
+    round to installing the stage, and written into nothing the grading was lost."""
     written = 0
     for stage in POST_STAGES:
         names = stage.extra_inputs()
@@ -306,6 +310,8 @@ def apply_post_inputs(scene, values):
         if missing:
             raise KeyError("[material] post stage wants {0}; {1} not supplied".format(
                 names, missing))
+        if not stage.installed(scene):
+            stage.install(scene)
         written += stage.set_extra(scene, [values[name] for name in names])
     return written
 
