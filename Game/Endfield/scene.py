@@ -345,6 +345,10 @@ def _import(context, arguments):
                  datasets.scene_reflection(map_name, anchor, [state_id])])
             if unread:
                 notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
+        # The level's volumetric fog, integrated by the host the way the game integrates it.
+        medium = datasets.scene_medium(map_name)
+        if medium is not None:
+            notes.extend(host.apply_medium(context, medium))
     # The level states its own colour grading; a host with a display chain takes it.
     grading = datasets.scene_grading(map_name)
     if grading is not None and host_port.Compositor in host.capabilities:

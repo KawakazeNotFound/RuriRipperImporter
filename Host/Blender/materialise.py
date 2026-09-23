@@ -541,7 +541,8 @@ class _Materialisation:
         power is radiant flux, and EEVEE hands a light loop ``power / (4 pi)`` for them
         (``Light::point_radiance_get``). A sun's strength is already the irradiance it hands
         over. So point and spot power is the intensity times 4 pi, and a sun's is the
-        intensity as stated. The source's lights are points: no radius.
+        intensity as stated. The source's lights are points: no radius. What a light scatters
+        into a participating medium is scaled by the volume factor it states.
 
         A cone blends from its inner angle to its outer one; Blender blends over the fraction
         ``spot_blend`` of the cosine span from the outer edge to the axis, so the same span is
@@ -551,6 +552,7 @@ class _Materialisation:
         light = bpy.data.lights.new(node.name, type=kind)
         light.color = stated["color"]
         light.use_shadow = stated["shadows"]
+        light.volume_factor = stated["volume"]
         if kind in ("POINT", "SPOT"):
             light.energy = stated["intensity"] * 4.0 * np.pi
             light.shadow_soft_size = 0.0

@@ -195,6 +195,31 @@ class SceneGraph(abc.ABC):
         level."""
 
     @abc.abstractmethod
+    def apply_medium(self, context, medium):
+        """Stand a level's participating medium up in the document, replacing any stood up
+        before, so the host integrates it the way the source integrates its fog. ``medium`` is
+        in the source's own world and units:
+
+        ``label``            the volume it came from;
+        ``range``            ``(start, end)`` view depths it is integrated over;
+        ``grid``             ``(slices, tile_pixels, distribution)``: the source's integration
+                             grid, its slices at ``(2^(z/distribution) - O) / B`` over the range;
+        ``albedo``           the scattered fraction, per channel;
+        ``density_scale``,   extinction ``density_scale * sum(density * 2^-max(-127, falloff *
+        ``layers``           (y - height)))`` over ``(height, density, falloff)`` layers, grey;
+        ``anisotropy``       the Henyey-Greenstein phase ``g``;
+        ``near_fade``        the medium scales by ``clamp(distance past the start * near_fade)``;
+        ``emission``         radiance it emits per metre;
+        ``ambient_scale``,   the sky it scatters: ``max(dot(L1, (g * ray, 1)) * ambient_scale, 0)``
+        ``ambient``          per channel, one ``(x, y, z, w)`` L1 row each, times the scattering;
+        ``light``            the main light it scatters -- its own copy: ``direction`` toward the
+                             light, ``color``, ``intensity``, and ``scale`` on what it scatters;
+        ``punctual_shadows`` whether the lamps it scatters are shadowed in it.
+
+        A lamp's own share of what it scatters is the volume factor its statement carries.
+        Returns the lines to report."""
+
+    @abc.abstractmethod
     def source_view_position(self, context):
         """Where the document is being looked at from, as a point in the SOURCE's
         world, or None when the document holds nothing to look at. Camera-centred

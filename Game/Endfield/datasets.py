@@ -63,6 +63,7 @@ SCENE_AMBIENT = "endfield.scene.ambient"
 SCENE_GLOBALS = "endfield.scene.globals"
 SCENE_IRRADIANCE = "endfield.scene.irradiance"
 SCENE_REFLECTION = "endfield.scene.reflection"
+SCENE_FOG = "endfield.scene.fog"
 
 
 def _table(dataset_id, **args):
@@ -297,6 +298,44 @@ def scene_reflection(map_name, anchor, states):
     x, y, z = anchor
     return cabmap_state.BRIDGE.game_data_blob(
         SCENE_REFLECTION, map=map_name, x=x, y=y, z=z, states=[str(state) for state in states])
+
+
+def scene_medium(map_name):
+    """The participating medium one level integrates -- its volumetric fog, off the volume that
+    applies everywhere -- in the shape :meth:`Kernel.host.SceneGraph.apply_medium` takes, or
+    None when the level runs none."""
+    rows = _rows(SCENE_FOG, map=map_name)
+    if not rows:
+        return None
+    row = next((r for r in rows if float(r.get("global") or 0) > 0.5), rows[0])
+
+    def number(name):
+        return float(row[name])
+
+    def triple(prefix, suffixes="RGB"):
+        return tuple(number(prefix + suffix) for suffix in suffixes)
+
+    return {
+        "label": row["volume"],
+        "range": (number("start"), number("end")),
+        "grid": (int(number("slices")), int(number("tilePixels")), number("distribution")),
+        "albedo": triple("albedo"),
+        "density_scale": number("densityScale"),
+        "layers": tuple((number("layerHeight" + str(i)), number("layerDensity" + str(i)),
+                         number("layerFalloff" + str(i))) for i in range(2)),
+        "anisotropy": number("anisotropy"),
+        "near_fade": number("nearFade"),
+        "emission": triple("emission"),
+        "ambient_scale": number("ambientScale"),
+        "ambient": tuple(triple("ambient" + channel, ("x", "y", "z", "w")) for channel in "RGB"),
+        "light": {
+            "direction": triple("light", "XYZ"),
+            "color": triple("light"),
+            "intensity": number("lightIntensity"),
+            "scale": number("lightScale"),
+        },
+        "punctual_shadows": number("punctualShadows") > 0.5,
+    }
 
 
 def scene_grading(map_name):

@@ -165,6 +165,10 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         from . import material_builder
         return material_builder.apply_level_resources(context.scene, values, payloads)
 
+    def apply_medium(self, context, medium):
+        from . import medium as medium_builder
+        return medium_builder.apply(context, medium)
+
     def source_view_position(self, context):
         """Where the document is being looked at from, in the source's world: the scene
         camera, else the first 3D view's own viewpoint, else the middle of what is in
