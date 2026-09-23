@@ -1,7 +1,7 @@
 """In-process pythonnet bridge into Ruri.RipperHook.dll: boots a CoreCLR runtime
 inside the host application's own process (``bootstrap`` having already
 installed pythonnet) and exposes thin Python wrappers over
-Ruri.RipperHook.Bridge.RipperBlenderBridge. Everything crossing the CLR/Python
+Ruri.RipperHook.BlenderBridge.RipperBlenderBridge. Everything crossing the CLR/Python
 boundary out of this module is plain data (str/bytes/dict/list) -- nothing above
 it ever touches `clr`/.NET objects directly, which is what keeps the bridge one
 implementation rather than one per host.
@@ -339,10 +339,10 @@ def _ensure_runtime():
               "doesn't work and the reflection fallback is needed; harmless if the fallback "
               "below still finds RipperBlenderBridge.")
 
-    bridge_type = assembly.GetType("Ruri.RipperHook.Bridge.RipperBlenderBridge")
+    bridge_type = assembly.GetType("Ruri.RipperHook.BlenderBridge.RipperBlenderBridge")
     if bridge_type is None:
         raise RuntimeError(
-            "Ruri.RipperHook.dll loaded, but has no Ruri.RipperHook.Bridge.RipperBlenderBridge type -- "
+            "Ruri.RipperHook.dll loaded, but has no Ruri.RipperHook.BlenderBridge.RipperBlenderBridge type -- "
             "rebuild Source/Ruri.RipperHook/Ruri.RipperHook.csproj against the latest source.")
     _bridge_type = _StaticTypeProxy(bridge_type)
     # Every decoder beyond the kernel's own -- the Unreal one is the module today --

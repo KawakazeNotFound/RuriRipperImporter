@@ -12,7 +12,7 @@ Decoding happens per CELL, never over the whole blob, which is what lets a view
 draw thirty rows out of eighteen thousand without touching the other 18,321.
 
 Carries no notion of what a column MEANS in a panel -- that is the column's own
-``role``, stated in C# where the table is built (see Ruri.RipperHook.Tables.
+``role``, stated in C# where the table is built (see Ruri.RipperHook.BlenderBridge.Tables.
 ColumnRole). Which table and which arguments to ask for is the caller's
 declaration; see the game modules.
 
@@ -27,7 +27,7 @@ import ctypes
 
 import numpy as np
 
-#: Mirrors Ruri.RipperHook.Tables.ColumnRole. What a column ANSWERS, so a panel
+#: Mirrors Ruri.RipperHook.BlenderBridge.Tables.ColumnRole. What a column ANSWERS, so a panel
 #: never has to restate "which column is the name" on this side.
 LABEL = 1 << 0
 KEY = 1 << 1
