@@ -111,8 +111,12 @@ vec2 ruriUvClamp(sampler2D t, vec2 uv) {
 //----------------------------------------------------------------------region 面板参数(生成)
 //: param custom { "default": 0, "label": "GirlsFrontline Part", "widget": "combobox", "values": { "0 Standard": 0, "1 Face": 1, "2 Eyes": 2, "3 EyeBlendAdd": 3, "4 EyeBlendMultiply": 4 }, "group": "0 部位" }
 uniform_specialization int _CharaPartID;
+//: param custom { "default": false, "label": "_NORMALMAP", "group": "1 变体开关" }
+uniform_specialization bool _NORMALMAP;
 //: param custom { "default": 0.31830987, "label": "INV_PI", "group": "R 引擎态" }
 uniform float INV_PI;
+//: param custom { "default": false, "label": "Adjust Shadow Bias", "group": "Stocking" }
+uniform bool _AdjustShadowBias;
 //: param custom { "default": 0, "label": "Anisotropic GGX", "min": -1, "max": 1, "group": "Stocking" }
 uniform float _AnisotropicGXX;
 //: param custom { "default": false, "label": "Use Anisotropic Specular", "group": "Stocking" }
@@ -123,6 +127,8 @@ uniform float _Anisotropy;
 uniform float _AnisotropyShift;
 //: param custom { "default": [1, 1, 1, 1], "label": "Color", "widget": "color", "srgb": true, "group": "参数" }
 uniform vec4 _BaseColor;
+//: param custom { "default": [1, 1, 0, 0], "label": "_BaseMap_ST", "group": "R 引擎态" }
+uniform vec4 _BaseMap_ST;
 //: param custom { "default": 0.1, "label": "Blend Smoothness", "min": 0, "max": 1, "group": "Stocking" }
 uniform float _BlendSmoothness;
 //: param custom { "default": 1, "label": "Normal Scale", "group": "参数" }
@@ -144,8 +150,18 @@ const uint _MainLightLayerMask = uint(0xFFFFFFFF);
 uniform vec4 _MainLightOcclusionProbes;
 //: param custom { "default": 1, "label": "Metallic Intensity", "group": "参数" }
 uniform float _MetallicIntensity;
+//: param custom { "default": [0.6, 0.6, 0.6, 0.1], "label": "Outline Color", "widget": "color", "srgb": true, "group": "State" }
+uniform vec4 _OutlineColor;
+//: param custom { "default": 1, "label": "Outline Intensity", "min": 1, "max": 30, "group": "Stocking" }
+uniform float _OutlineIntensity;
+//: param custom { "default": [0.6, 0.6, 0.6, 1], "label": "Outline Shadow Color", "widget": "color", "srgb": true, "group": "State" }
+uniform vec4 _OutlineShadowColor;
 //: param custom { "default": 1, "label": "Roughness Intensity", "group": "参数" }
 uniform float _RoughnessIntensity;
+//: param custom { "default": false, "label": "_RuriOutlineShellGate", "group": "R 引擎态" }
+uniform bool _RuriOutlineShellGate;
+//: param custom { "default": 0.1, "label": "Shadow Bias Distance", "min": 0, "max": 1, "group": "Stocking" }
+uniform float _ShadowBiasDistance;
 //: param custom { "default": 0.25, "label": "Shadow Intensity", "min": 0, "max": 1, "group": "Character Effect" }
 uniform float _ShadowIntensity;
 //: param custom { "default": 1, "label": "Specular Intensity", "group": "参数" }
@@ -162,6 +178,8 @@ uniform float _StockingFalloffPower;
 uniform int _SurfaceType;
 //: param custom { "default": false, "label": "Use Alpha Test", "group": "State" }
 uniform bool _UseAlphaTest;
+//: param custom { "default": false, "label": "Use GI Flatten", "group": "Stocking" }
+uniform bool _UseGIFlatten;
 //: param custom { "default": false, "label": "Use RMOS Map", "group": "参数" }
 uniform bool _UseRMOSMap;
 //: param custom { "default": false, "label": "Use Ramp Map", "group": "参数" }
@@ -170,8 +188,11 @@ uniform bool _UseRampMap;
 uniform bool _UseSpecularUV2;
 //: param custom { "default": false, "label": "Use Stocking Falloff", "group": "Stocking" }
 uniform bool _UseStockingFalloff;
+const uint lightIndex = uint(0);
 //: param custom { "default": [1, 1, 0, 0], "label": "unity_SpecCube0_HDR", "group": "R 引擎态" }
 uniform vec4 unity_SpecCube0_HDR;
+//: param custom { "default": 0, "label": "unity_WorldToObject", "group": "R 引擎态" }
+uniform mat4 unity_WorldToObject;
 //----------------------------------------------------------------------endregion
 
 //----------------------------------------------------------------------region 宿主库
@@ -244,6 +265,7 @@ struct CharaVaryings {
     vec4 tangentWS;
     vec4 uv1;
     vec2 uv0zw;
+    vec2 uv2;
     vec4 positionNDC;
     vec4 color;
     vec4 positionCS;
@@ -269,6 +291,19 @@ struct GBufferFragOutput {
     float depth;
     vec4 shadowMask;
     uint meshRenderingLayers;
+};
+
+struct InputData {
+    vec3 positionWS;
+    vec4 positionCS;
+    vec3 normalWS;
+    vec3 viewDirectionWS;
+    vec4 shadowCoord;
+    float fogCoord;
+    vec3 vertexLighting;
+    vec3 bakedGI;
+    vec2 normalizedScreenSpaceUV;
+    vec4 shadowMask;
 };
 
 struct Light {
@@ -392,6 +427,7 @@ CharaVaryings ruriZeroCharaVaryings() {
     v.tangentWS = vec4(0.0);
     v.uv1 = vec4(0.0);
     v.uv0zw = vec2(0.0);
+    v.uv2 = vec2(0.0);
     v.positionNDC = vec4(0.0);
     v.color = vec4(0.0);
     v.positionCS = vec4(0.0);
@@ -407,6 +443,21 @@ GBufferFragOutput ruriZeroGBufferFragOutput() {
     v.depth = 0.0;
     v.shadowMask = vec4(0.0);
     v.meshRenderingLayers = uint(0);
+    return v;
+}
+
+InputData ruriZeroInputData() {
+    InputData v;
+    v.positionWS = vec3(0.0);
+    v.positionCS = vec4(0.0);
+    v.normalWS = vec3(0.0);
+    v.viewDirectionWS = vec3(0.0);
+    v.shadowCoord = vec4(0.0);
+    v.fogCoord = 0.0;
+    v.vertexLighting = vec3(0.0);
+    v.bakedGI = vec3(0.0);
+    v.normalizedScreenSpaceUV = vec2(0.0);
+    v.shadowMask = vec4(0.0);
     return v;
 }
 
@@ -604,10 +655,10 @@ vec3 UnpackNormalScale(vec4 packedNormal, float bumpScale)
 
 vec3 SampleNormal(vec2 uv, sampler2D bumpMap, float scale)
 {
-    if (_UseBumpMap)
+    if (_NORMALMAP)
     {
-        vec4 n = vec4(texture(bumpMap, uv));
-        return vec3(UnpackNormalScale(n, scale));
+        vec4 n = half4(texture(bumpMap, uv));
+        return half3(UnpackNormalScale(n, scale));
     }
     else
     {
@@ -627,7 +678,7 @@ vec3 TransformTangentToWorld(vec3 directionTS, mat3 tangentToWorld)
 
 vec3 ResolveNormalWS(vec3 normalTS, vec3 positionWS, vec3 vertexNormalWS, vec4 tangentWS, vec2 uv)
 {
-    vec3 N = vec3(NormalizeNormalPerPixel(vertexNormalWS));
+    vec3 N = half3(NormalizeNormalPerPixel(vertexNormalWS));
     vec3 dp1 = ddx(positionWS);
     vec3 dp2 = ddy(positionWS);
     vec2 duv1 = ddx(uv);
@@ -646,10 +697,10 @@ vec3 ResolveNormalWS(vec3 normalTS, vec3 positionWS, vec3 vertexNormalWS, vec4 t
         vec3 Td = dp2perp * duv1.x + dp1perp * duv2.x;
         vec3 Bd = dp2perp * duv1.y + dp1perp * duv2.y;
         float invmax = rsqrt(max(dot(Td, Td), dot(Bd, Bd)) + 1e-8);
-        T = vec3(Td * invmax);
-        B = vec3(Bd * invmax);
+        T = half3(Td * invmax);
+        B = half3(Bd * invmax);
     }
-    return vec3(NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, ruriMat3Rows(T, B, N))));
+    return half3(NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, ruriMat3Rows(T, B, N))));
 }
 
 bool IsPerspectiveProjection()
@@ -701,10 +752,10 @@ vec2 GetNormalizedScreenSpaceUV(vec4 positionCS)
 
 vec3 SampleNormal_BumpMap(vec2 uv, float scale)
 {
-    if (_UseBumpMap)
+    if (_NORMALMAP)
     {
-        vec4 n = vec4(ruriRead_BumpMap(uv));
-        return vec3(UnpackNormalScale(n, scale));
+        vec4 n = half4(ruriRead_BumpMap(uv));
+        return half3(UnpackNormalScale(n, scale));
     }
     else
     {
@@ -774,74 +825,87 @@ Light GetMainLight()
     return light;
 }
 
-float MainLightRealtimeShadow(vec4 shadowCoord) {
-    return 1.0;
-}
-
-float MainLightShadow(vec4 shadowCoord, vec3 positionWS, vec4 shadowMask, vec4 occlusionProbes)
-{
-    return MainLightRealtimeShadow(shadowCoord);
-}
-
-Light GetMainLight(vec4 shadowCoord, vec3 positionWS, vec4 shadowMask)
-{
-    Light light = GetMainLight();
-    light.shadowAttenuation = MainLightShadow(shadowCoord, positionWS, shadowMask, _MainLightOcclusionProbes);
-    return light;
-}
-
 vec3 SafeNormalize(vec3 inVec)
 {
     float dp3 = max(1.175494351e-38, dot(inVec, inVec));
     return inVec * rsqrt(dp3);
 }
 
-// 真源把 RMO 拆开、把主光与半程向量备好。家族的 <c>_RMOSMap</c> 那条路这一作用不上
-// (材质里没有 <c>_UseRMOSMap</c> 也没有那张图),所以粗糙度/金属度/遮蔽/高光级在这里从
-// <c>_RMOTex</c> 直接落。
+// b5194 片元与 b5190 第 214-248 行的顶点色:方位 = 物体空间里顶点水平方向与主光水平方向的
+// 点积映到 [0, 1](光向先整体归一再取 xz),<c>lerp(_OutlineShadowColor, _OutlineColor, 方位) × _OutlineIntensity</c>,
+// 再乘 <c>_FinalTint</c>、主光色与底色图;alpha 恒 1。
+// 真源在顶点上算方位、光栅插值颜色;这里在着色点上按同一式求值(着色点位置换回物体空间)——
+// 两者只在 <c>normalize(xz)</c> 的非线性上有插值差,描边只有一两个像素宽。
+void GirlsFrontline_Outline(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
+{
+    Light mainLight = GetMainLight();
+    vec3 lightOS = SafeNormalize(mul(mat3(unity_WorldToObject), mainLight.direction));
+    vec2 radialOS = mul(unity_WorldToObject, float4(input_.positionWS, 1.0)).xz;
+    vec2 radial = radialOS * rsqrt(max(dot(radialOS, radialOS), 1.175494351e-38));
+    float azimuth = (dot(radial, lightOS.xz) + 1.0) * 0.5;
+    vec4 tint = lerp(_OutlineShadowColor, _OutlineColor, azimuth) * _OutlineIntensity;
+    vec3 baseMap = ruriRead_BaseMap(input_.uv * _BaseMap_ST.xy + _BaseMap_ST.zw).xyz;
+    vec3 color = tint.xyz * _FinalTint.xyz * mainLight.color * baseMap;
+    ruriData.alpha = 1.0;
+    outputData.baseColor = baseMap;
+    outputData.roughness = ruriData.roughness;
+    outputData.metallic = ruriData.metallic;
+    outputData.specular = ruriData.specular;
+    outputData.normalWS = input_.normalWS;
+    outputData.globalIllumination = float4(color, 1.0);
+}
+
+// 真源所有 uber 分支共用的开头:底色按 <c>_BaseMap_ST</c> 采样再乘 <c>_BaseColor</c>;
+// b2593 第 126-129 行的裁剪 <c>if (baseMap.a * _BaseColor.a - _Cutoff &lt; 0) discard;</c>
+// 是前向趟自己的(开关与阈值是这一作自己的两条名字)。
 void GirlsFrontline_Setup(inout RuriData ruriData, CharaVaryings input_)
 {
-    ruriData.mainLight = GetMainLight(ruriData.shadowCoord, ruriData.positionWS, ruriData.shadowMask);
-    ruriData.V = ruriData.viewDirectionWS;
-    ruriData.L = ruriData.mainLight.direction;
-    ruriData.H = SafeNormalize(ruriData.L + ruriData.V);
-    ruriData.useRampVal = (_UseRampMap ? 1.0 : 0.0);
-    // 真源 b2593 第 126-129 行:`if (baseMap.a * _BaseColor.a - _Cutoff < 0) discard;`。
-    // 家族的裁剪走的是它自己的 `_AlphaClip` / `_AlphaClipThreshold` 两条,而且只在非前向趟里跑;
-    // 这一作的裁剪是**前向趟自己的**,开关与阈值也是它自己的两条名字,所以落在这里。
+    vec4 baseMap = ruriRead_BaseMap(input_.uv * _BaseMap_ST.xy + _BaseMap_ST.zw);
+    ruriData.albedo = baseMap.xyz * _BaseColor.xyz;
+    ruriData.alpha = baseMap.w * _BaseColor.w;
     if (_UseAlphaTest)
     {
         clip(ruriData.alpha - _Cutoff);
     }
-    vec4 rmo = texture(_RMOTex, input_.uv);
-    ruriData.roughness = rmo.x;
-    ruriData.metallic = rmo.y;
-    ruriData.occlusion = rmo.z;
-    ruriData.specular = rmo.w;
 }
 
-// 真源 b2603 第 163-245 行 —— 脸部 SDF。
-// 光向先进**物体空间**(真源 <c>mul(unity_WorldToObject, L)</c>;这里用 <c>UNITY_MATRIX_M</c> 的三列
-// 点乘,对刚体+等比缩放是同一件事,而这两个宿主真正供得出的是 M 不是它的逆),取 xz 归一化;
-// <c>_FaceLightDirAdjustment</c> 把这个二维方向往 (0,1) 掰。
-// 两次采样 <c>_BlendTex.r</c>:原 uv 一次、u 镜像一次;<c>1 - _BlendTex.a &gt; 0.5</c> 决定
-// 哪一份当近侧、哪一份当远侧,以及门限落在 [0,1) 还是 [1,2)。门限再按 x 的正负翻到 2 - t。
-// 过渡带是**环绕**比较(真源用 <c>frac((t ± s/2 + 4) * 0.5) * 2</c> 把值折回 [0,2)):
-// t + 4 恒为正,所以真源里那两个正负分支恒取正的那一支,这里直接写成折回式。
-float GirlsFrontline_FaceShadow(vec2 faceUV, vec3 lightDirectionWS, out float faceUpFade)
+float MainLightShadow(vec4 shadowCoord, vec3 positionWS, vec4 shadowMask, vec4 occlusionProbes) {
+    return 1.0;
+}
+
+// b3024 第 179-190 行:主光阴影在沿光向推过的位置上求。本体只在 <c>_AdjustShadowBias</c> 开时推
+// <c>_ShadowBiasDistance</c>;各向异性与脸那两支关着时也推 0.1(b3034 第 174 行、b3035 第 164 行)。
+// 级联的深度/法线偏置是阴影图自己的防粉刺量,宿主的阴影自带一份,不属于询问。
+float GirlsFrontline_MainLightShadow(vec3 positionWS, vec3 lightDirection, vec4 shadowMask, float closedBias)
 {
-    vec3 objectLight = ruriNormalize(half3(dot(lightDirectionWS, UNITY_MATRIX_M[0].xyz), dot(lightDirectionWS, UNITY_MATRIX_M[1].xyz), dot(lightDirectionWS, UNITY_MATRIX_M[2].xyz)));
-    faceUpFade = 1.0 - abs(objectLight.z);
-    vec2 lightXZ = ruriNormalize(half2(objectLight.x, objectLight.z));
+    float bias = (_AdjustShadowBias ? _ShadowBiasDistance : closedBias);
+    vec3 samplePosition = positionWS + lightDirection * bias;
+    return MainLightShadow(vec4(0.0), samplePosition, shadowMask, _MainLightOcclusionProbes);
+}
+
+// b3035 第 305-334 行:光向进物体空间取 xz 归一化(真源 <c>mul(unity_WorldToObject, L)</c>;
+// 这里点乘 <c>UNITY_MATRIX_M</c> 的三列,刚体 + 等比缩放下同一方向),<c>_FaceLightDirAdjustment</c> 把它往 (0, 1) 掰。
+// <paramref name="upFade"/> = <c>1 - |物体空间光向.z|</c>(三维单位化后的 z)。
+vec2 GirlsFrontline_FaceLightXZ(vec3 lightDirection, out float upFade)
+{
+    vec3 objectLight = ruriNormalize(float3(dot(lightDirection, UNITY_MATRIX_M[0].xyz), dot(lightDirection, UNITY_MATRIX_M[1].xyz), dot(lightDirection, UNITY_MATRIX_M[2].xyz)));
+    upFade = 1.0 - abs(objectLight.z);
+    vec2 lightXZ = ruriNormalize(float2(objectLight.x, objectLight.z));
     if (_FaceLightDirAdjustment > 0.0)
     {
-        lightXZ = ruriNormalize(half2(lightXZ.x + _FaceLightDirAdjustment * (0.0 - lightXZ.x), lightXZ.y + _FaceLightDirAdjustment * (1.0 - lightXZ.y)));
+        lightXZ = ruriNormalize(float2(lightXZ.x + _FaceLightDirAdjustment * (0.0 - lightXZ.x), lightXZ.y + _FaceLightDirAdjustment * (1.0 - lightXZ.y)));
     }
-    vec4 nearSample = texture(_BlendTex, faceUV);
-    float mirrored = texture(_BlendTex, half2(1.0 - faceUV.x, faceUV.y)).x;
-    bool frontHalf = (1.0 - nearSample.w) > 0.5;
-    float nearSide = (frontHalf ? nearSample.x : mirrored);
-    float farSide = (frontHalf ? mirrored : nearSample.x);
+    return lightXZ;
+}
+
+// b3035 第 335-368 行 —— 脸部 SDF。<c>_BlendTex.r</c> 采两次(原 uv、u 镜像),<c>1 - _BlendTex.a &gt; 0.5</c>
+// 决定哪一份当近侧与门限落在 [0,1) 还是 [1,2),门限再按光向 x 的正负翻到 <c>2 - t</c>。
+// 过渡带是环绕比较(<c>frac((t ± s/2 + 4)·0.5)·2</c>,t + 4 恒正,真源那两个正负分支恒取正的一支)。
+float GirlsFrontline_FaceShadow(vec2 lightXZ, float nearSample, float mirroredSample, float faceSide)
+{
+    bool frontHalf = (1.0 - faceSide) > 0.5;
+    float nearSide = (frontHalf ? nearSample : mirroredSample);
+    float farSide = (frontHalf ? mirroredSample : nearSample);
     float rawThreshold = (frontHalf ? (lightXZ.y * 0.5 + 0.5) : (lightXZ.y * 0.5 + 1.5));
     float threshold = ((lightXZ.x < 0.0) ? (2.0 - rawThreshold) : rawThreshold);
     float smoothness = _BlendSmoothness;
@@ -853,51 +917,75 @@ float GirlsFrontline_FaceShadow(vec2 faceUV, vec3 lightDirectionWS, out float fa
     return ((upper < 1.0) ? min(upperTerm, lowerTerm) : max(wrapped, lowerTerm));
 }
 
-vec3 CalcDiffuseGirlsFrontline2(vec3 lightColor, vec3 distanceAtten, float NoL, float shadowAtten, float useRampMap)
+// b3024 第 313-338 行:斜坡图的横坐标是衰减三通道的均值(真源 <c>dot(a.xxx, 0.3333)</c>),
+// 下限 2^-14;纵坐标是行 —— 主光 0.125、高光 0.375、环境高光偏置 0.625、附加光 0.875。
+vec3 GirlsFrontline_RampLight(float attenuation, float row)
 {
-    float atten = NoL * shadowAtten * distanceAtten.x;
-    if (useRampMap <= 0.001)
-        return atten * lightColor;
-    // 真源的下限是 6.103515625e-05(= 2^-14,half 的最小正规数),不是 1e-4:
-    // 斜坡那一格恰好落在这两个数之间时,取哪个决定的是「按斜坡首色平涂」还是「按 atten 线性收」。
-    float rampY = 0.125;
-    vec2 rampUV = half2(atten, rampY);
-    rampUV.x = max(rampUV.x, 6.103515625e-05);
-    vec3 ramp = textureLod(_RampMap, rampUV, 0).rgb;
-    vec3 finalAtten = (rampUV.x > 6.103515625e-05 ? (ramp * min(rcp(rampUV.x) * atten, 1.0)) : ramp);
-    return finalAtten * lightColor;
+    float coordinate = max(dot(float3(attenuation, attenuation, attenuation), float3(0.3333, 0.3333, 0.3333)), 6.103515625e-05);
+    vec3 ramp = textureLod(_RampMap, ruriUvClamp(_RampMap, float2(coordinate, row)), 0.0).xyz;
+    return (coordinate > 6.103515625e-05 ? ramp * min(rcp(coordinate) * attenuation, 1.0) : ramp);
 }
 
-// 真源 b2603 第 288-306 行 —— 脸部高光。
-// 取的是**相机前向**在物体空间的 xz(真源 <c>unity_CameraToWorld</c> 的第三列,寄存器 c1320,
-// 由同安装别的着色器按名声明坐实),与光向的二维 xz 按 0.85 混合后决定采哪半边与阈值。
-// 阈值式 <c>saturate(-dir.y - 0.70710677) * 3.4142134</c> 是真源逐字(√2/2 与 1+√2)。
-// 形状由 <c>_BlendTex</c> 的 g/b 双阈值取交,再乘 N·V、<c>_Anisotropy</c>、1/π、
-// <c>saturate(2 * lightXZ.y - 1)</c>(真源写成 <c>saturate(halfDir * 4 - 3)</c>,同一条)、
-// SDF 阴影,最后是 <c>0.1 + 0.9 * N·L</c>。
-float GirlsFrontline_FaceSpecular(vec2 faceUV, vec2 lightXZ, vec3 viewDirectionWS, float NoV, float NoL, float faceShadow)
+vec3 GirlsFrontline_Diffuse(float attenuation, float row)
+{
+    return (_UseRampMap ? GirlsFrontline_RampLight(attenuation, row) : float3(attenuation, attenuation, attenuation));
+}
+
+// b3035 第 398-423 行 —— 脸部高光。相机前向进物体空间,与(掰过的)光向 xz 按 0.85 混合决定采哪半边与阈值;
+// 阈值式 <c>saturate(-dir.y - 0.70710677) · 3.4142134</c> 逐字;形由 <c>_BlendTex</c> 的 g/b 双阈值取交,
+// 再乘 N·V、<c>_Anisotropy</c>、1/π、<c>saturate(4·(光向.y·0.5 + 0.5) - 3)</c> 与 SDF。
+float GirlsFrontline_FaceSpecular(vec2 faceUV, vec2 lightXZ, vec3 viewDirectionWS, vec3 normalWS, float faceShadow)
 {
     vec3 cameraForwardWS = -UNITY_MATRIX_I_V[2].xyz;
-    vec3 objectForward = ruriNormalize(half3(dot(cameraForwardWS, UNITY_MATRIX_M[0].xyz), dot(cameraForwardWS, UNITY_MATRIX_M[1].xyz), dot(cameraForwardWS, UNITY_MATRIX_M[2].xyz)));
-    vec2 steered = ruriNormalize(half2(lightXZ.x + (objectForward.x - lightXZ.x) * 0.85, lightXZ.y + (objectForward.z - lightXZ.y) * 0.85));
-    vec2 shapeUV = half2((steered.x < 0.0 ? (1.0 - faceUV.x) : faceUV.x), faceUV.y - viewDirectionWS.y * _AnisotropyShift);
+    vec3 objectForward = ruriNormalize(float3(dot(cameraForwardWS, UNITY_MATRIX_M[0].xyz), dot(cameraForwardWS, UNITY_MATRIX_M[1].xyz), dot(cameraForwardWS, UNITY_MATRIX_M[2].xyz)));
+    vec2 steered = ruriNormalize(float2(lightXZ.x + (objectForward.x - lightXZ.x) * 0.85, lightXZ.y + (objectForward.z - lightXZ.y) * 0.85));
+    vec2 shapeUV = float2((steered.x < 0.0 ? (1.0 - faceUV.x) : faceUV.x), faceUV.y + -viewDirectionWS.y * _AnisotropyShift);
     vec3 shape = texture(_BlendTex, shapeUV).xyz;
     float threshold = clamp(saturate(-steered.y - 0.70710677) * 3.4142134, 0.01, 0.99);
     float band = ((shape.y >= (1.0 - threshold) ? 1.0 : 0.0)) * ((shape.z >= threshold ? 1.0 : 0.0));
-    float intensity = NoV * band * _Anisotropy * INV_PI;
-    intensity *= saturate((lightXZ.y * 0.5 + 0.5) * 4.0 - 3.0);
-    intensity *= faceShadow;
-    return intensity * 0.1 + (intensity * NoL) * 0.9;
+    float intensity = saturate(dot(viewDirectionWS, normalWS)) * band * _Anisotropy * 0.31830987;
+    return intensity * saturate((lightXZ.y * 0.5 + 0.5) * 4.0 - 3.0) * faceShadow;
 }
 
 vec3 SampleSH(vec3 normalWS) {
     return envIrradiance({Normal});
 }
 
-vec3 DecodeHDREnvironment(vec4 encodedIrradiance, vec4 decodeInstructions)
+vec3 GirlsFrontline_IrradianceAlongAxis(vec3 axisWS) {
+    return envIrradiance({Normal});
+}
+
+// b3024 第 219-243 行 —— 环境漫反射。<c>_UseGIFlatten</c> 开时亮度换成 SH 在整个球面上的平均
+// (真源 <c>dot(SHA.w + 0.3333·SHB.z, 亮度权重)</c>),色度仍取法线方向那一份。
+// 宿主答不出 SH 的系数寄存器,只答「某个方向的辐照」;而二阶 SH 在六个轴向上的取值正好把这两个系数解回来:
+// ±X 之和 = 2(A + C)、±Y 之和 = 2(A - C)、±Z 之和 = 2(A + Bz),于是 A = (X + Y)/4、Bz = Z/2 - A,
+// 逐项代数恒等,不是近似。
+vec3 GirlsFrontline_Ambient(vec3 normalWS, bool flatten)
 {
-    float alpha = max(decodeInstructions.w * (encodedIrradiance.w - 1.0) + 1.0, 0.0);
-    return (decodeInstructions.x * pow(alpha, decodeInstructions.y)) * encodedIrradiance.xyz;
+    vec3 irradiance = SampleSH(normalWS);
+    if (!flatten)
+        return max(irradiance, 0.0);
+    vec3 clamped = max(irradiance, 0.001);
+    vec3 luminanceWeights = float3(0.2126729, 0.7151522, 0.072175);
+    vec3 axisX = GirlsFrontline_IrradianceAlongAxis(float3(1.0, 0.0, 0.0)) + GirlsFrontline_IrradianceAlongAxis(float3(-1.0, 0.0, 0.0));
+    vec3 axisY = GirlsFrontline_IrradianceAlongAxis(float3(0.0, 1.0, 0.0)) + GirlsFrontline_IrradianceAlongAxis(float3(0.0, -1.0, 0.0));
+    vec3 axisZ = GirlsFrontline_IrradianceAlongAxis(float3(0.0, 0.0, 1.0)) + GirlsFrontline_IrradianceAlongAxis(float3(0.0, 0.0, -1.0));
+    vec3 constantTerm = (axisX + axisY) * 0.25;
+    vec3 zonalTerm = axisZ * 0.5 - constantTerm;
+    float sphereLuminance = dot(constantTerm + zonalTerm * 0.3333, luminanceWeights);
+    return sphereLuminance * (clamped / dot(clamped, luminanceWeights));
+}
+
+uint GetAdditionalLightsCount() {
+    return 0;
+}
+
+Light GetAdditionalLight(uint index, vec3 positionWS, vec4 shadowMask) {
+    return ruriZeroLight();
+}
+
+float GirlsFrontline_AdditionalLightKind(uint index) {
+    return 0.0;
 }
 
 vec2 CalcEnvBRDFApprox(float Roughness, float NoV)
@@ -910,327 +998,374 @@ vec2 CalcEnvBRDFApprox(float Roughness, float NoV)
     return AB;
 }
 
-vec3 CalcEnvBRDFGirlsFrontline2(vec3 specularColor, float roughness, float NoV_Clamp, vec3 normalWS, float useRampMap)
+vec3 DecodeHDREnvironment(vec4 encodedIrradiance, vec4 decodeInstructions)
 {
-    vec2 AB = CalcEnvBRDFApprox(roughness, NoV_Clamp);
-    if (useRampMap > 0.001)
-    {
-        // 真源读的是 $Globals 的 c1337(unity_MatrixV)与 c1341(unity_MatrixInvV)——
-        // 同一安装别的着色器把这两处按名声明了出来,所以这两个身份是读出来的。
-        // 这里改用 UNITY_MATRIX_V / UNITY_MATRIX_I_V:它们是同一对矩阵,而**两个宿主真正供得出的是它们**
-        // (小写那对在配方的引擎态里没有落点,发出去就是一个恒 0 的 uniform,整条分支静默变常数)。
-        vec3 vsRightDir = half3(UNITY_MATRIX_V[0].x, UNITY_MATRIX_V[1].x, UNITY_MATRIX_V[2].x);
-        float rightSign = dot(vsRightDir, _MainLightPosition.xyz);
-        float facingSign = (rightSign < 0.0 ? -1.0 : 1.0);
-        vec3 rightDirWS = ruriNormalize(half3(facingSign, facingSign, facingSign) * float3(UNITY_MATRIX_I_V[0].x, UNITY_MATRIX_I_V[0].y, UNITY_MATRIX_I_V[0].z));
-        float NDotRDWS_Clamp = saturate(dot(normalWS, rightDirWS));
-        vec2 rampUV = half2(AB.y * NDotRDWS_Clamp, 0.625);
-        AB.y = textureLod(_RampMap, rampUV, 0.0).x;
-    }
-    return specularColor * AB.x + AB.y;
+    float alpha = max(decodeInstructions.w * (encodedIrradiance.w - 1.0) + 1.0, 0.0);
+    return (decodeInstructions.x * pow(alpha, decodeInstructions.y)) * encodedIrradiance.xyz;
 }
 
-// 真源 b2592 第 219-222 行:反射探针按 <c>roughness * 6</c> 取 mip,环境 BRDF 走
-// <c>specularColor * AB.x + AB.y</c>(AB = Karis 的移动端近似,<see cref="CalcEnvBRDFApprox"/> 逐字同式)。
-// 各向异性与脸那两支没有 RMO,真源在那里把粗糙度恒定成 1、金属度恒定成 0,
-// 编译器于是把 <c>0.04 * AB.x(1)</c> 折成了常数 0.018096 —— 这里不抄那个折叠值,
-// 照原式传 (0.04, 1) 让它自己算出同一个数。
-vec3 GirlsFrontline_EnvironmentSpecular(vec3 specularColor, float roughness, float NoV, vec3 normalWS, vec3 viewDirectionWS, float useRampMap)
+// b3024 第 185-218 行 + 第 502-511 行:反射探针按 <c>roughness·6</c> 取 mip,环境 BRDF 是 Karis 的
+// 移动端近似(<see cref="CalcEnvBRDFApprox"/> 逐字同式,NoV 用未加偏移的那一个)。斜坡开着时把偏置项 AB.y
+// 乘上「朝光那一侧的相机右向」与法线的点积,再去斜坡第 0.625 行取 <c>.x</c>。
+// 各向异性与脸那两支没有 RMO,真源把粗糙度恒定成 1、高光色恒定成 0.04(编译器折出 0.018096 与 -0.0024),
+// 这里照原式传入,让它自己算出同一对数。
+vec3 GirlsFrontline_EnvironmentSpecular(vec3 specularColor, float roughness, float NoV, vec3 normalWS, vec3 viewDirectionWS, vec3 lightDirection)
 {
+    vec2 environmentBRDF = CalcEnvBRDFApprox(roughness, NoV);
+    float offset = environmentBRDF.y;
+    if (_UseRampMap)
+    {
+        vec3 cameraRight = float3(UNITY_MATRIX_V[0].x, UNITY_MATRIX_V[1].x, UNITY_MATRIX_V[2].x);
+        vec3 lightSide = ruriNormalize(sign(dot(cameraRight, lightDirection)) * UNITY_MATRIX_I_V[0].xyz);
+        offset = textureLod(_RampMap, ruriUvClamp(_RampMap, float2(environmentBRDF.y * saturate(dot(normalWS, lightSide)), 0.625)), 0.0).x;
+    }
     vec3 reflectDirection = reflect(-viewDirectionWS, normalWS);
     vec4 encodedIrradiance = vec4(envSampleLOD(reflectDirection, roughness * 6.0), 1.0);
     vec3 probeColor = DecodeHDREnvironment(encodedIrradiance, unity_SpecCube0_HDR);
-    return probeColor * CalcEnvBRDFGirlsFrontline2(specularColor, roughness, NoV, normalWS, useRampMap);
+    return probeColor * (specularColor * environmentBRDF.x + offset);
 }
 
-// 真源 b2603(<c>_USE_BLEND_TEX</c>)。这一支没有 RMO、没有法线图、没有自发光:
-// 反编译件的纹理表就只有 <c>_BaseMap</c> / <c>_BlendTex</c> / <c>_RampMap</c> 三张,
-// 与安装里那两张脸材质真绑的三张逐一对上。
-void GirlsFrontline_Face(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
+void GirlsFrontline_Face(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData, float facing)
 {
+    vec3 normalWS = ruriNormalize((facing > 0.0 ? input_.normalWS : -input_.normalWS));
+    vec3 viewDirectionWS = ruriData.viewDirectionWS;
+    vec3 albedo = ruriData.albedo;
     vec2 faceUV = (_UseSpecularUV2 ? input_.uv1.xy : input_.uv);
-    vec3 objectLight = ruriNormalize(half3(dot(ruriData.L, UNITY_MATRIX_M[0].xyz), dot(ruriData.L, UNITY_MATRIX_M[1].xyz), dot(ruriData.L, UNITY_MATRIX_M[2].xyz)));
-    vec2 lightXZ = ruriNormalize(half2(objectLight.x, objectLight.z));
-    float faceUpFade;
-    float faceShadow = GirlsFrontline_FaceShadow(faceUV, ruriData.L, faceUpFade);
-    float shaded = (faceUpFade * 0.5 + 0.5) * faceShadow;
-    vec3 diffuseColor = CalcDiffuseGirlsFrontline2(ruriData.mainLight.color, vec3(ruriData.mainLight.distanceAttenuation), shaded, ruriData.mainLight.shadowAttenuation, ruriData.useRampVal);
-    float NoV = saturate(dot(ruriData.V, ruriData.normalWS));
-    float NoL = max(dot(ruriData.normalWS, ruriData.L), 0.0);
-    float specular = GirlsFrontline_FaceSpecular(faceUV, lightXZ, ruriData.V, NoV, NoL, faceShadow);
-    vec3 ambient = max(SampleSH(ruriData.normalWS), 0.0);
-    vec3 finalColor = (diffuseColor + specular) * ruriData.albedo + ambient * ruriData.albedo + GirlsFrontline_EnvironmentSpecular(half3(0.04, 0.04, 0.04), 1.0, NoV, ruriData.normalWS, ruriData.V, ruriData.useRampVal);
-    finalColor *= _FinalTint.xyz;
+    vec4 nearSample = texture(_BlendTex, faceUV);
+    float mirroredSample = texture(_BlendTex, float2(1.0 - faceUV.x, faceUV.y)).x;
+    Light mainLight = GetMainLight();
+    vec3 lightDirection = mainLight.direction;
+    float shadow = GirlsFrontline_MainLightShadow(ruriData.positionWS, lightDirection, ruriData.shadowMask, 0.1);
+    float upFade;
+    vec2 lightXZ = GirlsFrontline_FaceLightXZ(lightDirection, upFade);
+    float faceShadow = GirlsFrontline_FaceShadow(lightXZ, nearSample.x, mirroredSample, nearSample.w);
+    vec3 diffuse = GirlsFrontline_Diffuse((upFade * 0.5 + 0.5) * (shadow * faceShadow), 0.125);
+    float specular = GirlsFrontline_FaceSpecular(faceUV, lightXZ, viewDirectionWS, normalWS, faceShadow);
+    float shadowedNoL = shadow * max(dot(normalWS, lightDirection), 0.0);
+    float specularLight = specular * 0.1 + shadowedNoL * specular * 0.9;
+    vec3 color = (diffuse * albedo + specularLight) * mainLight.color * mainLight.distanceAttenuation;
+    color += albedo * GirlsFrontline_Ambient(normalWS, _UseGIFlatten);
+    vec3 lightPosition = ruriData.positionWS + ((facing > 0.0 ? input_.normalWS : -input_.normalWS)) * 0.005;
+    vec4 shadowMask = ruriData.shadowMask;
+    InputData inputData = ruriZeroInputData();
+    inputData.normalizedScreenSpaceUV = ruriData.normalizedScreenSpaceUV;
+    inputData.positionWS = lightPosition;
+    uint pixelLightCount = GetAdditionalLightsCount();
+    LIGHT_LOOP_BEGIN(pixelLightCount)
+        Light light = GetAdditionalLight(lightIndex, lightPosition, shadowMask);
+        float additionalUpFade;
+        vec2 additionalXZ = GirlsFrontline_FaceLightXZ(light.direction, additionalUpFade);
+        float directional = (additionalUpFade * 0.5 + 0.5) * GirlsFrontline_FaceShadow(additionalXZ, nearSample.x, mirroredSample, nearSample.w);
+        float punctual = max(dot(normalWS, light.direction), 0.0);
+        float attenuation = (GirlsFrontline_AdditionalLightKind(lightIndex) < 1.0 ? directional : punctual);
+        color += albedo * GirlsFrontline_Diffuse(attenuation, 0.875) * light.color * light.distanceAttenuation;
+    LIGHT_LOOP_END
+    color += GirlsFrontline_EnvironmentSpecular(float3(0.04, 0.04, 0.04), 1.0, max(dot(normalWS, viewDirectionWS), 0.0), normalWS, viewDirectionWS, lightDirection);
+    color *= _FinalTint.xyz;
     outputData.baseColor = ruriData.albedo;
-    outputData.roughness = ruriData.roughness;
-    outputData.metallic = ruriData.metallic;
-    outputData.specular = ruriData.specular;
-    outputData.normalWS = ruriData.normalWS;
-    outputData.globalIllumination = half4(finalColor, ruriData.alpha);
+    outputData.roughness = 1.0;
+    outputData.metallic = 0.0;
+    outputData.specular = 0.0;
+    outputData.normalWS = normalWS;
+    outputData.globalIllumination = float4(color, ruriData.alpha);
 }
 
-// 真源 <c>gf_shader/pbr/character/eye</c> 的 b288。
-// 两张图各走自己的视差位移,底色不乘 <c>_BaseColor</c>(那份变体里根本没引用),
-// 漫反射是 <c>lerp(_ShadowIntensity, 1, N·L)</c>,高光是 <c>N·L * _Specularmap * _SpecularIntensity</c>,
-// 出射 alpha 恒 0。视差量是顶点腿算的一维偏移:物体空间视线的 z × 顶点色 g × 切线手性
-// × <c>unity_WorldTransformParams.w</c>。
+// b384 —— 两张图各走自己的视差位移(顶点腿算的一维偏移:物体空间视线的 z × 顶点色 g × 切线手性
+// × <c>unity_WorldTransformParams.w</c>,只加在 u 上),底色不乘 <c>_BaseColor</c>。
+// 主光:<c>N·L × 阴影</c> 进 <c>lerp(_ShadowIntensity, 1, ·)</c> 当漫反射、乘高光图当高光,都乘主光色、不乘距离项;
+// 环境漫反射**无条件**拍平(与 uber 的 <c>_UseGIFlatten</c> 同一式);附加光是 <c>(底色 + 高光图) × N·L</c>,
+// 位置沿法线外推 0.02。出射 alpha 恒 0。
 void GirlsFrontline_Eyes(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
 {
-    vec3 objectView = ruriNormalize(half3(dot(ruriData.V, UNITY_MATRIX_M[0].xyz), dot(ruriData.V, UNITY_MATRIX_M[1].xyz), dot(ruriData.V, UNITY_MATRIX_M[2].xyz)));
+    vec3 normalWS = ruriNormalize(input_.normalWS);
+    vec3 viewDirectionWS = ruriData.viewDirectionWS;
+    vec3 objectView = ruriNormalize(float3(dot(viewDirectionWS, UNITY_MATRIX_M[0].xyz), dot(viewDirectionWS, UNITY_MATRIX_M[1].xyz), dot(viewDirectionWS, UNITY_MATRIX_M[2].xyz)));
     float parallax = objectView.z * input_.color.y * input_.tangentWS.w * unity_WorldTransformParams.w;
-    vec3 baseColor = ruriSampleSrgb(_MainTex, ruriUvClamp(_MainTex, half2(input_.uv.x + parallax * _CorneaParallax, input_.uv.y))).xyz;
-    vec3 specularMap = ruriSampleSrgb(_Specularmap, half2(input_.uv.x + parallax * _SpecularParallax, input_.uv.y)).xyz;
-    float NoL = saturate(dot(ruriData.normalWS, ruriData.L));
-    vec3 lightColor = ruriData.mainLight.color;
-    vec3 specular = specularMap * _SpecularIntensity * NoL;
-    vec3 diffuse = baseColor * lightColor * lerp(_ShadowIntensity, 1.0, NoL);
-    vec3 ambient = max(SampleSH(ruriData.normalWS), 0.0);
-    vec3 finalColor = diffuse + specular * lightColor + ambient * baseColor;
-    finalColor *= _FinalTint.xyz;
+    vec3 baseColor = ruriSampleSrgb(_MainTex, float2(input_.uv.x + parallax * _CorneaParallax, input_.uv.y)).xyz;
+    vec3 specularMap = ruriSampleSrgb(_Specularmap, float2(input_.uv.x + parallax * _SpecularParallax, input_.uv.y)).xyz * _SpecularIntensity;
+    Light mainLight = GetMainLight();
+    vec3 lightDirection = mainLight.direction;
+    vec3 samplePosition = ruriData.positionWS + lightDirection * _ShadowBiasDistance;
+    float shadow = MainLightShadow(vec4(0.0), samplePosition, ruriData.shadowMask, _MainLightOcclusionProbes);
+    float shadowedNoL = saturate(dot(lightDirection, normalWS)) * shadow;
+    vec3 color = shadowedNoL * specularMap * mainLight.color + lerp(_ShadowIntensity, 1.0, shadowedNoL) * (baseColor * mainLight.color);
+    color += GirlsFrontline_Ambient(normalWS, true) * baseColor;
+    vec3 lightPosition = ruriData.positionWS + input_.normalWS * 0.02;
+    vec3 lit = baseColor + specularMap;
+    vec4 shadowMask = ruriData.shadowMask;
+    InputData inputData = ruriZeroInputData();
+    inputData.normalizedScreenSpaceUV = ruriData.normalizedScreenSpaceUV;
+    inputData.positionWS = lightPosition;
+    uint pixelLightCount = GetAdditionalLightsCount();
+    LIGHT_LOOP_BEGIN(pixelLightCount)
+        Light light = GetAdditionalLight(lightIndex, lightPosition, shadowMask);
+        color += light.distanceAttenuation * (lit * light.color) * max(dot(input_.normalWS, light.direction), 0.0);
+    LIGHT_LOOP_END
+    color *= _FinalTint.xyz;
     outputData.baseColor = baseColor;
     outputData.roughness = ruriData.roughness;
     outputData.metallic = ruriData.metallic;
     outputData.specular = ruriData.specular;
-    outputData.normalWS = ruriData.normalWS;
-    outputData.globalIllumination = half4(finalColor, 0.0);
+    outputData.normalWS = normalWS;
+    outputData.globalIllumination = float4(color, 0.0);
 }
 
-// 真源 <c>…/eyeblend_add</c> 的 b48(<c>Blend One One</c>):
-// <c>rgb = _MainTex.rgb * _MainColor.rgb * _SpecularIntensity * (saturate(N·L) * 0.8 + 0.2)</c>、
-// <c>a = _MainTex.a * _MainColor.a</c>。整份着色器就这一段,没有别的。
+// b64(<c>Blend One One</c>):<c>rgb = _MainTex.rgb · _MainColor.rgb · _SpecularIntensity ·
+// (saturate(N·L) · 阴影 · 0.8 + 0.2)</c>、<c>a = _MainTex.a · _MainColor.a</c>。
 void GirlsFrontline_EyeBlendAdd(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
 {
-    vec4 mask = ruriSampleSrgb(_MainTex, ruriUvClamp(_MainTex, input_.uv));
-    float lightTerm = saturate(dot(ruriData.normalWS, ruriData.L)) * 0.8 + 0.2;
-    vec3 finalColor = mask.xyz * _MainColor.xyz * _SpecularIntensity * lightTerm;
+    vec4 mask = ruriSampleSrgb(_MainTex, input_.uv);
+    Light mainLight = GetMainLight();
+    vec3 lightDirection = mainLight.direction;
+    vec3 samplePosition = ruriData.positionWS + lightDirection * _ShadowBiasDistance;
+    float shadow = MainLightShadow(vec4(0.0), samplePosition, ruriData.shadowMask, _MainLightOcclusionProbes);
+    float lightTerm = saturate(dot(lightDirection, input_.normalWS)) * shadow * 0.8 + 0.2;
+    vec3 color = lightTerm * (mask.xyz * _MainColor.xyz * _SpecularIntensity);
     outputData.baseColor = mask.xyz;
     outputData.roughness = ruriData.roughness;
     outputData.metallic = ruriData.metallic;
     outputData.specular = ruriData.specular;
-    outputData.normalWS = ruriData.normalWS;
-    outputData.globalIllumination = half4(finalColor, mask.w * _MainColor.w);
+    outputData.normalWS = input_.normalWS;
+    outputData.globalIllumination = float4(color, mask.w * _MainColor.w);
 }
 
-// 真源 <c>…/eyeblend_multiply</c> 的 b16(<c>Blend DstColor Zero</c>):
-// <c>rgb = 1 + _SpecularIntensity * (_MainTex.rgb * _MainColor.rgb - 1)</c>,
-// 也就是把「乘进帧缓冲的因子」直接写出来 —— 所以这个部位的 <c>[StylePart]</c> 标了
-// <c>MultiplyBlend</c>,over 混合的宿主据此自己做等价分解。
+// b16(<c>Blend DstColor Zero</c>):<c>rgb = 1 + _SpecularIntensity · (_MainTex.rgb · _MainColor.rgb - 1)</c>,
+// 也就是把「乘进帧缓冲的因子」直接写出来 —— 这个部位的 <c>[StylePart]</c> 照抄了那行 <c>Blend</c>,
+// over 混合的宿主据此自己做等价分解。
 void GirlsFrontline_EyeBlendMultiply(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
 {
-    vec4 mask = ruriSampleSrgb(_MainTex, ruriUvClamp(_MainTex, input_.uv));
+    vec4 mask = ruriSampleSrgb(_MainTex, input_.uv);
     vec3 factor = 1.0 + _SpecularIntensity * (mask.xyz * _MainColor.xyz - 1.0);
     outputData.baseColor = mask.xyz;
     outputData.roughness = ruriData.roughness;
     outputData.metallic = ruriData.metallic;
     outputData.specular = ruriData.specular;
-    outputData.normalWS = ruriData.normalWS;
-    outputData.globalIllumination = half4(factor, 1.0);
+    outputData.normalWS = input_.normalWS;
+    outputData.globalIllumination = float4(factor, 1.0);
 }
 
-// 真源 b2602 第 235-252 行(各向异性高光带)。
-// 带的形状是 <c>_BlendTex</c> 在**沿 v 推过**的 uv 上的 rgb,乘 N·V 与 <c>_Anisotropy</c>;
-// 出射 = <c>带 * 0.1/π + (N·L 遮罩 * 带) * 0.9/π</c>。
-// 两个系数在反编译件里是 0.031830988824367523 与 0.28647887706756592,即 <c>INV_PI * 0.1</c> 与
-// <c>INV_PI * 0.9</c>,不是手调的魔数。
-vec3 GirlsFrontline_AnisotropicBand(vec2 anisotropyUV, float NoV, float maskedNoL)
+// b3024 第 137-177 行:法线图的 x 取 <c>r·a</c>、y 取 <c>1 - g</c>(绿通道朝下的约定),z 由单位长补出。
+// 背面只翻顶点法线,切线与副切线不翻,三者都按插值原样参与合成。
+vec3 GirlsFrontline_SurfaceNormal(CharaVaryings input_, float facing)
 {
-    vec3 band = texture(_BlendTex, anisotropyUV).xyz * (NoV * _Anisotropy);
-    return band * (INV_PI * 0.1) + (band * maskedNoL) * (INV_PI * 0.9);
+    vec4 packedNormal = ruriRead_BumpMap(input_.uv);
+    float x = packedNormal.x * packedNormal.w * 2.0 - 1.0;
+    float y = (1.0 - packedNormal.y) * 2.0 - 1.0;
+    float z = sqrt(1.0 - min(x * x + y * y, 1.0));
+    vec3 vertexNormal = (facing > 0.0 ? input_.normalWS : -input_.normalWS);
+    vec3 bitangent = input_.tangentWS.w * cross(input_.normalWS, input_.tangentWS.xyz);
+    return ruriNormalize(input_.tangentWS.xyz * x + bitangent * y + vertexNormal * z);
 }
 
-// 真源 b2602(<c>_ANISOTROPIC_SPECULAR</c>)—— 头发那一支。
-// 这支**没有** RMO、没有自发光、没有 PBR 高光:真源把粗糙度恒定在 1、金属度恒定在 0,
-// 反射探针固定取 mip 6,直接光只有「斜坡漫反射 + 各向异性带」。
-void GirlsFrontline_Anisotropic(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
+// b3034 第 348-362 行:高光带的形是 <c>_BlendTex</c> 在沿 v 推过的 uv 上的 rgb,乘 N·V 与 <c>_Anisotropy</c>;
+// 出射 = <c>带 · 0.1/π + (遮罩后的 N·L · 带) · 0.9/π</c>(两个系数在反编译件里是 0.0318309888 与 0.2864788771)。
+vec3 GirlsFrontline_AnisotropicBand(vec2 bandUV, float NoV, float maskedNoL)
 {
+    vec3 band = texture(_BlendTex, bandUV).xyz * NoV * _Anisotropy;
+    return band * (INV_PI * 0.1) + maskedNoL * band * (INV_PI * 0.9);
+}
+
+void GirlsFrontline_Anisotropic(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData, float facing)
+{
+    vec3 normalWS = GirlsFrontline_SurfaceNormal(input_, facing);
+    vec3 viewDirectionWS = ruriData.viewDirectionWS;
+    vec3 albedo = ruriData.albedo;
     vec4 blend = texture(_BlendTex, input_.uv);
-    float maskedNoL = max(dot(ruriData.normalWS, ruriData.L), 0.0) * blend.w;
-    vec3 diffuseColor = CalcDiffuseGirlsFrontline2(ruriData.mainLight.color, vec3(ruriData.mainLight.distanceAttenuation), maskedNoL, ruriData.mainLight.shadowAttenuation, ruriData.useRampVal);
-    vec2 anisotropyUV = (_UseSpecularUV2 ? input_.uv1.xy : input_.uv);
-    anisotropyUV.y -= ruriData.V.y * _AnisotropyShift;
-    float NoV = saturate(dot(ruriData.V, ruriData.normalWS));
-    vec3 band = GirlsFrontline_AnisotropicBand(anisotropyUV, NoV, maskedNoL);
-    vec3 ambient = max(SampleSH(ruriData.normalWS), 0.0);
-    vec3 finalColor = diffuseColor * ruriData.albedo + band * ruriData.mainLight.color * ruriData.mainLight.distanceAttenuation + ambient * ruriData.albedo + GirlsFrontline_EnvironmentSpecular(half3(0.04, 0.04, 0.04), 1.0, NoV, ruriData.normalWS, ruriData.V, ruriData.useRampVal);
-    finalColor *= _FinalTint.xyz;
+    Light mainLight = GetMainLight();
+    vec3 lightDirection = mainLight.direction;
+    float shadow = GirlsFrontline_MainLightShadow(ruriData.positionWS, lightDirection, ruriData.shadowMask, 0.1);
+    float maskedNoL = max(dot(normalWS, lightDirection), 0.0) * (blend.w * shadow);
+    vec3 diffuse = GirlsFrontline_Diffuse(maskedNoL, 0.125);
+    vec2 bandUV = (_UseSpecularUV2 ? input_.uv1.xy : input_.uv);
+    bandUV.y += -viewDirectionWS.y * _AnisotropyShift;
+    float NoV = saturate(dot(viewDirectionWS, normalWS));
+    vec3 band = GirlsFrontline_AnisotropicBand(bandUV, NoV, maskedNoL);
+    vec3 color = (diffuse * albedo + band) * mainLight.color * mainLight.distanceAttenuation;
+    color += albedo * GirlsFrontline_Ambient(normalWS, _UseGIFlatten);
+    vec3 lightPosition = ruriData.positionWS + ((facing > 0.0 ? input_.normalWS : -input_.normalWS)) * 0.005;
+    vec4 shadowMask = ruriData.shadowMask;
+    InputData inputData = ruriZeroInputData();
+    inputData.normalizedScreenSpaceUV = ruriData.normalizedScreenSpaceUV;
+    inputData.positionWS = lightPosition;
+    uint pixelLightCount = GetAdditionalLightsCount();
+    LIGHT_LOOP_BEGIN(pixelLightCount)
+        Light light = GetAdditionalLight(lightIndex, lightPosition, shadowMask);
+        vec3 additional = GirlsFrontline_Diffuse(max(dot(normalWS, light.direction), 0.0), 0.875);
+        color += albedo * additional * light.color * light.distanceAttenuation;
+    LIGHT_LOOP_END
+    color += GirlsFrontline_EnvironmentSpecular(float3(0.04, 0.04, 0.04), 1.0, max(dot(normalWS, viewDirectionWS), 0.0), normalWS, viewDirectionWS, lightDirection);
+    color *= _FinalTint.xyz;
     outputData.baseColor = ruriData.albedo;
-    outputData.roughness = ruriData.roughness;
-    outputData.metallic = ruriData.metallic;
-    outputData.specular = ruriData.specular;
-    outputData.normalWS = ruriData.normalWS;
-    outputData.globalIllumination = half4(finalColor, ruriData.alpha);
+    outputData.roughness = 1.0;
+    outputData.metallic = 0.0;
+    outputData.specular = 0.0;
+    outputData.normalWS = normalWS;
+    outputData.globalIllumination = float4(color, ruriData.alpha);
 }
 
-float D_GGX_Anisotropic(float TdotH, float BdotH, float NdotH, float alpha_t, float alpha_b)
+// b3026 第 1048-1093 行:丝袜的各向异性 D。切向轴是 <c>normalize(副切线) × N</c>、副轴是 <c>N × 切向轴</c>,
+// <c>αT = max(α(1 + g), 0.001)</c>、<c>αB = max(α(1 - g), 0.001)</c>(g = <c>_AnisotropicGXX</c>),
+// <c>D = αTαB/π · (αTαB / |v|²)²</c>,这一支带 1/π、不设上限。
+float GirlsFrontline_AnisotropicDistribution(float roughness, vec3 normalWS, vec3 bitangentWS, vec3 halfDirection, float NoH)
 {
-    float a2 = alpha_t * alpha_b;
-    vec3 v = float3(TdotH * alpha_b, BdotH * alpha_t, NdotH * a2);
-    float v2 = dot(v, v);
-    float w2 = ((v2 != a2) ? a2 / v2 : 1.0);
-    return min(a2 * w2 * w2 * INV_PI, 2048.0);
-}
-
-float D_GGX_Float(float NdotH, float alpha2)
-{
-    float d = (NdotH * alpha2 - NdotH) * NdotH + 1.0;
-    float d2 = d * d;
-    float D = ((d2 != alpha2) ? alpha2 / d2 : 1.0);
-    return min(D, 2048.0);
-}
-
-float V_SmithGGX_Hammon(float roughness, float NoV, float NoL)
-{
-    float a = roughness * roughness;
-    float Vis_V = NoL * (NoV * (1.0 - a) + a);
-    float Vis_L = NoV * (NoL * (1.0 - a) + a);
-    return min(0.5 * rcp(Vis_V + Vis_L), 1.0);
-}
-
-float Pow5(float x)
-{
-    float x2 = x * x;
-    return x2 * x2 * x;
-}
-
-vec3 CalcFresnelSchlickGirlsFrontline2(vec3 specularColor, float VoH_Clamp)
-{
-    float Fc = Pow5(max(1 - VoH_Clamp, 0.001));
-    return vec3(saturate(50.0 * specularColor.g) * Fc + (1 - Fc));
-}
-
-vec3 CalcSpecularGirlsFrontline2(vec3 specularColor, float roughness, vec3 N, vec3 tangentWS, vec3 bitangentDirWS, vec3 halfDir, float NoH, float NoV, float NoL, float VoH, float LoH, float anisotropicGGX, float useRampMap)
-{
-    float NoH_Safe = saturate(NoH);
-    float NoV_Safe = max(NoV, 1e-4);
-    float NoL_Safe = max(NoL, 1e-4);
-    float VoH_Safe = max(VoH, 1e-4);
-    float LoH_Safe = max(LoH, 1e-4);
-    // 真源的各向同性 D 是 Filament 那一式:a = 粗糙度², k = a / (1 - NoH² + (NoH·a)²), D = k²。
-    // 本仓的 D_GGX_Float(NoH, alpha2) 算的是 alpha2 / (NoH²(alpha2-1)+1)²,两式在 alpha2 = a² 时
-    // 逐字相等 —— 所以传进去的是**四次方**。传二次方(上一版)等于把 α 开了一次根号,高光宽一圈。
     float alpha = roughness * roughness;
-    float D = 0;
-    if (abs(anisotropicGGX) > 0.001)
-    {
-        float TdotH = dot(tangentWS, halfDir);
-        float BdotH = dot(bitangentDirWS, halfDir);
-        float roughnessT = max(alpha * (1.0 + anisotropicGGX), 0.001);
-        float roughnessB = max(alpha * (1.0 - anisotropicGGX), 0.001);
-        D = D_GGX_Anisotropic(TdotH, BdotH, NoH_Safe, roughnessT, roughnessB);
-    }
-    else
-    {
-        D = D_GGX_Float(NoH_Safe, alpha * alpha);
-    }
-    float V = V_SmithGGX_Hammon(roughness, NoV_Safe, NoL_Safe);
-    float Fc = CalcFresnelSchlickGirlsFrontline2(specularColor, VoH_Safe).x;
-    // 真源把 D·V·F 这一整段先 clamp 到 [0, 10] 再乘高光色(反编译件逐字 clamp(x, 0, 10)):
-    // 掠射角上 D 能冲到 2048 的上限,不夹住就是一圈过曝白边。
-    if (useRampMap > 0.001)
-    {
-        float D2 = D_GGX_Float(1.0, alpha * alpha);
-        float V2 = V_SmithGGX_Hammon(roughness, VoH_Safe, LoH_Safe);
-        float den = max(D2 * V2, 1e-4);
-        vec2 rampUV;
-        rampUV.x = saturate(D * V / den);
-        rampUV.y = 0.375;
-        vec3 ramp = textureLod(_RampMap, rampUV, 0.0).rgb;
-        return clamp(ramp * (D2 * V2 * Fc), 0.0, 10.0) * specularColor;
-    }
-    return clamp(half3(D * V * Fc, D * V * Fc, D * V * Fc), 0.0, 10.0) * specularColor;
+    vec3 tangentAxis = cross(ruriNormalize(bitangentWS), normalWS);
+    vec3 bitangentAxis = cross(normalWS, tangentAxis);
+    float alphaT = max(alpha * (_AnisotropicGXX + 1.0), 0.001);
+    float alphaB = max(alpha * (1.0 - _AnisotropicGXX), 0.001);
+    float alphaProduct = alphaT * alphaB;
+    vec3 v = float3(dot(tangentAxis, halfDirection) * alphaB, dot(bitangentAxis, halfDirection) * alphaT, NoH * alphaProduct);
+    float w = alphaProduct / dot(v, v);
+    return w * w * (alphaProduct * 0.31830987);
 }
 
-vec3 CharaVaryings_GetBitangentWS(CharaVaryings ruriSelf)
+// b3024 第 339-345 行:各向同性的 D 是 Filament 那一式 <c>k = α/(NoH²α² + 1 - NoH²)</c>,
+// <c>D = k²</c>,不带 1/π,上限 2048;α = 粗糙度²。
+float GirlsFrontline_Distribution(float roughness, float NoH)
 {
-    return ruriSelf.tangentWS.w * cross(ruriSelf.normalWS.xyz, ruriSelf.tangentWS.xyz);
+    float alpha = roughness * roughness;
+    float scaled = NoH * alpha;
+    float k = alpha / (scaled * scaled + (1.0 - NoH * NoH));
+    return min(k * k, 2048.0);
 }
 
-// 真源 b2592(全关的兜底变体)+ b2594(<c>_USE_STOCKING</c>)。
-// 直接光 = <c>(漫反射色 + 高光BRDF) × 斜坡衰减 × 主光色</c>;
-// 间接漫反射 = <c>漫反射色 × SH × 遮蔽</c>;间接高光 = 反射探针 × 环境 BRDF(**不乘遮蔽**,真源如此);
-// 自发光 = <c>反照率 × _EmissiveIntensity × RMO.a</c>,而 b2594 里各向异性 GGX 开着时这一项被整条丢掉。
-// 高光 BRDF 的 D 项:真源是 Filament 的 <c>k = α/(1 - NoH² + (NoH·α)²), D = k²</c>,α = 粗糙度²;
-// 本仓的 <see cref="D_GGX_Float"/> 写成 <c>alpha2/(NoH²(alpha2-1)+1)²</c>,两式在
-// <c>alpha2 = α²</c> 时逐字相等 —— 所以这里传的是**粗糙度的四次方**,不是二次方。
-// (传二次方是上一版的偏差:同一条式子少平方一次,高光会宽一圈。)
-void GirlsFrontline_Body(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
+// b3024 第 346-387 行 —— 直接光高光。V 是 Hammon 的相关 Smith 快速式,
+// F = <c>1 + (saturate(50·F0.g) - 1)·(1 - VoH)^5</c>;斜坡开着时把 D·V 按「法线正对半程向量」那一刻的峰值
+// 归一,去斜坡第 0.375 行查形,再乘回峰值。出射先夹到 [0, 10] 再乘高光色。
+vec3 GirlsFrontline_Specular(vec3 specularColor, float roughness, float distribution, float NoL, float NoV, float VoH, float LoH)
+{
+    float alpha = roughness * roughness;
+    float oneMinusAlpha = 1.0 - roughness * roughness;
+    float visibility = min(rcp(max(NoL * (NoV * oneMinusAlpha + alpha) + (NoL * oneMinusAlpha + alpha) * NoV, 1e-4)) * 0.5, 1.0);
+    float grazing = max(1.0 - VoH, 0.001);
+    float grazingSquared = grazing * grazing;
+    float fresnelWeight = grazing * (grazingSquared * grazingSquared);
+    float fresnel = saturate(specularColor.y * 50.0) * fresnelWeight - fresnelWeight + 1.0;
+    if (_UseRampMap)
+    {
+        float peakRatio = alpha / (alpha * alpha);
+        float peakDistribution = min(peakRatio * peakRatio, 2048.0);
+        float peakVisibility = min(rcp(max(LoH * (VoH * oneMinusAlpha + alpha) + VoH * (LoH * oneMinusAlpha + alpha), 1e-4)) * 0.5, 1.0);
+        float coordinate = saturate(distribution * visibility * rcp(peakDistribution) * rcp(peakVisibility));
+        vec3 ramp = textureLod(_RampMap, ruriUvClamp(_RampMap, float2(coordinate, 0.375)), 0.0).xyz;
+        return specularColor * clamp(fresnel * (peakVisibility * (peakDistribution * ramp)), 0.0, 10.0);
+    }
+    float term = fresnel * (distribution * visibility);
+    return specularColor * clamp(float3(term, term, term), 0.0, 10.0);
+}
+
+// b3024 第 294-342 行(主光)与第 363-501 行(附加光)共用的那一段:一盏灯的
+// <c>斜坡漫反射 × 漫反射色 + 高光 × 斜坡漫反射</c>,灯色与衰减由调用方乘。
+// <paramref name="shadow"/> 只进斜坡横坐标;附加光这一趟不带阴影,传 1。
+vec3 GirlsFrontline_BodyLight(vec3 lightDirection, float shadow, float row, vec3 normalWS, vec3 viewDirectionWS, vec3 bitangentWS, vec3 diffuseColor, vec3 specularColor, float roughness, float NoV, bool anisotropicDistribution)
+{
+    vec3 halfDirection = ruriNormalize(viewDirectionWS + lightDirection);
+    float NoL = max(dot(normalWS, lightDirection), 0.0);
+    float NoH = max(dot(normalWS, halfDirection), 0.0);
+    float VoH = max(dot(viewDirectionWS, halfDirection), 0.0);
+    float LoH = max(dot(lightDirection, halfDirection), 0.0);
+    float distribution = (anisotropicDistribution ? GirlsFrontline_AnisotropicDistribution(roughness, normalWS, bitangentWS, halfDirection, NoH) : GirlsFrontline_Distribution(roughness, NoH));
+    vec3 diffuse = GirlsFrontline_Diffuse(NoL * shadow, row);
+    vec3 specular = GirlsFrontline_Specular(specularColor, roughness, distribution, NoL, NoV, VoH, LoH);
+    return diffuse * diffuseColor + specular * diffuse;
+}
+
+void GirlsFrontline_Body(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData, float facing)
 {
     if (_AnisotropicSpecular)
     {
-        GirlsFrontline_Anisotropic(ruriData, input_, outputData);
+        GirlsFrontline_Anisotropic(ruriData, input_, outputData, facing);
         return;
     }
-    vec3 normalWS = ruriData.normalWS;
-    float NoL = max(dot(normalWS, ruriData.L), 0.0);
-    float NoH = max(dot(normalWS, ruriData.H), 0.0);
-    float VoH = max(dot(ruriData.V, ruriData.H), 0.0);
-    float LoH = max(dot(ruriData.L, ruriData.H), 0.0);
-    float NoV = min(max(dot(normalWS, ruriData.V), 0.0) + 1e-5, 1.0);
-    vec3 diffuseColor = ruriData.albedo * (1.0 - ruriData.metallic);
+    vec3 normalWS = GirlsFrontline_SurfaceNormal(input_, facing);
+    vec3 viewDirectionWS = ruriData.viewDirectionWS;
+    vec3 bitangentWS = input_.tangentWS.w * cross(input_.normalWS, input_.tangentWS.xyz);
+    vec3 albedo = ruriData.albedo;
+    vec4 rmo = texture(_RMOTex, input_.uv);
+    float roughness = rmo.x;
+    float metallic = rmo.y;
+    bool anisotropicDistribution = _UseStockingFalloff && abs(_AnisotropicGXX) > 0.001;
+    float NoVRaw = max(dot(normalWS, viewDirectionWS), 0.0);
+    float NoV = min(NoVRaw + 9.9999997e-06, 1.0);
+    vec3 diffuseColor = albedo - albedo * metallic;
     vec3 specularColor;
-    float emissionGate = 1.0;
+    vec3 emission = albedo * _EmissiveIntensity * rmo.w;
     if (_UseStockingFalloff)
     {
-        float stockingLevel = ((abs(_AnisotropicGXX) > 0.001 ? ruriData.specular : 0.5)) * 0.08;
-        specularColor = stockingLevel + (ruriData.albedo - stockingLevel) * ruriData.metallic;
-        vec3 falloff = lerp(_StockingFalloffColor.xyz, _StockingCenterColor.xyz, pow(max(NoV, 1e-4), _StockingFalloffPower));
+        float stockingLevel = ((anisotropicDistribution ? rmo.w : 0.5)) * 0.08;
+        specularColor = albedo * metallic + (stockingLevel - stockingLevel * metallic);
+        vec3 falloff = lerp(_StockingFalloffColor.xyz, _StockingCenterColor.xyz, exp2(log2(NoV) * _StockingFalloffPower));
         diffuseColor *= falloff;
-        emissionGate = (abs(_AnisotropicGXX) > 0.001 ? 0.0 : 1.0);
+        if (anisotropicDistribution)
+            emission = float3(0.0, 0.0, 0.0);
     }
     else
     {
-        specularColor = lerp(half3(0.04, 0.04, 0.04), ruriData.albedo, ruriData.metallic);
+        specularColor = albedo * metallic + (0.04 - metallic * 0.04);
     }
-    vec3 attenuation = CalcDiffuseGirlsFrontline2(ruriData.mainLight.color, vec3(ruriData.mainLight.distanceAttenuation), NoL, ruriData.mainLight.shadowAttenuation, ruriData.useRampVal);
-    vec3 specularBRDF = CalcSpecularGirlsFrontline2(specularColor, ruriData.roughness, normalWS, input_.tangentWS.xyz, CharaVaryings_GetBitangentWS(input_), ruriData.H, NoH, NoV, NoL, VoH, LoH, _AnisotropicGXX, ruriData.useRampVal);
-    vec3 ambient = max(SampleSH(normalWS), 0.0);
-    vec3 emission = ruriData.albedo * _EmissiveIntensity * ruriData.specular * emissionGate;
-    vec3 finalColor = (diffuseColor + specularBRDF) * attenuation + ambient * diffuseColor * ruriData.occlusion + GirlsFrontline_EnvironmentSpecular(specularColor, ruriData.roughness, NoV, normalWS, ruriData.V, ruriData.useRampVal) + emission;
-    finalColor *= _FinalTint.xyz;
+    Light mainLight = GetMainLight();
+    vec3 lightDirection = mainLight.direction;
+    float shadow = GirlsFrontline_MainLightShadow(ruriData.positionWS, lightDirection, ruriData.shadowMask, 0.0);
+    vec3 lit = GirlsFrontline_BodyLight(lightDirection, shadow, 0.125, normalWS, viewDirectionWS, bitangentWS, diffuseColor, specularColor, roughness, NoV, anisotropicDistribution);
+    vec3 color = lit * mainLight.color * mainLight.distanceAttenuation;
+    color += GirlsFrontline_Ambient(normalWS, _UseGIFlatten) * diffuseColor * rmo.z;
+    vec3 lightPosition = ruriData.positionWS + ((facing > 0.0 ? input_.normalWS : -input_.normalWS)) * 0.005;
+    vec4 shadowMask = ruriData.shadowMask;
+    InputData inputData = ruriZeroInputData();
+    inputData.normalizedScreenSpaceUV = ruriData.normalizedScreenSpaceUV;
+    inputData.positionWS = lightPosition;
+    uint pixelLightCount = GetAdditionalLightsCount();
+    LIGHT_LOOP_BEGIN(pixelLightCount)
+        Light light = GetAdditionalLight(lightIndex, lightPosition, shadowMask);
+        vec3 additional = GirlsFrontline_BodyLight(light.direction, 1.0, 0.875, normalWS, viewDirectionWS, bitangentWS, diffuseColor, specularColor, roughness, NoV, anisotropicDistribution);
+        color += additional * light.color * light.distanceAttenuation;
+    LIGHT_LOOP_END
+    color += GirlsFrontline_EnvironmentSpecular(specularColor, roughness, NoVRaw, normalWS, viewDirectionWS, lightDirection);
+    color += emission;
+    color *= _FinalTint.xyz;
     outputData.baseColor = ruriData.albedo;
-    outputData.roughness = ruriData.roughness;
-    outputData.metallic = ruriData.metallic;
-    outputData.specular = ruriData.specular;
-    outputData.normalWS = ruriData.normalWS;
-    outputData.globalIllumination = half4(finalColor, ruriData.alpha);
+    outputData.roughness = roughness;
+    outputData.metallic = metallic;
+    outputData.specular = rmo.w;
+    outputData.normalWS = normalWS;
+    outputData.globalIllumination = float4(color, ruriData.alpha);
 }
 
 // 部位 = 材质指着哪份着色器(<c>ShaderName</c>),不是属性指纹。
-// · <c>uber</c> 与 <c>ubertrans</c> 是**同一个表面**:两份反编译件的片元尾段
-// (自发光 + 环境高光 + 直接光 + 间接漫反射 → <c>_FinalTint</c> → 选中描色)逐项同构,
-// 差别全在 pass 状态与写出的 alpha(不透明恒 1 / 半透明写底色 alpha),
-// 所以收成 <c>Aliases</c> 而不是再开一个部位(一个部位 = 一棵树,多开一份就是同一表面的第二真源)。
-// · 脸与身体共用 <c>uber</c>,靠 <c>_UseBlendTex</c> 区分 —— 那条开关在这个参考角色的
-// 12 份 uber 材质里只有 2 份为 1,正是两份脸材质,且它们绑的三张图与脸那份变体的纹理表逐一对上。
+// · <c>uber</c> 与 <c>ubertrans</c> 是**同一个表面**:两份反编译件的片元尾段逐项同构,差别全在 pass 状态与
+// 写出的 alpha,所以收成 <c>Aliases</c> 而不是再开一个部位。
+// · 脸与身体共用 <c>uber</c>,靠 <c>_UseBlendTex</c>(关键字 <c>_USE_BLEND_TEX</c>)区分。
 // · 眼睛三份各是自己的着色器、自己的混合,分成三个部位。
-void Fragment_GirlsFrontline(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData)
+// · 描边趟在 uber 里标作 GFOutline、在 ubertrans 里标作 GFCharTransOutline,两趟逐项同式。
+void Fragment_GirlsFrontline(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData, float facing)
 {
-    GirlsFrontline_Setup(ruriData, input_);
-    int partId = _CharaPartID;
-    if (partId == 1)
-        GirlsFrontline_Face(ruriData, input_, outputData);
+    if (_RuriOutlineShellGate)
+    {
+        GirlsFrontline_Outline(ruriData, input_, outputData);
+    }
     else
-        if (partId == 2)
-            GirlsFrontline_Eyes(ruriData, input_, outputData);
+    {
+        GirlsFrontline_Setup(ruriData, input_);
+        int partId = _CharaPartID;
+        if (partId == 1)
+            GirlsFrontline_Face(ruriData, input_, outputData, facing);
         else
-            if (partId == 3)
-                GirlsFrontline_EyeBlendAdd(ruriData, input_, outputData);
+            if (partId == 2)
+                GirlsFrontline_Eyes(ruriData, input_, outputData);
             else
-                if (partId == 4)
-                    GirlsFrontline_EyeBlendMultiply(ruriData, input_, outputData);
+                if (partId == 3)
+                    GirlsFrontline_EyeBlendAdd(ruriData, input_, outputData);
                 else
-                    GirlsFrontline_Body(ruriData, input_, outputData);
+                    if (partId == 4)
+                        GirlsFrontline_EyeBlendMultiply(ruriData, input_, outputData);
+                    else
+                        GirlsFrontline_Body(ruriData, input_, outputData, facing);
+    }
 }
 
 void CalcRuriNPR(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData, float facing)
 {
-    Fragment_GirlsFrontline(ruriData, input_, outputData);
-}
-
-vec3 RuriCharaAdditionalLights(vec3 positionWS, vec3 N, vec2 normalizedScreenSpaceUV, vec3 albedo)
-{
-    vec3 lightAccum = float3(0.0, 0.0, 0.0);
-    return lightAccum;
+    Fragment_GirlsFrontline(ruriData, input_, outputData, facing);
 }
 
 vec3 PackGBufferNormal(vec3 normalWS)
@@ -1255,7 +1390,7 @@ GBufferFragOutput RuriGBufferDataToCharaGbuffer(RuriData ruriData, RuriGBufferDa
     output_.gBuffer0 = float4(outputData.baseColor, outputData.alpha);
     output_.gBuffer1 = float4(unused, outputData.metallic, outputData.specular, outputData.occlusion);
     output_.gBuffer2 = float4(packedNormalWS, 1.0 - outputData.roughness);
-    output_.color = vec4(outputData.globalIllumination);
+    output_.color = half4(outputData.globalIllumination);
     return output_;
 }
 
@@ -1280,7 +1415,6 @@ GBufferFragOutput CharaMixedPassFragment(CharaVaryings input_, float facing)
     RuriGBufferData outputData = ruriZeroRuriGBufferData();
     CalcRuriNPR(ruriData, input_, outputData, facing);
     outputData.baseColor = outputData.globalIllumination.xyz;
-    outputData.baseColor.rgb = outputData.baseColor.rgb + RuriCharaAdditionalLights(ruriData.positionWS, ruriData.normalWS, ruriData.normalizedScreenSpaceUV, ruriData.albedo);
     outputData.alpha = ruriData.alpha;
     return RuriGBufferDataToCharaGbuffer(ruriData, outputData);
 }
