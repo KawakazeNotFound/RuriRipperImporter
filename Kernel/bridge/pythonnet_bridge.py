@@ -153,14 +153,23 @@ def _claim_coreclr(runtime_config):
     failure to a much more confusing spot later (clr.AddReference silently not
     registering the assembly's namespaces, surfacing as "No module named
     'Ruri'" at the unrelated from-import line) -- fail loudly and specifically
-    right here instead."""
+    right here instead.
+
+    The runtime starts as the application that lives in the reader folder. A
+    runtime-config start names no application, so hostfxr leaves
+    APP_CONTEXT_BASE_DIRECTORY empty, and a library that finds its native half
+    beside the application (Silk.NET's loader for spirv-cross, which the shader
+    decompiler emits through) finds nothing -- every shader export failed. The
+    base is stated here, the one value ``dotnet <app>.dll`` would have set."""
     global _runtime_set
     if _runtime_set:
         return
     from clr_loader import get_coreclr
     from pythonnet import set_runtime
+    application_base = os.path.join(os.path.dirname(runtime_config), "")
     try:
-        set_runtime(get_coreclr(runtime_config=runtime_config))
+        set_runtime(get_coreclr(runtime_config=runtime_config,
+                                properties={"APP_CONTEXT_BASE_DIRECTORY": application_base}))
     except RuntimeError as exc:
         if "already been loaded" not in str(exc):
             raise
