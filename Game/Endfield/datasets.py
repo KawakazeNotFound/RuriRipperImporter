@@ -62,6 +62,7 @@ SCENE_ENVIRONMENT = "endfield.scene.environment"
 SCENE_AMBIENT = "endfield.scene.ambient"
 SCENE_GLOBALS = "endfield.scene.globals"
 SCENE_IRRADIANCE = "endfield.scene.irradiance"
+SCENE_REFLECTION = "endfield.scene.reflection"
 
 
 def _table(dataset_id, **args):
@@ -287,6 +288,15 @@ def scene_irradiance(map_name, anchor):
     as it is."""
     x, y, z = anchor
     return cabmap_state.BRIDGE.game_data_blob(SCENE_IRRADIANCE, map=map_name, x=x, y=y, z=z)
+
+
+def scene_reflection(map_name, anchor, states):
+    """The reflection probes a camera at ``anchor`` (a point in the game's own world)
+    uses, in the given scene states, rebuilt as the game's probe records and
+    octahedral probe array -- a level-resources payload the host applies as it is."""
+    x, y, z = anchor
+    return cabmap_state.BRIDGE.game_data_blob(
+        SCENE_REFLECTION, map=map_name, x=x, y=y, z=z, states=[str(state) for state in states])
 
 
 def scene_grading(map_name):

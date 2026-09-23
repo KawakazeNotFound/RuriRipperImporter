@@ -331,15 +331,18 @@ def _import(context, arguments):
     built = loading.load(context, [seed], options)
     notes = list(built.warnings[:2])
     # Everything the level states for every material, as one state the stacks read live: its
-    # static globals (fog, the default sky SH) and its baked irradiance, rebuilt as the game's
-    # camera clipmaps around wherever the document is looked at from.
+    # static globals (fog, the default sky SH), its baked irradiance rebuilt as the game's camera
+    # clipmaps and the reflection probes the game's camera would use, both around wherever the
+    # document is looked at from.
     if host_port.SceneGraph in host.capabilities:
         anchor = host.source_view_position(context)
         if anchor is None:
             notes.append("nothing in the scene to centre the level's lighting on")
         else:
             _written, unread = host.apply_level_resources(
-                context, datasets.scene_globals(map_name), [datasets.scene_irradiance(map_name, anchor)])
+                context, datasets.scene_globals(map_name),
+                [datasets.scene_irradiance(map_name, anchor),
+                 datasets.scene_reflection(map_name, anchor, [state_id])])
             if unread:
                 notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
     # The level states its own colour grading; a host with a display chain takes it.
