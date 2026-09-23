@@ -670,11 +670,10 @@ class RipperBridge:
         return self.game_data("core.folders.children", folder=str(folder))
 
     def folder_files(self, folder):
-        """The rows listed IN one virtual folder, as row ids."""
+        """The rows listed IN one virtual folder, as int32 row ids straight out of the reader's
+        bytes -- a root folder can hold millions."""
         import numpy as np
-        table = self.game_data("core.folders.files", folder=str(folder))
-        return np.asarray([int(float(table.cell(index, "row"))) for index in range(len(table))],
-                          dtype="<i4")
+        return np.frombuffer(self.game_data_blob("core.folders.files", folder=str(folder)), dtype="<i4")
 
     def folder_exists(self, folder):
         """Whether a remembered folder still exists in THIS map."""
@@ -696,18 +695,14 @@ class RipperBridge:
         return table
 
     def _ordered(self, ids, sort_column, sort_direction):
-        """Row ids in the order a display column puts them. Load order is the
-        order the reader already gave them in, so it costs nothing."""
+        """Row ids in the order a display column puts them (direction 1 up, 2 down), or in load
+        order when none is sorted -- ordered by the reader's own engine over its own ranks, never
+        here."""
         import numpy as np
-        if int(sort_direction) == 0 or not sort_column:
-            return np.asarray(ids, dtype="<i4")
-        table = self._rows_handle()
-        if not table.has(str(sort_column)):
-            return np.asarray(ids, dtype="<i4")
-        keys = [str(table.cell(int(row), str(sort_column))).lower() for row in ids]
-        order = sorted(range(len(keys)), key=lambda index: keys[index],
-                       reverse=int(sort_direction) == 2)
-        return np.asarray([int(ids[index]) for index in order], dtype="<i4")
+        payload = np.ascontiguousarray(ids, dtype="<i4").tobytes()
+        return np.frombuffer(self.game_data_blob(
+            "core.rows.order", payload=payload, column=str(sort_column or ""),
+            direction=int(sort_direction)), dtype="<i4")
 
     def search_table(self, query, rules=None, sort_column="name", sort_direction=0):
         """Quick search + Include/Exclude rules + sort over the loaded cabmap,

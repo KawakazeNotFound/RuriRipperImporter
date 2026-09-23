@@ -1850,7 +1850,10 @@ def _load_steps(context, state, seeds, clips, reset_scene, scene, panel=""):
                                              activate=True)
         lines.extend(clip_lines)
     _sync_texture_roles(state)
-    _reapply_and_refresh(context)
+    # A load changes nothing a listing shows, so the listing is not rebuilt -- only the
+    # window drawn from it, which is a page of rows rather than a folder of millions.
+    _rebuild_window(state)
+    _redraw()
     message = "  ".join(["{0} object(s) placed, {1} performance(s) played from {2} seed(s).".format(
         placed, played, len(seeds) + len(clips))] + lines[:3])
     level = host_port.INFO if placed or played else host_port.WARNING

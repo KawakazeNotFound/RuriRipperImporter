@@ -334,13 +334,19 @@ def load_rows(preferred_dir=()):
     ``preferred_dir`` lets a host restore the folder the user was last browsing
     instead of dumping them back at the root on every Load; a path that no
     longer exists in THIS map (a different game, a renamed folder) simply falls
-    back to the root -- see browse_dir."""
+    back to the root -- see browse_dir.
+
+    Nothing is listed here: every caller refreshes the view right after (the
+    refresh is what knows whether a search is active), and a root folder can hold
+    millions of rows, so listing it here too was listing it twice."""
     if BRIDGE is None:
         raise RuntimeError("No bridge session -- call ensure_bridge() first.")
     ACTIVE.ROWS = BRIDGE.enumerate_table()
     ACTIVE._CAB_INDEX = None    # rebuilt lazily on first selection
     clear_selection()           # cab keys from a previous map mean nothing in this one
-    browse_dir(tuple(preferred_dir))
+    ACTIVE.CURRENT_DIR = tuple(preferred_dir)
+    ACTIVE.CURRENT_SUBFOLDERS = []
+    ACTIVE.VISIBLE = []
 
 
 class _RowsByCab:
@@ -393,8 +399,8 @@ def browse_dir(path):
     children = BRIDGE.folder_children(dir_to_key(path))
     ACTIVE.CURRENT_SUBFOLDERS = [(children.cell(row, "name"), int(children.cell(row, "count")))
                                  for row in range(children.row_count)]
-    ACTIVE.VISIBLE = BRIDGE.folder_files(dir_to_key(path)).tolist()
-    _apply_sort()
+    ACTIVE.VISIBLE = BRIDGE.sort_rows(BRIDGE.folder_files(dir_to_key(path)),
+                                      ACTIVE._sort_column, ACTIVE._sort_dir).tolist()
 
 
 def folder_of(row_index, query="", path=None):
@@ -466,10 +472,8 @@ def apply_filter(query, rules=()):
     if BRIDGE is None or rows is None or len(rows) == 0:
         ACTIVE.VISIBLE = []
         return
-    ACTIVE.VISIBLE = [index for index in
-                      BRIDGE.search_table((query or "").strip(), rules,
-                                          ACTIVE._sort_column, ACTIVE._sort_dir).tolist()
-                      if index < len(rows)]
+    found = BRIDGE.search_table((query or "").strip(), rules, ACTIVE._sort_column, ACTIVE._sort_dir)
+    ACTIVE.VISIBLE = found[found < len(rows)].tolist()
 
 
 def reapply_filter(query):
@@ -482,13 +486,11 @@ def reapply_filter(query):
 
 
 def _apply_sort():
-    if ACTIVE._sort_dir == 0:
-        ACTIVE.VISIBLE.sort()  # back to load order
-        return
     if BRIDGE is None or not ACTIVE.VISIBLE:
         return
-    # Same C# engine as apply_filter, over the current id set (the folder
-    # view's listing, or a re-click on an already-filtered result).
+    # Same C# engine as apply_filter and browse_dir, over the current id set (the
+    # folder view's listing, or a re-click on an already-filtered result) -- load
+    # order included, when no column is sorted.
     ACTIVE.VISIBLE = BRIDGE.sort_rows(ACTIVE.VISIBLE, ACTIVE._sort_column, ACTIVE._sort_dir).tolist()
 
 
