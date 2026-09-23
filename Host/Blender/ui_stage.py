@@ -38,8 +38,6 @@ LIGHT_DIRECTION = staging.LIGHT_DIRECTION
 LIGHT_ENERGY = staging.LIGHT_ENERGY
 LIGHT_ANGLE = staging.LIGHT_ANGLE
 LIGHT_COLOR = staging.LIGHT_COLOR
-LIGHT_TEMPERATURE = staging.LIGHT_TEMPERATURE
-LIGHT_USE_TEMPERATURE = staging.LIGHT_USE_TEMPERATURE
 WORLD_COLOR = staging.WORLD_COLOR
 
 _XYZ = {"x": 0, "y": 1, "z": 2}
@@ -116,8 +114,9 @@ def _write_light(obj, target, value, scale):
     a blown-white frame. The Lambert 1/pi is therefore accounted for exactly
     once, on the side that authored it.
 
-    A colour temperature travels as Kelvin, which Blender carries on the light
-    itself."""
+    The colour arrives as the game emits it, linear and per unit of that energy:
+    a temperature is the game's own curve, folded in before it gets here, never
+    Blender's blackbody."""
     data = obj.data
     if target == LIGHT_DIRECTION:
         if not isinstance(value, dict):
@@ -138,12 +137,6 @@ def _write_light(obj, target, value, scale):
         components = _vector(value, "rgb")
         if len(components) >= 3:
             data.color = (components[0], components[1], components[2])
-    elif target == LIGHT_USE_TEMPERATURE:
-        if hasattr(data, "use_temperature"):
-            data.use_temperature = bool(_scalar(value))
-    elif target == LIGHT_TEMPERATURE:
-        if _scalar(value) and hasattr(data, "temperature"):
-            data.temperature = _scalar(value)
 
 
 def _world(context, ambient, scale):

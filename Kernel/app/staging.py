@@ -31,17 +31,16 @@ from __future__ import annotations
 LIGHT_DIRECTION = "light.direction"
 LIGHT_ENERGY = "light.energy"
 LIGHT_ANGLE = "light.angle"
+#: The colour the light emits per unit of its energy, linear -- any colour
+#: temperature already folded in by the game's own rule.
 LIGHT_COLOR = "light.color"
-LIGHT_TEMPERATURE = "light.temperature"
-LIGHT_USE_TEMPERATURE = "light.useTemperature"
 #: The backdrop level: the constant term of the stage's own baked sky.
 WORLD_COLOR = "world.color"
 #: A per-material parameter of the game's own shading stack.
 CHARACTER_PARAMS = "material.characterParams"
 
-LIGHT_TARGETS = (LIGHT_DIRECTION, LIGHT_ENERGY, LIGHT_ANGLE, LIGHT_COLOR,
-                 LIGHT_TEMPERATURE, LIGHT_USE_TEMPERATURE)
+LIGHT_TARGETS = (LIGHT_DIRECTION, LIGHT_ENERGY, LIGHT_ANGLE, LIGHT_COLOR)
 
 #: The targets an exposure change scales. A radiance moves with the stops; a
-#: direction, an angle and a temperature do not.
+#: direction and an angle do not.
 SCALED_TARGETS = (LIGHT_ENERGY, WORLD_COLOR)
