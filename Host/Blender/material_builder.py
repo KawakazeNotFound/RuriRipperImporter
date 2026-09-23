@@ -264,21 +264,26 @@ def refresh_light_roles():
 
 
 def apply_post_stages(scene, force=False):
-    """Install every registered post stage onto a scene.
+    """Install onto a scene the post stage that grades what it holds.
+
+    A session carries every deployed game's stacks, and a scene has ONE compositor
+    tree, so the stage is the one whose own content is in the scene: each stage
+    states which shading stacks' materials it grades (``grades``). A scene holding
+    two stages' content has no single answer, and that is reported with nothing
+    installed rather than letting whichever installs last win.
 
     Already installed is skipped by default: install() rebuilds the whole
     compositor tree and writes the view transform and the viewport's compositor
     switch back to shipped values, so re-running it on every import silently
     zeroes every knob the user turned. ``force`` is the panel button that means
-    start over.
-
-    More than one stage would be two owners of one compositor tree, so that is
-    reported rather than silently letting the last one win."""
-    if len(POST_STAGES) > 1:
-        print("[material] !! {0} post stages registered; a scene has ONE compositor "
-              "tree, the last installed wins".format(len(POST_STAGES)))
-    return [stage.install(scene) for stage in POST_STAGES
-            if force or not stage.installed(scene)]
+    start over."""
+    graded = [stage for stage in POST_STAGES if stage.grades(scene)]
+    if len(graded) > 1:
+        print("[material] !! the scene holds content of {0} post stages ({1}); a scene has ONE "
+              "compositor tree, so none is installed".format(
+                  len(graded), sorted(stage.post["group"] for stage in graded)))
+        return []
+    return [stage.install(scene) for stage in graded if force or not stage.installed(scene)]
 
 
 def remove_post_stages(scene):
@@ -304,33 +309,39 @@ def world_basis():
 
 
 def apply_post_inputs(scene, values):
-    """Drive the host-side inputs of every post stage that declares any.
+    """Drive the host-side inputs of the post stage they belong to.
 
     ``values`` is keyed by the stage's own input names; each is the DIFFERENCE from
     identity, because an entry parameter's socket default is always zero and only a
     difference makes "nothing drives it" mean "no change" -- a session with a character
-    and no scene has to land on identity.
+    and no scene has to land on identity. A value input's entry is its components; an
+    image input's entry is its texels, one row of them, which the stage turns into the
+    image its group samples.
 
-    A stage whose inputs are not all supplied is refused rather than part-written: the
-    missing one would silently fall back to identity and the picture would be quietly
-    wrong with nothing to show for it.
+    The stage is the one whose declared inputs are exactly the names supplied: a set that
+    is any other stage's inputs, or a stage's inputs with one missing, is refused rather
+    than part-written -- the missing one would silently fall back to identity and the
+    picture would be quietly wrong with nothing to show for it.
 
     The inputs live on the installed stage, so a stage not installed yet is installed
     here first: an import states its grading before the derived-state pass would get
     round to installing the stage, and written into nothing the grading was lost."""
-    written = 0
-    for stage in POST_STAGES:
-        names = stage.extra_inputs()
-        if not names:
-            continue
-        missing = [name for name in names if name not in values]
-        if missing:
-            raise KeyError("[material] post stage wants {0}; {1} not supplied".format(
-                names, missing))
-        if not stage.installed(scene):
-            stage.install(scene)
-        written += stage.set_extra(scene, [values[name] for name in names])
-    return written
+    supplied = set(values)
+    owners = [stage for stage in POST_STAGES
+              if set(stage.extra_inputs()) | set(stage.extra_images()) == supplied]
+    if len(owners) != 1:
+        raise KeyError("[material] {0} post stage(s) take exactly the inputs {1}; the stages take {2}".format(
+            len(owners), sorted(supplied),
+            {stage.post["group"]: sorted(stage.extra_inputs() + stage.extra_images()) for stage in POST_STAGES}))
+    stage = owners[0]
+    if not stage.installed(scene):
+        stage.install(scene)
+    written = stage.set_extra(scene, [values[name] for name in stage.extra_inputs()])
+    images = {}
+    for name in stage.extra_images():
+        texels = [float(texel) for texel in values[name]]
+        images[name] = (len(texels), 1, [channel for texel in texels for channel in (texel, texel, texel, 1.0)])
+    return written + stage.set_images(scene, images)
 
 
 def apply_level_resources(scene, values, payloads):

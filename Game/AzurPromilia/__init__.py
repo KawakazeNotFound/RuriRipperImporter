@@ -1,11 +1,13 @@
 """AzurPromilia -- everything the add-on has for this game and nothing else.
 
-Two tabs, neither of which means anything for another title:
+Three tabs, none of which means anything for another title:
 
 ``Scene``      every scene the install carries, under the folder tree the game files it in, saying
                which of them ship a built scene file at all. (``scene``)
 ``Character``  the cast off the game's own tables, one row per outfit under the character it
                dresses. (``roster``)
+``Display``    the volume sets the render pipeline puts its post chain under, and the colour
+               grading each gives it. (``display``)
 
 Every reading behind them lives upstream in ``Ruri.RipperHook.AzurPromilia``: the configuration
 tables and the cipher they are kept under, the outfit -> unit -> model join, and what an avatar seed
@@ -20,12 +22,13 @@ from __future__ import annotations
 
 import importlib
 
+from ...Kernel import host as host_port
 from .. import GameModule, GameSection, GameTab
 
-#: The parts the two tabs are composed of, each with the capability its host must answer. Both are
-#: a list whose rows load through the kernel's own verbs, which need nothing of the host the browser
-#: does not already need, so neither declares a capability.
-SECTIONS = (GameSection("roster"), GameSection("scene"))
+#: The parts the tabs are composed of, each with the capability its host must answer. The cast and
+#: the scenes are lists whose rows load through the kernel's own verbs, which need nothing of the host
+#: the browser does not already need; the volume sets grade the host's display chain, so they need one.
+SECTIONS = (GameSection("roster"), GameSection("scene"), GameSection("display", host_port.Compositor))
 
 _LOADED = []
 
@@ -56,6 +59,9 @@ GAME_MODULE = GameModule(
         GameTab("character", "Character",
                 "The cast off the game's own tables, one row per outfit",
                 ("roster", "draw")),
+        GameTab("display", "Display",
+                "The volume sets the pipeline grades its post chain with",
+                ("display", "draw"), requires=host_port.Compositor),
     ),
     register=_register,
     unregister=_unregister,

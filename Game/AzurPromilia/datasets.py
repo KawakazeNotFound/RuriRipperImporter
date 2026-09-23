@@ -12,6 +12,8 @@ from ...Kernel.bridge import cabmap_state
 
 CAST = "azurpromilia.roster.cast"
 SCENES = "azurpromilia.scene.list"
+POST_VOLUMES = "azurpromilia.post.volumes"
+POST_GRADING = "azurpromilia.post.grading"
 
 
 def _table(dataset_id, **args):
@@ -26,3 +28,23 @@ def cast():
 def scenes():
     """Every scene the install carries, with whether its built scene file is present."""
     return _table(SCENES)
+
+
+def post_volumes():
+    """The volume sets the title's pipeline puts a post chain under."""
+    return _table(POST_VOLUMES)
+
+
+def post_grading(volume):
+    """What one volume set grades the post chain with, keyed by the post stage's own input names: a
+    scalar input as a float, a vector input's components as a tuple, an image input's texels as a
+    list. The hook states each input one component per row, in order."""
+    table = _table(POST_GRADING, volume=volume)
+    components = {}
+    images = set()
+    for name, image, value in zip(table.values("input"), table.values("image"), table.values("value")):
+        components.setdefault(name, []).append(float(value))
+        if image:
+            images.add(name)
+    return {name: (values if name in images else values[0] if len(values) == 1 else tuple(values))
+            for name, values in components.items()}

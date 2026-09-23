@@ -246,7 +246,8 @@ class Compositor(abc.ABC):
     @abc.abstractmethod
     def apply_post_inputs(self, context, values):
         """Drive the display chain's host-side inputs from a level's own data --
-        the colour grading a scene states, keyed by the chain's own input names.
+        the colour grading a scene states, keyed by the chain's own input names: a
+        value input's components, or an image input's texels (one row of them).
         Returns how many inputs were written."""
 
 
