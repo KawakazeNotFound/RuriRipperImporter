@@ -1,0 +1,3898 @@
+"""Ruri Blender 材质栈运行时(生成物,勿手改)。
+
+本平台产物同批同 stamp(25613f68c980ec71):每个生成栈一个 <栈名>.blend(模板节点组库,codegen 期
+headless 物化,导入期默认 append 进当前文件),外加**全平台唯一的**本文件 ruri_azurpromilia.py ——
+运行时 + 全部栈清单(内联在 MANIFESTS,每条自带它的 blend 文件名与组名单)。
+
+清单内联而不是单出一个 json,是因为插件 register() 跑在 Blender 的**受限上下文**里
+(bpy.data 此刻是 _RestrictData),那时读不了 .blend 里的任何东西,而宿主又要在注册期
+拿 INTERFACE 建 PropertyGroup。这一个 .py 也是不可省的下限:.blend 没法把自己注册进宿主。
+
+内核版本/stamp 对不上一律响亮拒绝,没有任何现场重建退路。
+"""
+import filecmp
+import json
+import math
+import os
+import shutil
+
+import bpy
+
+RUNTIME_KERNEL = 'rvg1'
+
+if bpy.app.version < (5, 3, 0):
+    raise RuntimeError('[Ruri] 产物按 Blender 5.3 基准物化(EEVEE 原生灯节点:Light Info / '
+                       'Light Evaluation / Shadow Raycast / Light Accumulation);当前 %d.%d 没有这些节点。'
+                       % bpy.app.version[:2])
+MANIFESTS = json.loads(r'''[{"kernel":"rvg1","stamp":"25613f68c980ec71","names":{"panel_key":"ruri_character_uber_azurpromilia","panel_title":"Ruri_AzurPromilia_Uber \u53C2\u6570","mat_table":"Ruri AzurPromilia Uber Params","template_mat":"Ruri AzurPromilia Uber Tpl ","vtx_modifier":"Ruri AzurPromilia Uber Vertex","vtx_tree_prefix":"Ruri AzurPromilia Uber Vertex ","outline_template":"Ruri AzurPromilia Uber Outline","material_name":"Ruri_AzurPromilia_Uber","st_slot":"_BaseMap","st_node":"RuriBaseMapST"},"known_parts":["Standard","Face","Eyes","Hair","Eyebrow"],"material_keywords":["_ALPHATEST_ON","_DISABLE_SHADOW_RECEIVE","_DYE_LAYER_ON","_MAKEUP_ON","_SHIFT_TEX_ON","_SIWA_ON","_USE_SCRIPT_VALUE"],"variant_uniform":"_CharaPartID","feature_toggles":["_ALPHATEST_ON","_AddMatCapOn","_DISABLE_SHADOW_RECEIVE","_DYE_LAYER_ON","_DyeingLerpMode","_ExpressionColorMask","_EyebrowNoRamp","_IsLumInverse","_KiboEnable","_MAKEUP_ON","_MetalMapOff","_NormalMapOn","_SHIFT_TEX_ON","_SIWA_ON","_SpecularFlipHorizontal","_SwitchToMultiply","_USE_SCRIPT_VALUE","_UseBrighten","_UseDiffuse","_UseRampPartColor","_UseRimNoiseMask","_UseTestLightDir","_UseVertexColorForColor"],"variant_values":{"Standard":0,"Face":1,"Eyes":2,"Hair":3,"Eyebrow":5},"default_part":"Standard","blend":"ruri_character_uber_azurpromilia.blend","parts":{"Standard":{"crossings":[["X0_0",1,0,1],["X0_3",1,0,1],["X0_4",1,0,1],["X0_5",0,0,1],["X0_6",0,0,1],["X0_7",1,0,1],["X0_8",1,0,1],["X0_9",1,0,1],["X0_10",0,0,1],["X0_11",1,0,1],["X0_12",1,0,1],["X0_13",0,0,1],["X0_14",1,0,1],["X0_15",0,0,1],["X0_16",0,0,1],["X0_17",0,0,1],["X0_18",1,0,1],["X0_19",1,0,1],["X0_20",0,0,1],["X0_21",0,0,1],["X0_22",0,0,1],["X0_23",0,0,1],["X0_24",0,0,1],["X0_25",1,0,1],["X0_26",0,0,1],["X0_27",0,0,1],["X0_28",0,0,1],["X0_29",0,0,1],["X0_30",0,0,1],["X0_32",0,0,1],["X0_33",0,0,1],["X0_34",0,0,1],["X0_35",0,0,1],["X0_36",0,0,1],["X0_37",0,0,1],["X0_38",0,0,1],["X0_39",0,0,1],["X0_40",0,0,1],["X0_41",0,0,1],["X0_42",0,0,1],["X0_43",0,0,1],["X0_54",0,0,1],["X0_55",0,0,1],["X0_61",0,0,1],["X0_62",0,0,1],["X0_63",0,0,1],["X0_73",1,0,1],["X0_0",1,0,2],["X0_1",1,0,2],["X0_2",1,0,2],["X0_12",1,0,2],["X1_1",0,1,2],["X1_2",1,1,2],["X1_3",0,1,2],["X1_4",0,1,2],["X1_5",0,1,2],["X1_6",0,1,2],["X1_8",1,1,2],["X1_9",0,1,2],["X1_10",0,1,2],["X1_11",0,1,2],["X1_12",1,1,2],["X1_13",0,1,2],["X1_14",1,1,2],["X0_31",0,0,2],["X0_32",0,0,2],["X1_15",1,1,2],["X1_16",0,1,2],["X1_17",0,1,2],["X1_18",1,1,2],["X1_19",1,1,2],["X1_20",0,1,2],["X1_21",0,1,2],["X1_22",0,1,2],["X1_23",0,1,2],["X1_24",0,1,2],["X1_25",0,1,2],["X1_26",0,1,2],["X1_28",0,1,2],["X1_29",0,1,2],["X1_31",0,1,2],["X1_32",0,1,2],["X1_33",1,1,2],["X1_34",0,1,2],["X1_35",0,1,2],["X0_45",0,0,2],["X1_51",1,1,2],["X1_52",1,1,2],["X1_0",1,1,3],["X1_3",0,1,3],["X1_5",0,1,3],["X0_19",1,0,3],["X1_7",0,1,3],["X1_8",1,1,3],["X1_16",0,1,3],["X1_17",0,1,3],["X1_27",0,1,3],["X1_30",0,1,3],["X2_0",1,2,3],["X1_36",0,1,3],["X1_37",0,1,3],["X2_1",0,2,3],["X0_44",0,0,3],["X2_2",1,2,3],["X1_38",0,1,3],["X0_46",0,0,3],["X1_39",0,1,3],["X1_40",1,1,3],["X0_47",0,0,3],["X0_48",0,0,3],["X0_49",0,0,3],["X1_41",0,1,3],["X1_42",0,1,3],["X0_50",0,0,3],["X0_51",0,0,3],["X1_43",1,1,3],["X1_44",1,1,3],["X1_45",0,1,3],["X0_56",0,0,3],["X1_47",0,1,3],["X0_58",0,0,3],["X0_59",1,0,3],["X0_60",0,0,3],["X1_48",0,1,3],["X1_49",1,1,3],["X2_3",1,2,3],["X1_55",1,1,3],["X1_3",0,1,4],["X0_19",1,0,4],["X0_32",0,0,4],["X3_0",1,3,4],["X3_1",0,3,4],["X1_43",1,1,4],["X1_44",1,1,4],["X0_52",0,0,4],["X0_53",0,0,4],["X3_2",1,3,4],["X1_46",0,1,4],["X3_3",0,3,4],["X3_4",1,3,4],["X3_5",1,3,4],["X0_57",0,0,4],["X3_6",0,3,4],["X3_7",1,3,4],["X0_64",0,0,4],["X0_65",0,0,4],["X0_66",1,0,4],["X1_50",0,1,4],["X0_67",0,0,4],["X0_68",0,0,4],["X0_69",0,0,4],["X0_70",0,0,4],["X0_71",0,0,4],["X0_72",0,0,4],["X3_8",1,3,4],["X3_9",1,3,4],["X1_53",1,1,4],["X1_54",1,1,4],["X0_67",0,0,5],["X0_68",0,0,5],["X0_69",0,0,5],["X0_70",0,0,5],["X0_71",0,0,5],["X0_72",0,0,5]],"finals":{"ret_gBuffer0":[5,1],"ret_gBuffer0_w":[1,0],"ret_gBuffer1":[0,1],"ret_gBuffer1_w":[0,0],"ret_gBuffer2":[0,1],"ret_gBuffer2_w":[0,0],"ret_color":[5,1],"ret_color_w":[0,0],"ret_depth":[0,0],"ret_shadowMask":[0,1],"ret_shadowMask_w":[0,0],"ret_meshRenderingLayers":[0,0],"__clip":[1,0],"__color_noloop":[4,1]},"fetches":[{"sock":"F0_BaseMap","slot":"_BaseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F1_BumpMap","slot":"_BumpMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0.5,0.5,1],"neutral_alpha":1},{"sock":"F2_RMOSMap","slot":"_RMOSMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F3_DiffuseMap","slot":"_DiffuseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":false,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F4_NormalMap","slot":"_NormalMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0.5,0.5,1],"neutral_alpha":1},{"sock":"F5_ILMMap","slot":"_ILMMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F6_DyeingTex","slot":"_DyeingTex","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F7_DenierMap","slot":"_DenierMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F8_SpecularShiftTex","slot":"_SpecularShiftTex","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F9_ColorRamp","slot":"_ColorRamp","depth":1,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F10_MetalMatcap","slot":"_MetalMatcap","depth":1,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":false,"neutral":[0.5,0.5,0.5],"neutral_alpha":1},{"sock":"F11_AddMatcapMap","slot":"_AddMatcapMap","depth":1,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":false,"neutral":[0,0,0],"neutral_alpha":1}],"capabilities":[{"sock":"C0_MainLight","cap":"MainLight","depth":0,"query":{},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"directional light record (direction toward light, linear radiance)"},{"sock":"C1_ShadowAttenuation","cap":"ShadowAttenuation","depth":0,"query":{},"results":{"":false},"result":"[0,1] attenuation"},{"sock":"C2_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C3_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C4_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C5_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"}],"zones":[{"sock":"Z0","depth":2,"states":[["N",1],["NdotV4",0],["V",1],["Lloop0",0],["additionalSpecular",1],["alphaB2",0],["alphaT2",0],["alphaTB",0],["anisotropyBitangent",1],["anisotropyTangent",1],["distributionFloor",0],["geometryK",0],["geometryV",0],["ilm",1],["ilm_w",0],["inp_color",1],["inp_color_w",0],["inp_normalWS",1],["inp_positionCS",1],["inp_positionCS_w",0],["inp_positionNDC",1],["inp_positionNDC_w",0],["inp_positionWS",1],["inp_tangentWS",1],["inp_tangentWS_w",0],["inp_uv",1],["inp_uv0zw",1],["inp_uv1",1],["inp_uv1_w",0],["inp_uv2",1],["lightIndex",0],["litLayer",0],["mask",0],["metallic",0]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1],["X0_2",0,0,1],["X0_3",0,0,1],["X0_4",0,0,1],["X0_5",1,0,1],["X0_6",0,0,1],["X0_7",1,0,1]],"body_finals":{"N":[0,1],"NdotV4":[0,0],"V":[0,1],"Lloop0":[0,0],"additionalSpecular":[1,1],"alphaB2":[0,0],"alphaT2":[0,0],"alphaTB":[0,0],"anisotropyBitangent":[0,1],"anisotropyTangent":[0,1],"distributionFloor":[0,0],"geometryK":[0,0],"geometryV":[0,0],"ilm":[0,1],"ilm_w":[0,0],"inp_color":[0,1],"inp_color_w":[0,0],"inp_normalWS":[0,1],"inp_positionCS":[0,1],"inp_positionCS_w":[0,0],"inp_positionNDC":[0,1],"inp_positionNDC_w":[0,0],"inp_positionWS":[0,1],"inp_tangentWS":[0,1],"inp_tangentWS_w":[0,0],"inp_uv":[0,1],"inp_uv0zw":[0,1],"inp_uv1":[0,1],"inp_uv1_w":[0,0],"inp_uv2":[0,1],"lightIndex":[0,0],"litLayer":[0,0],"mask":[0,0],"metallic":[0,0]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z0 s0","Ruri AzurPromilia Uber Z0 s1"]},{"sock":"Z1","depth":3,"states":[["Lloop0",0],["direction",1],["lightColor",1],["lightIndex",0],["positionWS",1],["totalWeight",0],["weight",0]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"direction":[1,1],"lightColor":[1,1],"lightIndex":[0,0],"positionWS":[0,1],"totalWeight":[1,0],"weight":[1,0]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z1 s0","Ruri AzurPromilia Uber Z1 s1"]},{"sock":"Z2","depth":4,"states":[["Lloop0",0],["lightIndex",0],["positionWS",1],["tinted",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"lightIndex":[0,0],"positionWS":[0,1],"tinted":[1,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z2 s0","Ruri AzurPromilia Uber Z2 s1"]},{"sock":"Z3","depth":1,"states":[["N",1],["Lloop0",0],["lightAccum",1],["lightIndex",0],["positionWS",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0],["albedo",1]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"N":[0,1],"Lloop0":[0,0],"lightAccum":[1,1],"lightIndex":[0,0],"positionWS":[0,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z3 s0","Ruri AzurPromilia Uber Z3 s1"]}],"params":[["_UseBumpMap","F",0,0,[0,0,0],0],["_BumpScale","F",0,1,[1,1,1],0],["_UseRMOSMap","F",0,2,[0,0,0],0],["_BaseColor","V4",1,0,[1,1,1],1],["_SurfaceType","F",0,3,[0,0,0],0],["_RoughnessIntensity","F",2,0,[1,1,1],0],["_MetallicIntensity","F",2,1,[1,1,1],0],["_SpecularIntensity","F",2,2,[1,1,1],0],["_GlobalCustomLightDir","F",2,3,[0.44999998807907104,0.44999998807907104,0.44999998807907104],0],["_UseFakeLightDir","F",3,0,[0,0,0],0],["_FakeLightDir","V4",4,0,[0,0,0],0],["_NormalMapOn","F",3,1,[0,0,0],0],["_NormalScale","F",3,2,[1,1,1],0],["_ALPHATEST_ON","F",3,3,[0,0,0],0],["_AlphaClipThreshold","F",5,0,[0.5,0.5,0.5],0],["_DISABLE_SHADOW_RECEIVE","F",5,1,[0,0,0],0],["_MainLightShadowColor","V3",6,0,[0,0,0],0],["_MainLightShadowEdgeColor","V3",7,0,[0.5,0.5,0.5],0],["_FadeClip","F",5,2,[1,1,1],0],["_RimMaskVal","F",5,3,[0,0,0],0],["_DebugDiffseLayer","F",8,0,[0,0,0],0],["_SIWA_ON","F",8,1,[0,0,0],0],["_SiwaBlackWhiteExchange","F",8,2,[0,0,0],0],["_DYE_LAYER_ON","F",8,3,[0,0,0],0],["_DyeingLerpMode","F",9,0,[0,0,0],0],["_DyeingColor","V4",10,0,[1,1,1],1],["_DyeingColor2","V4",11,0,[1,1,1],1],["_DyeingColor3","V4",12,0,[1,1,1],1],["_DyeingColor4","V4",13,0,[1,1,1],1],["_DyeingIntensity4","F",9,1,[1,1,1],0],["_AnisotropyHueColor","V4",14,0,[1,1,1],0],["_SiwaFresnelMin","F",9,2,[0,0,0],0],["_SiwaFresnelMax","F",9,3,[0,0,0],0],["_SiwaColor","V4",15,0,[1,1,1],1],["_SHIFT_TEX_ON","F",16,0,[0,0,0],0],["_SpecularShiftTex_ST","V4",17,0,[1,1,0],0],["_ShiftIntensity","F",16,1,[1,1,1],0],["_SpecularExponent","F",16,2,[50,50,50],0],["_SpecularColor","V4",18,0,[1,1,1],1],["_DiffuseColorInfluence","F",16,3,[0,0,0],0],["_EmissiveRampMode","F",19,0,[3,3,3],0],["_DayNightValue","F",19,1,[0,0,0],0],["_ColorRamp_TexelSize","V4",20,0,[0,0,0],0],["_AORampPower","F",19,2,[1,1,1],0],["_AOIntensity_Rump","F",19,3,[0,0,0],0],["_EmissiveGetRampEffect","F",21,0,[0,0,0],0],["_SkinColor","V4",22,0,[1,1,1],0],["_AOIntensity","F",21,1,[0,0,0],0],["_AOColorSaturation","F",21,2,[1,1,1],0],["_EmissiveIntensity","F",21,3,[1,1,1],0],["_UseCharacterWeatherAdjust","F",23,0,[0,0,0],0],["_Weather_DarkSideValueCh","F",23,1,[0,0,0],0],["_UseScriptColorAdjust","F",23,2,[0,0,0],0],["_DarkFaceSmoothness","F",23,3,[0,0,0],0],["_DarkFaceThreshold","F",24,0,[0,0,0],0],["_DarkFaceColor","V4",25,0,[0,0,0],0],["_BrightFaceColor","V4",26,0,[0,0,0],0],["_DebugSpecularLayer","F",24,1,[0,0,0],0],["_AnisotropySmoothness","F",24,2,[0.20000000298023224,0.20000000298023224,0.20000000298023224],0],["_AnisotropyBias","F",24,3,[0,0,0],0],["_MetalMapOff","F",27,0,[0,0,0],0],["_AddMatCapOn","F",27,1,[0,0,0],0],["_AddMatcapSaturation","F",27,2,[0,0,0],0],["_AddMatcapHue","F",27,3,[0,0,0],0],["_AddMatcapColor","V4",28,0,[1,1,1],1],["_SwitchToMultiply","F",29,0,[0,0,0],0],["_AddMatcapBrightness","F",29,1,[1,1,1],0],["_IndirectLightSpecularIntensity","F",29,2,[1.2000000476837158,1.2000000476837158,1.2000000476837158],0],["_WetIntensity","F",29,3,[0,0,0],0],["_UseScriptSkinSpecControl","F",30,0,[0,0,0],0],["_ScriptLightDirUpViewBias","F",30,1,[0,0,0],0],["_ScriptLightDirBiasScale","F",30,2,[0,0,0],0],["_UseScriptSkinSpecLight","F",30,3,[0,0,0],0],["_ScriptSpecLightDir","V3",31,0,[0,0,0],0],["_PhotoMode","F",32,0,[0,0,0],0],["_CharSkinSpecularIntensity","F",32,1,[0,0,0],0],["_WetSpecularIntensity","F",32,2,[0.5479999780654907,0.5479999780654907,0.5479999780654907],0],["_BackRimLightIntensityClamp","F",32,3,[4,4,4],0],["_BackFresnelMin","F",33,0,[0.5,0.5,0.5],0],["_ScriptBackFresnelMin","F",33,1,[0,0,0],0],["_BackFresnelMax","F",33,2,[1,1,1],0],["_ScriptBackFresnelMax","F",33,3,[0,0,0],0],["_BackRimIntensity","F",34,0,[0,0,0],0],["_ScriptBackRimIntensity","F",34,1,[0,0,0],0],["_KiboEnable","F",34,2,[0,0,0],0],["_FakeSkyLightPower","F",34,3,[3,3,3],0],["_FakeSkyLightScale","F",35,0,[0.07000000029802322,0.07000000029802322,0.07000000029802322],0],["_UseRimNoiseMask","F",35,1,[0,0,0],0],["_RimNoiseScale","F",35,2,[10,10,10],0],["_RimNoiseMin","F",35,3,[0,0,0],0],["_RimNoiseMax","F",36,0,[1,1,1],0],["_RimNoiseIntensity","F",36,1,[1,1,1],0],["_FresnelMax","F",36,2,[1,1,1],0],["_FresnelMin","F",36,3,[0.5,0.5,0.5],0],["_RimLightStrength","F",37,0,[0,0,0],0],["_RimIntensity","F",37,1,[0,0,0],0],["_RimColor","V4",38,0,[1,1,1],1],["_RimMainLightRatio","F",37,2,[0.20000000298023224,0.20000000298023224,0.20000000298023224],0],["_FresnelPow","F",37,3,[5,5,5],0],["_RimLightColor","V4",39,0,[1,1,1],1],["_Weather_lightColorCh","V3",40,0,[0,0,0],0],["_MainLightColorLimit","F",41,0,[1.2999999523162842,1.2999999523162842,1.2999999523162842],0],["_CharLightIntensity","F",41,1,[0,0,0],0],["_UseFakeLightColor","F",41,2,[0,0,0],0],["_FakeLightMode","F",41,3,[0,0,0],0],["_FakeLightColor","V4",42,0,[0,0,0],0],["_IsLumInverse","F",43,0,[1,1,1],0],["_DebugContrast","F",43,1,[0.9800000190734863,0.9800000190734863,0.9800000190734863],0],["_DebugSaturation","F",43,2,[1,1,1],0],["_DebugBrightness","F",43,3,[1,1,1],0],["_UseTimelineEffect","F",44,0,[0,0,0],0],["_TimelineColorTint","V4",45,0,[0,0,0],0],["_TimelineSaturation","F",44,1,[0,0,0],0],["_TimelineContrast","F",44,2,[0,0,0],0],["_TimelineBrightness","F",44,3,[0,0,0],0],["_AdditionalSpecularIntensity","F",46,0,[0.30000001192092896,0.30000001192092896,0.30000001192092896],0],["__size_DiffuseMap","V3",47,0,[1,1,1],0],["__size_MetalMatcap","V3",48,0,[1,1,1],0],["__size_AddMatcapMap","V3",49,0,[1,1,1],0]],"signature_keys":["_ALPHATEST_ON","_AddMatCapOn","_DISABLE_SHADOW_RECEIVE","_DYE_LAYER_ON","_DyeingLerpMode","_IsLumInverse","_KiboEnable","_MetalMapOff","_NormalMapOn","_SHIFT_TEX_ON","_SIWA_ON","_SwitchToMultiply","_UseRimNoiseMask"],"signatures":[],"segments":["Ruri AzurPromilia Uber Standard s0","Ruri AzurPromilia Uber Standard s1","Ruri AzurPromilia Uber Standard s2","Ruri AzurPromilia Uber Standard s3","Ruri AzurPromilia Uber Standard s4","Ruri AzurPromilia Uber Standard s5"]},"Face":{"crossings":[["X0_0",1,0,1],["X0_1",1,0,1],["X0_2",1,0,1],["X0_3",0,0,1],["X0_4",0,0,1],["X0_5",0,0,1],["X0_6",0,0,1],["X0_7",0,0,1],["X0_8",0,0,1],["X0_9",1,0,1],["X0_10",0,0,1],["X0_11",0,0,1],["X0_12",0,0,1],["X0_13",0,0,1],["X0_14",1,0,1],["X0_15",1,0,1],["X0_16",1,0,1],["X0_17",0,0,1],["X0_18",1,0,1],["X0_19",0,0,1],["X0_20",0,0,1],["X0_21",0,0,1],["X0_22",0,0,1],["X0_26",0,0,1],["X0_35",0,0,1],["X0_37",0,0,1],["X0_38",0,0,1],["X0_39",0,0,1],["X0_40",0,0,1],["X0_44",0,0,1],["X0_50",1,0,1],["X1_0",0,1,2],["X1_1",0,1,2],["X0_23",0,0,2],["X0_26",0,0,2],["X0_27",0,0,2],["X0_28",0,0,2],["X1_5",0,1,2],["X1_6",1,1,2],["X1_7",1,1,2],["X0_29",0,0,2],["X0_30",0,0,2],["X0_31",1,0,2],["X0_32",1,0,2],["X0_33",0,0,2],["X0_34",0,0,2],["X0_0",1,0,3],["X1_2",1,1,3],["X1_3",0,1,3],["X0_24",0,0,3],["X1_4",1,1,3],["X0_25",0,0,3],["X0_26",0,0,3],["X2_0",1,2,3],["X2_1",1,2,3],["X2_2",0,2,3],["X2_3",1,2,3],["X2_4",1,2,3],["X2_5",1,2,3],["X2_6",1,2,3],["X2_7",1,2,3],["X0_36",0,0,3],["X1_8",1,1,3],["X0_41",0,0,3],["X0_42",0,0,3],["X0_43",1,0,3],["X1_9",0,1,3],["X0_45",0,0,3],["X0_46",0,0,3],["X0_47",0,0,3],["X0_48",0,0,3],["X0_49",0,0,3],["X1_10",0,1,3],["X1_11",1,1,3],["X1_12",1,1,3],["X0_51",1,0,3]],"finals":{"ret_gBuffer0":[4,1],"ret_gBuffer0_w":[1,0],"ret_gBuffer1":[0,1],"ret_gBuffer1_w":[0,0],"ret_gBuffer2":[0,1],"ret_gBuffer2_w":[0,0],"ret_color":[4,1],"ret_color_w":[0,0],"ret_depth":[0,0],"ret_shadowMask":[0,1],"ret_shadowMask_w":[0,0],"ret_meshRenderingLayers":[0,0],"__color_noloop":[3,1]},"fetches":[{"sock":"F0_BaseMap","slot":"_BaseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F1_BumpMap","slot":"_BumpMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0.5,0.5,1],"neutral_alpha":1},{"sock":"F2_RMOSMap","slot":"_RMOSMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F3_ILMMap","slot":"_ILMMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":false,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F4_ILMMap","slot":"_ILMMap","depth":1,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F5_ILMMap","slot":"_ILMMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F6_DyeingTex","slot":"_DyeingTex","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F7_ExpressionMaskMap","slot":"_ExpressionMaskMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F8_MakeupTex","slot":"_MakeupTex","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F9_ColorRamp","slot":"_ColorRamp","depth":2,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1}],"capabilities":[{"sock":"C0_ShadowAttenuation","cap":"ShadowAttenuation","depth":0,"query":{},"results":{"":false},"result":"[0,1] attenuation"},{"sock":"C1_MainLight","cap":"MainLight","depth":0,"query":{},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"directional light record (direction toward light, linear radiance)"},{"sock":"C2_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C3_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C4_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"}],"zones":[{"sock":"Z0","depth":1,"states":[["Lloop0",0],["direction",1],["lightColor",1],["lightIndex",0],["positionWS",1],["totalWeight",0],["weight",0]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"direction":[1,1],"lightColor":[1,1],"lightIndex":[0,0],"positionWS":[0,1],"totalWeight":[1,0],"weight":[1,0]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z4 s0","Ruri AzurPromilia Uber Z4 s1"]},{"sock":"Z1","depth":3,"states":[["Lloop0",0],["lightIndex",0],["positionWS",1],["tinted",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"lightIndex":[0,0],"positionWS":[0,1],"tinted":[1,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z5 s0","Ruri AzurPromilia Uber Z5 s1"]},{"sock":"Z2","depth":1,"states":[["N",1],["Lloop0",0],["lightAccum",1],["lightIndex",0],["positionWS",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0],["albedo",1]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"N":[0,1],"Lloop0":[0,0],"lightAccum":[1,1],"lightIndex":[0,0],"positionWS":[0,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z6 s0","Ruri AzurPromilia Uber Z6 s1"]}],"params":[["_UseBumpMap","F",0,0,[0,0,0],0],["_BumpScale","F",0,1,[1,1,1],0],["_UseRMOSMap","F",0,2,[0,0,0],0],["_BaseColor","V4",1,0,[1,1,1],1],["_SurfaceType","F",0,3,[0,0,0],0],["_RoughnessIntensity","F",2,0,[1,1,1],0],["_MetallicIntensity","F",2,1,[1,1,1],0],["_SpecularIntensity","F",2,2,[1,1,1],0],["_DISABLE_SHADOW_RECEIVE","F",2,3,[0,0,0],0],["_MainLightShadowColor","V3",3,0,[0,0,0],0],["_MainLightShadowEdgeColor","V3",4,0,[0.5,0.5,0.5],0],["_GlobalCustomLightDir","F",5,0,[0.44999998807907104,0.44999998807907104,0.44999998807907104],0],["_UseFakeLightDir","F",5,1,[0,0,0],0],["_FakeLightDir","V4",6,0,[0,0,0],0],["_UseTimelineEffect","F",5,2,[0,0,0],0],["_GradientSmoothness","F",5,3,[0,0,0],0],["_GradientValue","F",7,0,[0,0,0],0],["_FaceGradientColor","V4",8,0,[0,0,0],0],["_USE_SCRIPT_VALUE","F",7,1,[0,0,0],0],["_ForwardWS","V4",9,0,[0,0,1],0],["_LeftWS","V4",10,0,[-1,0,0],0],["_TestAngle","F",7,2,[0,0,0],0],["_UseTestLightDir","F",7,3,[0,0,0],0],["_HighLightMoveDistance2","F",11,0,[0.019999999552965164,0.019999999552965164,0.019999999552965164],0],["_UseDiffuse","F",11,1,[0,0,0],0],["_SkinColor","V4",12,0,[1,1,1],0],["_MaskColor02","V4",13,0,[1,1,1],1],["_MaskColor03","V4",14,0,[1,1,1],1],["_MaskColor04","V4",15,0,[1,1,1],1],["_MaskColor05","V4",16,0,[1,1,1],1],["_MaskColor06","V4",17,0,[1,1,1],1],["_MaskColor07","V4",18,0,[1,1,1],1],["_MaskColor08","V4",19,0,[1,1,1],1],["_AOIntensity","F",11,2,[0,0,0],0],["_AOColorSaturation","F",11,3,[1,1,1],0],["_DyeingColorR","V4",20,0,[1,1,1],1],["_DyeingColorG","V4",21,0,[1,1,1],0],["_DyeingColorB","V4",22,0,[1,1,1],0],["_AMax","F",23,0,[1,1,1],0],["_AMin","F",23,1,[0,0,0],0],["_DyeingColorAMin","V4",24,0,[1,1,1],1],["_DyeingColorAMax","V4",25,0,[1,1,1],1],["_DyeingColorA","V4",26,0,[1,1,1],0],["_ExpressionColorMask","F",23,2,[0,0,0],0],["_ExpressionMaskColor","V3",27,0,[1,1,1],0],["_ExpressionMaskIntensity","F",23,3,[0,0,0],0],["_HighLightIntensity2","F",28,0,[0,0,0],0],["_MAKEUP_ON","F",28,1,[0,0,0],0],["_MakeupColor","V4",29,0,[1,1,1],1],["_DayNightValue","F",28,2,[0,0,0],0],["_ColorRamp_TexelSize","V4",30,0,[0,0,0],0],["_EyebrowNoRamp","F",28,3,[0,0,0],0],["_EyebrowDarkColor","V3",31,0,[1,1,1],0],["_UseCharacterWeatherAdjust","F",32,0,[0,0,0],0],["_Weather_DarkSideValueCh","F",32,1,[0,0,0],0],["_UseScriptColorAdjust","F",32,2,[0,0,0],0],["_DarkFaceSmoothness","F",32,3,[0,0,0],0],["_DarkFaceThreshold","F",33,0,[0,0,0],0],["_DarkFaceColor","V4",34,0,[0,0,0],0],["_BrightFaceColor","V4",35,0,[0,0,0],0],["_BackRimLightIntensityClamp","F",33,1,[4,4,4],0],["_BackFresnelMin","F",33,2,[0.5,0.5,0.5],0],["_ScriptBackFresnelMin","F",33,3,[0,0,0],0],["_BackFresnelMax","F",36,0,[1,1,1],0],["_ScriptBackFresnelMax","F",36,1,[0,0,0],0],["_BackRimIntensity","F",36,2,[0,0,0],0],["_ScriptBackRimIntensity","F",36,3,[0,0,0],0],["_FaceFakeSkyLightScale","F",37,0,[0.07999999821186066,0.07999999821186066,0.07999999821186066],0],["_FaceFakeSkyLightPower","F",37,1,[0.10000000149011612,0.10000000149011612,0.10000000149011612],0],["_RimLightStrength","F",37,2,[0,0,0],0],["_RimIntensity","F",37,3,[0,0,0],0],["_FresnelMax","F",38,0,[1,1,1],0],["_FresnelMin","F",38,1,[0.5,0.5,0.5],0],["_FresnelColor","V4",39,0,[0,0,0],0],["_RimMainLightRatio","F",38,2,[0.20000000298023224,0.20000000298023224,0.20000000298023224],0],["_FresnelPow","F",38,3,[5,5,5],0],["_RimLightColor","V4",40,0,[1,1,1],1],["_Weather_lightColorCh","V3",41,0,[0,0,0],0],["_MainLightColorLimit","F",42,0,[1.2999999523162842,1.2999999523162842,1.2999999523162842],0],["_PhotoMode","F",42,1,[0,0,0],0],["_CharLightIntensity","F",42,2,[0,0,0],0],["_UseFakeLightColor","F",42,3,[0,0,0],0],["_FakeLightMode","F",43,0,[0,0,0],0],["_FakeLightColor","V4",44,0,[0,0,0],0],["_DebugContrast","F",43,1,[0.9800000190734863,0.9800000190734863,0.9800000190734863],0],["_DebugSaturation","F",43,2,[1,1,1],0],["_DebugBrightness","F",43,3,[1,1,1],0],["_TimelineColorTint","V4",45,0,[0,0,0],0],["_TimelineSaturation","F",46,0,[0,0,0],0],["_TimelineContrast","F",46,1,[0,0,0],0],["_TimelineBrightness","F",46,2,[0,0,0],0],["__size_ILMMap","V3",47,0,[1,1,1],0]],"signature_keys":["_DISABLE_SHADOW_RECEIVE","_ExpressionColorMask","_EyebrowNoRamp","_MAKEUP_ON","_USE_SCRIPT_VALUE","_UseDiffuse","_UseTestLightDir"],"signatures":[],"segments":["Ruri AzurPromilia Uber Face s0","Ruri AzurPromilia Uber Face s1","Ruri AzurPromilia Uber Face s2","Ruri AzurPromilia Uber Face s3","Ruri AzurPromilia Uber Face s4"]},"Eyes":{"crossings":[["X0_0",1,0,1],["X0_1",1,0,1],["X0_2",1,0,1],["X0_3",0,0,1],["X0_4",0,0,1],["X0_5",0,0,1],["X0_6",0,0,1],["X0_7",0,0,1],["X0_8",0,0,1],["X0_9",0,0,1],["X0_10",0,0,1],["X0_11",0,0,1],["X0_12",0,0,1],["X0_13",1,0,1],["X0_14",0,0,1],["X0_15",0,0,1],["X0_16",0,0,1],["X0_17",0,0,1],["X0_18",0,0,1],["X0_19",1,0,1],["X0_6",0,0,2],["X0_14",0,0,2],["X0_15",0,0,2],["X0_16",0,0,2],["X0_17",0,0,2],["X0_18",0,0,2]],"finals":{"ret_gBuffer0":[2,1],"ret_gBuffer0_w":[1,0],"ret_gBuffer1":[0,1],"ret_gBuffer1_w":[0,0],"ret_gBuffer2":[0,1],"ret_gBuffer2_w":[0,0],"ret_color":[2,1],"ret_color_w":[0,0],"ret_depth":[0,0],"ret_shadowMask":[0,1],"ret_shadowMask_w":[0,0],"ret_meshRenderingLayers":[0,0],"__color_noloop":[1,1]},"fetches":[{"sock":"F0_BaseMap","slot":"_BaseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F1_BumpMap","slot":"_BumpMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0.5,0.5,1],"neutral_alpha":1},{"sock":"F2_RMOSMap","slot":"_RMOSMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F3_DiffuseMap","slot":"_DiffuseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F4_HighLightTex2","slot":"_HighLightTex2","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F5_HighLightTex1","slot":"_HighLightTex1","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F6_HighLightTex3","slot":"_HighLightTex3","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F7_AddMatcap","slot":"_AddMatcap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1}],"capabilities":[{"sock":"C0_MainLight","cap":"MainLight","depth":0,"query":{},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"directional light record (direction toward light, linear radiance)"},{"sock":"C1_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C2_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"}],"zones":[{"sock":"Z0","depth":1,"states":[["Lloop0",0],["lightIndex",0],["positionWS",1],["tinted",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"lightIndex":[0,0],"positionWS":[0,1],"tinted":[1,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z7 s0","Ruri AzurPromilia Uber Z7 s1"]},{"sock":"Z1","depth":1,"states":[["N",1],["Lloop0",0],["lightAccum",1],["lightIndex",0],["positionWS",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0],["albedo",1]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"N":[0,1],"Lloop0":[0,0],"lightAccum":[1,1],"lightIndex":[0,0],"positionWS":[0,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z8 s0","Ruri AzurPromilia Uber Z8 s1"]}],"params":[["_UseBumpMap","F",0,0,[0,0,0],0],["_BumpScale","F",0,1,[1,1,1],0],["_UseRMOSMap","F",0,2,[0,0,0],0],["_BaseColor","V4",1,0,[1,1,1],1],["_SurfaceType","F",0,3,[0,0,0],0],["_RoughnessIntensity","F",2,0,[1,1,1],0],["_MetallicIntensity","F",2,1,[1,1,1],0],["_SpecularIntensity","F",2,2,[1,1,1],0],["_Max","F",2,3,[1,1,1],0],["_Min","F",3,0,[0,0,0],0],["_ColorMin","V4",4,0,[1,1,1],1],["_ColorMax","V4",5,0,[1,1,1],1],["_ColorG","V4",6,0,[1,1,1],1],["_GLerpIntensity","F",3,1,[0,0,0],0],["_ColorB","V4",7,0,[1,1,1],1],["_BLerpIntensity","F",3,2,[0,0,0],0],["_ColorA","V4",8,0,[1,1,1],1],["_ALerpIntensity","F",3,3,[0,0,0],0],["_UseDiffuse","F",9,0,[0,0,0],0],["_DayNightValue","F",9,1,[0,0,0],0],["_SpecularFlipHorizontal","F",9,2,[0,0,0],0],["_ScaleX1","F",9,3,[1,1,1],0],["_ScaleY1","F",10,0,[1,1,1],0],["_RotateAngle1","F",10,1,[0,0,0],0],["_ScaleX2","F",10,2,[1,1,1],0],["_ScaleY2","F",10,3,[1,1,1],0],["_RotateAngle2","F",11,0,[0,0,0],0],["_HighlightIntensity2","F",11,1,[0.05999999865889549,0.05999999865889549,0.05999999865889549],0],["_HighLightColor2","V4",12,0,[0.4392000138759613,0.8352000117301941,1],1],["_HighlightIntensity1","F",11,2,[2,2,2],0],["_HighLightColor1","V4",13,0,[1,1,1],1],["_HorizontalAmount2","F",11,3,[4,4,4],0],["_VerticalAmount2","F",14,0,[2,2,2],0],["_Range","F",14,1,[1,1,1],0],["_ExpressionScale3","F",14,2,[1,1,1],0],["_ExpressionOffsetU","F",14,3,[0,0,0],0],["_ExpressionOffsetV","F",15,0,[0,0,0],0],["_RotateAngle3","F",15,1,[0,0,0],0],["_Layer3Mode","F",15,2,[0,0,0],0],["_HighlightIntensity3","F",15,3,[1,1,1],0],["_ExpressionIntensity","F",16,0,[1,1,1],0],["_AddMatcapBrightness","F",16,1,[1,1,1],0],["_UseCharacterWeatherAdjust","F",16,2,[0,0,0],0],["_Weather_lightColorCh","V3",17,0,[0,0,0],0],["_MainLightColorLimit","F",16,3,[1.2999999523162842,1.2999999523162842,1.2999999523162842],0],["_PhotoMode","F",18,0,[0,0,0],0],["_CharLightIntensity","F",18,1,[0,0,0],0],["_UseFakeLightColor","F",18,2,[0,0,0],0],["_FakeLightMode","F",18,3,[0,0,0],0],["_FakeLightColor","V4",19,0,[0,0,0],0],["_UseScriptColorAdjust","F",20,0,[0,0,0],0],["_DebugContrast","F",20,1,[0.9800000190734863,0.9800000190734863,0.9800000190734863],0],["_DebugSaturation","F",20,2,[1,1,1],0],["_DebugBrightness","F",20,3,[1,1,1],0],["_UseTimelineEffect","F",21,0,[0,0,0],0],["_TimelineColorTint","V4",22,0,[0,0,0],0],["_TimelineSaturation","F",21,1,[0,0,0],0],["_TimelineContrast","F",21,2,[0,0,0],0],["_TimelineBrightness","F",21,3,[0,0,0],0]],"signature_keys":["_SpecularFlipHorizontal","_UseDiffuse"],"signatures":[],"segments":["Ruri AzurPromilia Uber Eyes s0","Ruri AzurPromilia Uber Eyes s1","Ruri AzurPromilia Uber Eyes s2"]},"Hair":{"crossings":[["X0_0",1,0,1],["X0_1",1,0,1],["X0_2",1,0,1],["X0_3",0,0,1],["X0_4",0,0,1],["X0_5",0,0,1],["X0_6",1,0,1],["X0_7",0,0,1],["X0_8",0,0,1],["X0_9",0,0,1],["X0_11",0,0,1],["X0_12",0,0,1],["X0_13",0,0,1],["X0_14",0,0,1],["X0_15",0,0,1],["X0_17",0,0,1],["X0_18",0,0,1],["X0_19",0,0,1],["X0_20",0,0,1],["X0_21",1,0,1],["X0_22",0,0,1],["X0_30",0,0,1],["X0_31",0,0,1],["X0_32",0,0,1],["X0_41",1,0,1],["X0_42",1,0,1],["X0_0",1,0,2],["X0_10",1,0,2],["X1_0",0,1,2],["X1_1",1,1,2],["X1_2",1,1,2],["X1_3",0,1,2],["X0_16",0,0,2],["X0_17",0,0,2],["X1_4",1,1,2],["X1_5",0,1,2],["X0_23",1,0,2],["X0_24",1,0,2],["X1_6",1,1,2],["X1_7",0,1,2],["X1_8",1,1,2],["X1_9",1,1,2],["X0_25",0,0,2],["X0_26",0,0,2],["X0_27",1,0,2],["X0_28",0,0,2],["X0_29",0,0,2],["X1_10",1,1,2],["X0_33",0,0,2],["X0_34",0,0,2],["X0_35",1,0,2],["X0_36",0,0,2],["X0_37",0,0,2],["X0_38",0,0,2],["X0_39",0,0,2],["X0_40",0,0,2],["X1_11",0,1,2],["X1_12",1,1,2],["X1_13",1,1,2],["X0_43",1,0,2],["X0_44",1,0,2],["X0_44",1,0,3]],"finals":{"ret_gBuffer0":[3,1],"ret_gBuffer0_w":[1,0],"ret_gBuffer1":[0,1],"ret_gBuffer1_w":[0,0],"ret_gBuffer2":[0,1],"ret_gBuffer2_w":[0,0],"ret_color":[3,1],"ret_color_w":[0,0],"ret_depth":[0,0],"ret_shadowMask":[0,1],"ret_shadowMask_w":[0,0],"ret_meshRenderingLayers":[0,0],"__color_noloop":[2,1]},"fetches":[{"sock":"F0_BaseMap","slot":"_BaseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F1_BumpMap","slot":"_BumpMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0.5,0.5,1],"neutral_alpha":1},{"sock":"F2_RMOSMap","slot":"_RMOSMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F3_DiffuseMap","slot":"_DiffuseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F4_ColorRamp","slot":"_ColorRamp","depth":1,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F5_DiffuseMap","slot":"_DiffuseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F6_Matcap","slot":"_Matcap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1}],"capabilities":[{"sock":"C0_MainLight","cap":"MainLight","depth":0,"query":{},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"directional light record (direction toward light, linear radiance)"},{"sock":"C1_ShadowAttenuation","cap":"ShadowAttenuation","depth":0,"query":{},"results":{"":false},"result":"[0,1] attenuation"},{"sock":"C2_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C3_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C4_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"}],"zones":[{"sock":"Z0","depth":1,"states":[["Lloop0",0],["direction",1],["lightColor",1],["lightIndex",0],["positionWS",1],["totalWeight",0],["weight",0]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"direction":[1,1],"lightColor":[1,1],"lightIndex":[0,0],"positionWS":[0,1],"totalWeight":[1,0],"weight":[1,0]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z4 s0","Ruri AzurPromilia Uber Z4 s1"]},{"sock":"Z1","depth":2,"states":[["Lloop0",0],["lightIndex",0],["positionWS",1],["tinted",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"lightIndex":[0,0],"positionWS":[0,1],"tinted":[1,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z9 s0","Ruri AzurPromilia Uber Z9 s1"]},{"sock":"Z2","depth":1,"states":[["N",1],["Lloop0",0],["lightAccum",1],["lightIndex",0],["positionWS",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0],["albedo",1]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"N":[0,1],"Lloop0":[0,0],"lightAccum":[1,1],"lightIndex":[0,0],"positionWS":[0,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z6 s0","Ruri AzurPromilia Uber Z6 s1"]}],"params":[["_UseBumpMap","F",0,0,[0,0,0],0],["_BumpScale","F",0,1,[1,1,1],0],["_UseRMOSMap","F",0,2,[0,0,0],0],["_BaseColor","V4",1,0,[1,1,1],1],["_SurfaceType","F",0,3,[0,0,0],0],["_RoughnessIntensity","F",2,0,[1,1,1],0],["_MetallicIntensity","F",2,1,[1,1,1],0],["_SpecularIntensity","F",2,2,[1,1,1],0],["_GlobalHairCustomLightDir","F",2,3,[0.30000001192092896,0.30000001192092896,0.30000001192092896],0],["_UseFakeLightDir","F",3,0,[0,0,0],0],["_FakeLightDir","V4",4,0,[0,0,0],0],["_DISABLE_SHADOW_RECEIVE","F",3,1,[0,0,0],0],["_MainLightShadowColor","V3",5,0,[0,0,0],0],["_MainLightShadowEdgeColor","V3",6,0,[0.5,0.5,0.5],0],["_ColorMinR","V4",7,0,[1,1,1],1],["_ColorMaxR","V4",8,0,[1,1,1],1],["_UseBrighten","F",3,2,[0,0,0],0],["_BrightenColor","V4",9,0,[1,1,1],1],["_PartColor","V4",10,0,[1,1,1],1],["_SkinColor","V4",11,0,[1,1,1],0],["_DayNightValue","F",3,3,[0,0,0],0],["_ColorRamp_TexelSize","V4",12,0,[0,0,0],0],["_AOIntensity_Rump","F",13,0,[0,0,0],0],["_AOClamp_Rump","F",13,1,[0,0,0],0],["_RampColor","V4",14,0,[1,1,1],1],["_RampPartColor","V4",15,0,[1,1,1],1],["_UseRampPartColor","F",13,2,[0,0,0],0],["_ColorSaturation","F",13,3,[1,1,1],0],["_UseCharacterWeatherAdjust","F",16,0,[0,0,0],0],["_Weather_DarkSideValueCh","F",16,1,[0,0,0],0],["_UseScriptColorAdjust","F",16,2,[0,0,0],0],["_DarkFaceSmoothness","F",16,3,[0,0,0],0],["_DarkFaceThreshold","F",17,0,[0,0,0],0],["_DarkFaceColor","V4",18,0,[0,0,0],0],["_BrightFaceColor","V4",19,0,[0,0,0],0],["_PaintHighlightDayColor","V4",20,0,[1,1,1],1],["_FresnelMax","F",17,1,[1,1,1],0],["_FresnelMin","F",17,2,[0.5,0.5,0.5],0],["_RimLightColorRatio","F",17,3,[0.5,0.5,0.5],0],["_RimIntensity","F",21,0,[0,0,0],0],["_BackRimLightIntensityClamp","F",21,1,[4,4,4],0],["_BackFresnelMin","F",21,2,[0.5,0.5,0.5],0],["_ScriptBackFresnelMin","F",21,3,[0,0,0],0],["_BackFresnelMax","F",22,0,[1,1,1],0],["_ScriptBackFresnelMax","F",22,1,[0,0,0],0],["_BackRimIntensity","F",22,2,[0,0,0],0],["_ScriptBackRimIntensity","F",22,3,[0,0,0],0],["_HairFakeSkyLightPower","F",23,0,[2,2,2],0],["_HairFakeSkyLightScale","F",23,1,[0.5,0.5,0.5],0],["_FresnelPow","F",23,2,[5,5,5],0],["_RimLightStrength","F",23,3,[0,0,0],0],["_RimLightColor","V4",24,0,[1,1,1],1],["_Weather_lightColorCh","V3",25,0,[0,0,0],0],["_MainLightColorLimit","F",26,0,[1.2999999523162842,1.2999999523162842,1.2999999523162842],0],["_PhotoMode","F",26,1,[0,0,0],0],["_CharLightIntensity","F",26,2,[0,0,0],0],["_UseFakeLightColor","F",26,3,[0,0,0],0],["_FakeLightMode","F",27,0,[0,0,0],0],["_FakeLightColor","V4",28,0,[0,0,0],0],["_DebugContrast","F",27,1,[0.9800000190734863,0.9800000190734863,0.9800000190734863],0],["_DebugSaturation","F",27,2,[1,1,1],0],["_DebugBrightness","F",27,3,[1,1,1],0],["_UseTimelineEffect","F",29,0,[0,0,0],0],["_TimelineColorTint","V4",30,0,[0,0,0],0],["_TimelineSaturation","F",29,1,[0,0,0],0],["_TimelineContrast","F",29,2,[0,0,0],0],["_TimelineBrightness","F",29,3,[0,0,0],0],["_EmissionColor","V4",31,0,[1,1,1],1],["_UseEmission","F",32,0,[0,0,0],0]],"signature_keys":["_DISABLE_SHADOW_RECEIVE","_UseBrighten","_UseRampPartColor"],"signatures":[],"segments":["Ruri AzurPromilia Uber Hair s0","Ruri AzurPromilia Uber Hair s1","Ruri AzurPromilia Uber Hair s2","Ruri AzurPromilia Uber Hair s3"]},"Eyebrow":{"crossings":[["X0_0",1,0,1],["X0_1",1,0,1],["X0_2",1,0,1],["X0_3",1,0,1],["X0_4",0,0,1],["X0_5",0,0,1],["X0_6",0,0,1],["X0_7",1,0,1],["X0_8",1,0,1],["X0_9",0,0,1],["X0_10",0,0,1],["X0_11",0,0,1],["X0_12",0,0,1],["X0_13",0,0,1],["X0_14",1,0,1],["X0_15",0,0,1],["X0_16",0,0,1],["X0_17",0,0,1],["X0_18",0,0,1],["X0_19",0,0,1],["X0_20",1,0,1]],"finals":{"ret_gBuffer0":[2,1],"ret_gBuffer0_w":[1,0],"ret_gBuffer1":[0,1],"ret_gBuffer1_w":[0,0],"ret_gBuffer2":[0,1],"ret_gBuffer2_w":[0,0],"ret_color":[2,1],"ret_color_w":[0,0],"ret_depth":[0,0],"ret_shadowMask":[0,1],"ret_shadowMask_w":[0,0],"ret_meshRenderingLayers":[0,0],"__color_noloop":[1,1]},"fetches":[{"sock":"F0_BaseMap","slot":"_BaseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1},{"sock":"F1_BumpMap","slot":"_BumpMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0.5,0.5,1],"neutral_alpha":1},{"sock":"F2_RMOSMap","slot":"_RMOSMap","depth":0,"non_color":true,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[0,0,0],"neutral_alpha":1},{"sock":"F3_DiffuseMap","slot":"_DiffuseMap","depth":0,"non_color":false,"extension":"TEXTURE","point":false,"env":false,"mip":false,"derivative_mip":true,"neutral":[1,1,1],"neutral_alpha":1}],"capabilities":[{"sock":"C0_MainLight","cap":"MainLight","depth":0,"query":{},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"directional light record (direction toward light, linear radiance)"},{"sock":"C1_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"},{"sock":"C2_AdditionalLightCount","cap":"AdditionalLightCount","depth":0,"query":{},"results":{"":false},"result":"light count"}],"zones":[{"sock":"Z0","depth":1,"states":[["Lloop0",0],["lightIndex",0],["positionWS",1],["tinted",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"Lloop0":[0,0],"lightIndex":[0,0],"positionWS":[0,1],"tinted":[1,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z7 s0","Ruri AzurPromilia Uber Z7 s1"]},{"sock":"Z1","depth":1,"states":[["N",1],["Lloop0",0],["lightAccum",1],["lightIndex",0],["positionWS",1]],"reads":[["__done",0],["__clip",0],["pixelLightCount",0],["albedo",1]],"body_crossings":[["X0_0",0,0,1],["X0_1",0,0,1]],"body_finals":{"N":[0,1],"Lloop0":[0,0],"lightAccum":[1,1],"lightIndex":[0,0],"positionWS":[0,1]},"capabilities":[{"sock":"C0_AdditionalLight","cap":"AdditionalLight","depth":0,"query":{"index":false,"position":true},"results":{"direction":true,"color":true,"distanceAttenuation":false,"shadowAttenuation":false,"layerMask":false},"result":"punctual light record (direction toward light, linear radiance)"}],"fetches":[],"bodies":["Ruri AzurPromilia Uber Z8 s0","Ruri AzurPromilia Uber Z8 s1"]}],"params":[["_UseBumpMap","F",0,0,[0,0,0],0],["_BumpScale","F",0,1,[1,1,1],0],["_UseRMOSMap","F",0,2,[0,0,0],0],["_BaseColor","V4",1,0,[1,1,1],1],["_SurfaceType","F",0,3,[0,0,0],0],["_RoughnessIntensity","F",2,0,[1,1,1],0],["_MetallicIntensity","F",2,1,[1,1,1],0],["_SpecularIntensity","F",2,2,[1,1,1],0],["_UseFakeLightDir","F",2,3,[0,0,0],0],["_FakeLightDir","V4",3,0,[0,0,0],0],["_UseVertexColorForColor","F",4,0,[0,0,0],0],["_DayColor","V4",5,0,[1,1,1],1],["_DayColor2","V4",6,0,[0,0,0],0],["_DayNightValue","F",4,1,[0,0,0],0],["_DarkColor","V4",7,0,[1,1,1],1],["_UseCharacterWeatherAdjust","F",4,2,[0,0,0],0],["_Weather_lightColorCh","V3",8,0,[0,0,0],0],["_MainLightColorLimit","F",4,3,[1.2999999523162842,1.2999999523162842,1.2999999523162842],0],["_PhotoMode","F",9,0,[0,0,0],0],["_CharLightIntensity","F",9,1,[0,0,0],0],["_UseFakeLightColor","F",9,2,[0,0,0],0],["_FakeLightMode","F",9,3,[0,0,0],0],["_FakeLightColor","V4",10,0,[0,0,0],0],["_UseScriptColorAdjust","F",11,0,[0,0,0],0],["_DebugContrast","F",11,1,[0.9800000190734863,0.9800000190734863,0.9800000190734863],0],["_DebugSaturation","F",11,2,[1,1,1],0],["_DebugBrightness","F",11,3,[1,1,1],0],["_UseTimelineEffect","F",12,0,[0,0,0],0],["_TimelineColorTint","V4",13,0,[0,0,0],0],["_TimelineSaturation","F",12,1,[0,0,0],0],["_TimelineContrast","F",12,2,[0,0,0],0],["_TimelineBrightness","F",12,3,[0,0,0],0]],"signature_keys":["_UseVertexColorForColor"],"signatures":[],"segments":["Ruri AzurPromilia Uber Eyebrow s0","Ruri AzurPromilia Uber Eyebrow s1","Ruri AzurPromilia Uber Eyebrow s2"]}},"mat_table_w":1024,"mat_table_h":50,"packing":{"_BaseMap":[["rgb","BaseColor",""],["a","Opacity",""]],"_BumpMap":[["rg","PackedTangentNormal","unpack_normal_alpha_green"]],"_RMOSMap":[["r","Roughness",""],["g","Metallic",""],["b","Occlusion",""],["a","SpecularLevel",""]]},"vertex_parts":{},"rig":{"bone":"Head","attr":"ruri_face_basis","prop":"ruri_rig_basis_bone","label":"\u57FA\u5EA7\u9AA8\u9ABC","parts":["Face"]},"globals":{},"engine_global_sources":{},"level_images":{},"interface":[{"name":"\u57FA\u7840","gate":null,"rows":[{"name":"_DiffuseMap","label":"Base Map","kind":"TEXTURE"},{"name":"_NormalMap","label":"Normal Map","kind":"TEXTURE"},{"name":"_ILMMap","label":"ILM Map","kind":"TEXTURE"},{"name":"_ColorRamp","label":"Color Ramp","kind":"TEXTURE"},{"name":"_MetalMatcap","label":"Metal Matcap","kind":"TEXTURE"},{"name":"_AddMatcapMap","label":"Add Matcap Map","kind":"TEXTURE"},{"name":"_DenierMap","label":"Denier Map","kind":"TEXTURE"},{"name":"_DyeingTex","label":"Dyeing Map","kind":"TEXTURE"},{"name":"_SpecularShiftTex","label":"Specular Shift Tex","kind":"TEXTURE"},{"name":"_Matcap","label":"Matcap","kind":"TEXTURE"},{"name":"_MakeupTex","label":"Makeup Tex","kind":"TEXTURE"},{"name":"_ExpressionMaskMap","label":"Expression Mask Map","kind":"TEXTURE"},{"name":"_HighLightTex1","label":"HightLightTex 1","kind":"TEXTURE"},{"name":"_HighLightTex2","label":"HightLightTex 2","kind":"TEXTURE"},{"name":"_HighLightTex3","label":"HightLightTex 3","kind":"TEXTURE"},{"name":"_AddMatcap","label":"Add Matcap","kind":"TEXTURE"},{"name":"_BaseMap","label":"Albedo","kind":"TEXTURE","st_node":"RuriBaseMapST"},{"name":"_BumpMap","label":"Normal Map","kind":"TEXTURE"},{"name":"_RampMap","label":"Diffuse Ramp Map","kind":"TEXTURE"},{"name":"_EmissionMap","label":"Emission","kind":"TEXTURE"},{"name":"_OutlineMask","label":"Outline Mask","kind":"TEXTURE"},{"name":"_HairBrowMask","label":"Hair Brow Mask","kind":"TEXTURE"},{"name":"_RMOSMap","label":"RMOS Map (R=Rough G=Metal B=Occ A=Spec)","kind":"TEXTURE"},{"name":"_PositionTexture","label":"VAT \u4F4D\u7F6E\u56FE","kind":"TEXTURE"},{"name":"_RotationTexture","label":"VAT \u65CB\u8F6C\u56FE","kind":"TEXTURE"},{"name":"_CommonVATMap","label":"\u9AA8\u9ABC VAT \u52A8\u753B\u56FE","kind":"TEXTURE"},{"name":"_FactoryVATMap","label":"\u5DE5\u5382 VAT \u52A8\u753B\u56FE","kind":"TEXTURE"},{"name":"_ColorTexture","label":"VAT \u989C\u8272\u56FE","kind":"TEXTURE"},{"name":"_BlackBoxContourTexture","label":"\u9ED1\u7BB1\u8F6E\u5ED3\u56FE","kind":"TEXTURE"},{"name":"_ScanLineMaskTexture","label":"\u626B\u63CF\u7EBF\u906E\u7F69","kind":"TEXTURE"},{"name":"_SludgeHeightTexture","label":"\u6DE4\u6CE5\u9AD8\u5EA6\u56FE","kind":"TEXTURE"},{"name":"_DisappearTex","label":"\u6DE4\u6CE5\u6D88\u6563\u566A\u58F0","kind":"TEXTURE"},{"name":"_BlendTex","label":"Blend Tex","kind":"TEXTURE"},{"name":"_RefractTex","label":"\u81EA\u5B9A\u4E49\u6298\u5C04\u8D34\u56FE","kind":"TEXTURE"},{"name":"_WaterNormalMap","label":"\u6C34\u9762\u6CD5\u7EBF\u8D34\u56FE","kind":"TEXTURE"},{"name":"_WaterCausticMap","label":"\u6C34\u6CE2\u7EB9\u8D34\u56FE","kind":"TEXTURE"},{"name":"_DisplacementTex","label":"\u7F6E\u6362\u8D34\u56FE","kind":"TEXTURE"},{"name":"_IceNormalMap","label":"\u51B0\u5757\u6CD5\u7EBF\u8D34\u56FE","kind":"TEXTURE"},{"name":"_IceOpacityMap","label":"\u51B0\u5757\u4E0D\u900F\u660E\u5EA6\u8D34\u56FE","kind":"TEXTURE"},{"name":"_RMOTex","label":"RMO Map (RGB)","kind":"TEXTURE"},{"name":"_Specularmap","label":"Specular Map","kind":"TEXTURE"},{"name":"Ramp","label":"\u5206\u533A\u659C\u5761\u56FE(\u4E94\u884C)","kind":"TEXTURE"},{"name":"MaskTex","label":"\u9762\u90E8\u9634\u5F71 SDF","kind":"TEXTURE"},{"name":"TypeMask","label":"\u5206\u533A\u906E\u7F69(A = \u5206\u533A\u53F7)","kind":"TEXTURE"},{"name":"HairUVMap","label":"\u53D1\u4E1D\u5750\u6807\u56FE","kind":"TEXTURE"},{"name":"HairNoise","label":"\u53D1\u4E1D\u566A\u58F0","kind":"TEXTURE"},{"name":"HairRamp","label":"\u9AD8\u5149\u5E26\u5256\u9762(\u56DB\u884C)","kind":"TEXTURE"},{"name":"_OffsetTex","label":"Offset Tex","kind":"TEXTURE"},{"name":"_OffsetMaskTex","label":"Offset Mask Tex","kind":"TEXTURE"},{"name":"_MainTex2","label":"Main Tex 2","kind":"TEXTURE"},{"name":"_InkSimulationResultA","label":"Ink Simulation A","kind":"TEXTURE"},{"name":"_InkSimulationResultB","label":"Ink Simulation B","kind":"TEXTURE"},{"name":"_FlowmapTex","label":"Flowmap Tex","kind":"TEXTURE"},{"name":"_AirWallTex","label":"AirWall Tex","kind":"TEXTURE"},{"name":"_EmissionTex","label":"Emission Tex","kind":"TEXTURE"},{"name":"_DisturbTex2","label":"Disturb Tex 2","kind":"TEXTURE"},{"name":"_WeightTex","label":"Weight Tex","kind":"TEXTURE"},{"name":"_EmissiveRampMap","label":"Emissive Ramp Map","kind":"TEXTURE"},{"name":"_SpreadTex","label":"Spread Tex","kind":"TEXTURE"},{"name":"_SampleTex0","label":"Sample Tex 0","kind":"TEXTURE"},{"name":"_SampleTex1","label":"Sample Tex 1","kind":"TEXTURE"},{"name":"_SampleTex2","label":"Sample Tex 2","kind":"TEXTURE"},{"name":"_SampleTex3","label":"Sample Tex 3","kind":"TEXTURE"},{"name":"_SampleTex4","label":"Sample Tex 4","kind":"TEXTURE"},{"name":"_SampleTex5","label":"Sample Tex 5","kind":"TEXTURE"},{"name":"_NREMap","label":"NRE Map (\u6CD5\u7EBF/\u81EA\u53D1\u5149\u906E\u7F69)","kind":"TEXTURE"},{"name":"_WireRampTex","label":"Wire Ramp Tex","kind":"TEXTURE"},{"name":"_BaseColorMap","label":"Wallhack Base Color Map","kind":"TEXTURE"},{"name":"_RainTex0","label":"Rain Tex 0","kind":"TEXTURE"},{"name":"_PositiveAxesLightmap","label":"Six-Way \u002BAxes Lightmap","kind":"TEXTURE"},{"name":"_NegativeAxesLightmap","label":"Six-Way -Axes Lightmap","kind":"TEXTURE"},{"name":"_BaseColor","label":"Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_BumpScale","label":"Normal Scale","kind":"VALUE","size":1,"default":[1]},{"name":"_ShadowSoft","label":"Shadow Soft","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_RoughnessIntensity","label":"Roughness Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_MetallicIntensity","label":"Metallic Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_SpecularIntensity","label":"Specular Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_EmissiveIntensity","label":"Emissive Intensity","kind":"SLIDER","size":1,"min":1,"max":20,"default":[1]},{"name":"_AlphaClip","label":"__clip","kind":"SWITCH","size":1,"default":[0]},{"name":"_AlphaClipThreshold","label":"\u0027Clip Threshold\u0027 {}","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_UseDitherClip","label":"Use Dither Clip","kind":"SWITCH","size":1,"default":[0]},{"name":"_DitherAlpha","label":"Dither Alpha Value","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_SurfaceType","label":"Surface Type","kind":"INT","size":2,"default":[0]},{"name":"_HairBrowMaskThreshold","label":"Hair Brow Mask Threshold","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_UseRMOSMap","label":"Use RMOS Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseRampMap","label":"Use Ramp Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseBumpMap","label":"Use Normal Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseEmission","label":"Use Emission","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseMaskUV2","label":"Use Mask UV2","kind":"SWITCH","size":1,"default":[0]},{"name":"_GameRenderStyle","label":"Render Style","kind":"VALUE","size":2,"default":[0]},{"name":"_CharaPartID","label":"Character Part","kind":"INT","size":2,"default":[0]},{"name":"_UseHairShadow","label":"Use Hair Shadow","kind":"INT","size":1,"default":[0]},{"name":"_EyeShadowIntensity","label":"Eye Shadow Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.20000000298023224]},{"name":"_UseAnisotropicSpecular","label":"Use Anisotropic Specular","kind":"SWITCH","size":1,"default":[0]},{"name":"_AnisotropicGGX","label":"Anisotropic GGX","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_Anisotropy","label":"Anisotropy","kind":"SLIDER","size":1,"min":0,"max":5,"default":[1]},{"name":"_AnisotropyShift","label":"Anisotropy Shift","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.05000000074505806]},{"name":"_UseStocking","label":"Use Stocking Falloff","kind":"SWITCH","size":1,"default":[0]},{"name":"_StockingCenterColor","label":"Stocking Center Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_StockingFalloffColor","label":"Stocking Falloff Color","kind":"COLOR","size":4,"default":[0.10000000149011612,0,0,1],"gamma":true},{"name":"_StockingFalloffPower","label":"Stocking Falloff Power","kind":"SLIDER","size":1,"min":0.1,"max":5,"default":[1]},{"name":"_EmissionColor","label":"Emission Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_OutlineWidth","label":"Outline Width","kind":"SLIDER","size":1,"min":0,"max":2,"default":[0.5]},{"name":"_OutlineOffsetZ","label":"Outline Offset Z","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_OutlineAverageNormal","label":"Use Smooth Normal (UV2)","kind":"SWITCH","size":1,"default":[1]},{"name":"_OutlineTintEnable","label":"Outline Tint Enable","kind":"SWITCH","size":1,"default":[0]},{"name":"_OutlineTintColor","label":"Outline Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_EnableOutlineMask","label":"Outline Mask Enable","kind":"SWITCH","size":1,"default":[1]},{"name":"_UseVertexColorOutline","label":"Use VertexColor Outline","kind":"SWITCH","size":1,"default":[0]},{"name":"_BackFaceNormalFlip","label":"Back Face Normal Flip","kind":"VALUE","size":1,"default":[0]},{"name":"_AlphaPremultiply","label":"Alpha Premultiply","kind":"VALUE","size":1,"default":[0]},{"name":"_FBXRotationFix","label":"FBX -90 Z Rotation Fix (OTW col0/col1 swap)","kind":"SWITCH","size":1,"default":[0]},{"name":"_NormalScale","label":"Normal Scale","kind":"VALUE","size":1,"default":[1]},{"name":"_FresnelColor","label":"Fresnel Color","kind":"COLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_EnableHoudiniVAT","label":"Houdini VAT","kind":"SWITCH","size":1,"default":[0]},{"name":"_HoudiniVATType","label":"VAT \u7C7B\u578B","kind":"VALUE","size":1,"default":[0]},{"name":"_HoudiniVATInParticle","label":"VAT \u5728\u7C92\u5B50\u91CC","kind":"SWITCH","size":1,"default":[0]},{"name":"_frameCount","label":"Frame Count","kind":"VALUE","size":1,"default":[0]},{"name":"_boundMaxX","label":"Bound Max X","kind":"VALUE","size":1,"default":[0]},{"name":"_boundMaxY","label":"Bound Max Y","kind":"VALUE","size":1,"default":[0]},{"name":"_boundMaxZ","label":"Bound Max Z","kind":"VALUE","size":1,"default":[0]},{"name":"_boundMinX","label":"Bound Min X","kind":"VALUE","size":1,"default":[0]},{"name":"_boundMinY","label":"Bound Min Y","kind":"VALUE","size":1,"default":[0]},{"name":"_boundMinZ","label":"Bound Min Z","kind":"VALUE","size":1,"default":[0]},{"name":"_B_autoPlayback","label":"Auto Playback","kind":"SWITCH","size":1,"default":[0]},{"name":"_gameTimeAtFirstFrame","label":"Game Time At First Frame","kind":"VALUE","size":1,"default":[0]},{"name":"_displayFrame","label":"Display Frame","kind":"VALUE","size":1,"default":[0]},{"name":"_playbackSpeed","label":"Playback Speed","kind":"VALUE","size":1,"default":[0]},{"name":"_houdiniFPS","label":"Houdini FPS","kind":"VALUE","size":1,"default":[0]},{"name":"_TextureFormat","label":"Texture Format (1=HDR 0=LDR)","kind":"SWITCH","size":1,"default":[1]},{"name":"_B_UNLOAD_ROT_TEX","label":"\u4F7F\u7528\u538B\u7F29ROT(\u5B58\u5728PosTex.a)","kind":"SWITCH","size":1,"default":[0]},{"name":"_B_surfaceNormals","label":"Support Surface Normal Maps","kind":"SWITCH","size":1,"default":[0]},{"name":"_B_pscaleAreInPosA","label":"Piece Scales Are In Position Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_globalPscaleMul","label":"Global Piece Scale Multiplier","kind":"VALUE","size":1,"default":[1]},{"name":"_EnableCommonVAT","label":"CommonVAT \u9876\u70B9\u52A8\u753B","kind":"SWITCH","size":1,"default":[0]},{"name":"_CommonVATMapParams","label":"VAT \u53C2\u6570(\u5BBD,\u9AD8,\u4FDD\u7559,\u4FDD\u7559)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_CommonVATCurrentFrame","label":"\u5F53\u524D\u5E27","kind":"VALUE","size":1,"default":[0]},{"name":"_CommonVATAutoPlay","label":"\u81EA\u52A8\u64AD\u653E","kind":"SWITCH","size":1,"default":[1]},{"name":"_CommonVATFPS","label":"\u52A8\u753B\u5E27\u7387","kind":"VALUE","size":1,"default":[30]},{"name":"_CommonVATBlendNormal","label":"\u6CD5\u7EBF\u6DF7\u5408\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_EnableFactoryVAT","label":"\u5DE5\u5382 VAT","kind":"SWITCH","size":1,"default":[0]},{"name":"_FactoryVATMapParams","label":"\u5DE5\u5382 VAT \u53C2\u6570(\u5BBD,\u9AD8,\u4FDD\u7559,\u4FDD\u7559)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_FactoryVATFrame","label":"\u5DE5\u5382 VAT \u5F53\u524D\u5E27","kind":"VALUE","size":1,"default":[0]},{"name":"_FactoryVATLastFrame","label":"\u5DE5\u5382 VAT \u4E0A\u4E00\u5E27","kind":"VALUE","size":1,"default":[0]},{"name":"_UseVATColorTex","label":"VAT \u989C\u8272\u56FE","kind":"SWITCH","size":1,"default":[0]},{"name":"_B_uvFromRG","label":"VAT \u989C\u8272\u56FE uv \u53D6 RG","kind":"SWITCH","size":1,"default":[0]},{"name":"_EffectPartID","label":"Effect Part ID","kind":"VALUE","size":1,"default":[0]},{"name":"_UseAlphaTest","label":"Use Alpha Test","kind":"SWITCH","size":1,"default":[0]},{"name":"_IgnorePostExposure","label":"Ignore Post Exposure","kind":"SWITCH","size":1,"default":[1]},{"name":"_CullMode","label":"Cull Mode","kind":"VALUE","size":1,"default":[2]},{"name":"_ExposureWithMiscParams","label":"Exposure (y = post exposure)","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_VFXParams1","label":"VFX Grade (rgb = tint, w = saturation)","kind":"VECTOR","size":4,"default":[1,1,1,1]},{"name":"_VFXParams0","label":"VFX Params0 (xyz = \u89D2\u8272\u4F4D, w = \u65F6\u95F4)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_GlobalsFresnelColor","label":"Globals Fresnel Color","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"unity_Float4x5_Param0","label":"Per-Draw Instance Data 0","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_ScanLinePlane","label":"\u626B\u63CF\u5E73\u9762(xyz \u6CD5\u7EBF, w \u8DDD\u79BB)","kind":"VECTOR","size":4,"default":[0,1,0,0]},{"name":"_ScanLineWidth","label":"\u626B\u63CF\u7EBF\u5BBD","kind":"VALUE","size":1,"default":[0]},{"name":"_ScanLineColor","label":"\u626B\u63CF\u7EBF\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_BlackBoxColor","label":"\u9ED1\u7BB1\u8F6E\u5ED3\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_GridLineWidth","label":"Grid Line Width","kind":"SLIDER","size":1,"min":0.1,"max":15,"default":[1]},{"name":"_ForceMoveToFarPlane","label":"Move To Far Plane","kind":"SWITCH","size":1,"default":[0]},{"name":"_FocusScreenCenterInnerSize","label":"\u4E2D\u5FC3\u663E\u793A\u7684\u8303\u56F4","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_FocusScreenCenterOuterRange","label":"\u8FC7\u6E21\u5230\u4E0D\u663E\u793A\u7684\u8DDD\u79BB","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_EnableDepthOnlyDither","label":"\u6DF1\u5EA6\u8D9F\u6296\u52A8","kind":"SWITCH","size":1,"default":[0]},{"name":"_TaaFrameInfo","label":"TAA Frame Info","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_TransparentMatColor","label":"\u7A7F\u5899\u6750\u8D28\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_UseVFXPortal","label":"VFX Portal","kind":"SWITCH","size":1,"default":[0]},{"name":"_PortalStencilSet","label":"Portal Stencil Set (0=\u906E\u7F69 1=\u5BB9\u5668 2=\u53CD\u5411)","kind":"VALUE","size":1,"default":[0]},{"name":"_PortalAlpha","label":"Portal Alpha","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_UseSludge","label":"Use Sludge","kind":"SWITCH","size":1,"default":[0]},{"name":"_SludgeHeightTextureParams0","label":"Sludge Params0 (xyz \u539F\u70B9, w \u8303\u56F4)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SludgeHeightTextureParams1","label":"Sludge Params1 (v \u8F74)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SludgeHeightTextureParams2","label":"Sludge Params2 (u \u8F74)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SludgeHeightTextureParams3","label":"Sludge Params3 (uv \u7F29\u653E)","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_SludgeHeightTextureEdgeSharp","label":"Sludge Edge Sharp","kind":"VALUE","size":1,"default":[20]},{"name":"_DisappearTexNoiseIntensity","label":"Disappear Noise Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_DisappearDarkSpeed","label":"Disappear Dark Speed","kind":"VALUE","size":1,"default":[0]},{"name":"_DisappearEdgeSharp","label":"Disappear Edge Sharp","kind":"VALUE","size":1,"default":[1]},{"name":"_DisappearCenterPosition","label":"Disappear Center","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_DisappearColor","label":"Disappear Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_DitherScale","label":"Dither Scale","kind":"VALUE","size":1,"default":[1]},{"name":"_CharacterInteractiveRange","label":"Character Interactive Range","kind":"VALUE","size":1,"default":[1]},{"name":"_CharacterInteractiveColor","label":"Character Interactive Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_CharacterInteractiveParam","label":"Character Interactive Param (xyz \u53D7\u51FB\u70B9, w \u76F8\u4F4D)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_UseNoise3D","label":"Use Noise 3D","kind":"SWITCH","size":1,"default":[0]},{"name":"_NoiseIntensity","label":"\u6270\u52A8\u56FE\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_NoiseTexUseWorldUVW","label":"\u4F7F\u7528\u4E16\u754C\u5750\u6807\u505AUVW","kind":"SWITCH","size":1,"default":[1]},{"name":"_NoiseTexTilling1","label":"\u6270\u52A8\u56FEUV\u5BC6\u5EA6\u7F29\u653E1","kind":"VECTOR","size":4,"default":[1,1,1,0]},{"name":"_NoiseUVWDir1","label":"\u6270\u52A8\u56FEUVW\u79FB\u52A8\u65B9\u54111","kind":"VECTOR","size":4,"default":[1,1,1,0]},{"name":"_NoiseUVWSpeed1","label":"\u6270\u52A8\u56FEUVW\u79FB\u52A8\u901F\u5EA61","kind":"VALUE","size":1,"default":[0]},{"name":"_NoiseFar","label":"\u8FDC\u8FD1\u5206\u5272\u7EBF","kind":"VALUE","size":1,"default":[1]},{"name":"_NoiseFarIntensity","label":"\u8FDC\u5904\u6270\u52A8\u5F3A\u5EA6","kind":"VALUE","size":1,"default":[1]},{"name":"_UseTrail","label":"Use Trail","kind":"SWITCH","size":1,"default":[0]},{"name":"_TrailEffect","label":"Trail Effect","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseBlend","label":"Use Blend","kind":"SWITCH","size":1,"default":[0]},{"name":"_BlendTexUVWeights","label":"Blend Tex UV Weights","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_BlendTexUVSpeed","label":"Blend Tex UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_BlendTexUVRotateMat","label":"Blend Tex UV Rotate Mat","kind":"VECTOR","size":4,"default":[1,0,0,1]},{"name":"_BlendTexUseDisturb","label":"Blend Tex Use Disturb","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_UseWaterBlend","label":"Use Water Blend","kind":"SWITCH","size":1,"default":[0]},{"name":"_WaterHeight","label":"Water Height","kind":"VALUE","size":1,"default":[-9999]},{"name":"_SafeFullAbsorpDistance","label":"Safe Full Absorp Distance","kind":"VALUE","size":1,"default":[1]},{"name":"_WaterAbsorption","label":"Water Absorption","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterAbsorption2","label":"Water Absorption2","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterScatter","label":"Water Scatter","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_UseFog","label":"Use Fog","kind":"SWITCH","size":1,"default":[0]},{"name":"_FogIntensity","label":"Fog Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_Use_VerexTexColorAsOpacity","label":"\u7528\u9876\u70B9\u8272\u63A7\u5236Opacity","kind":"SWITCH","size":1,"default":[0]},{"name":"_Specular","label":"Specular (Default 0.5)","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_Roughness","label":"\u7C97\u7CD9\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_MatCapIgnorePostExposure","label":"Matcap \u4E0D\u53D7\u81EA\u52A8\u66DD\u5149\u5F71\u54CD","kind":"SWITCH","size":1,"default":[1]},{"name":"_RefractionIOR","label":"\u6563\u5C04IOR","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_RefractionColor","label":"\u6298\u5C04\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RefractionFresnelColor","label":"\u6298\u5C04\u83F2\u6D85\u5C14\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RefractionStrength","label":"\u6298\u5C04\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_UseFresnel","label":"Use Fresnel","kind":"SWITCH","size":1,"default":[0]},{"name":"_FresnelBias","label":"\u83F2\u6D85\u5C14\u504F\u79FB","kind":"SLIDER","size":1,"min":-1,"max":2,"default":[0]},{"name":"_FresnelAffectOpacity","label":"\u83F2\u6D85\u5C14\u5F71\u54CD\u900F\u660E\u5EA6\u7CFB\u6570","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_FresnelPower","label":"Fresnel Power","kind":"SLIDER","size":1,"min":1,"max":100,"default":[1]},{"name":"_Use_VerexGAsFresnelOpacity","label":"\u4F7F\u7528\u9876\u70B9\u8272G\u901A\u9053\u63A7\u5236\u83F2\u6D85\u5C14\u5F3A\u5EA6","kind":"SWITCH","size":1,"default":[0]},{"name":"_FresnelUseMeshNormal","label":"\u83F2\u6D85\u5C14\u6548\u679C\u4F7F\u7528\u6A21\u578B\u6CD5\u7EBF","kind":"SWITCH","size":1,"default":[0]},{"name":"_FresnelFlip","label":"\u7FFB\u8F6C\u83F2\u6D85\u5C14\u533A\u57DF","kind":"SWITCH","size":1,"default":[0.0010000000474974513]},{"name":"_EnableGlassRefraction","label":"\u73BB\u7483\u6298\u5C04","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseCustomRefractTex","label":"\u6298\u5C04\u7C7B\u578B (0=\u6298\u5C04\u7387 1=\u81EA\u5B9A\u4E49\u8D34\u56FE)","kind":"VALUE","size":1,"default":[0]},{"name":"_RefractTint","label":"\u6298\u5C04\u67D3\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RefractionContribution","label":"\u6298\u5C04\u8D21\u732E","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_RefractThickness","label":"\u539A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_IsShell","label":"\u73BB\u7483\u7C7B\u578B (0=\u5B9E\u5FC3 1=\u58F3)","kind":"VALUE","size":1,"default":[1]},{"name":"_IoR","label":"\u6298\u5C04\u7387 IoR","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0.800000011920929]},{"name":"_RefractTexIntensity","label":"\u6298\u5C04\u8D34\u56FE\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.009999999776482582]},{"name":"_RefractBrightness","label":"\u6298\u5C04\u4EAE\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_EnableGlassRim","label":"\u73BB\u7483\u8FB9\u7F18\u9AD8\u5149","kind":"SWITCH","size":1,"default":[0]},{"name":"_GlassRimColor","label":"\u73BB\u7483\u8FB9\u7F18\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_GlassRimPower","label":"\u73BB\u7483\u8FB9\u7F18\u5E42\u6B21","kind":"SLIDER","size":1,"min":0,"max":50,"default":[1]},{"name":"_GlassRimStrength","label":"\u73BB\u7483\u8FB9\u7F18\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_GlassRimRoughnessScale","label":"\u73BB\u7483\u8FB9\u7F18\u7C97\u7CD9\u5EA6\u7F29\u653E","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_GlassRimRefractionPower","label":"\u73BB\u7483\u8FB9\u7F18\u6298\u5C04\u5E42\u6B21","kind":"SLIDER","size":1,"min":0,"max":5,"default":[1]},{"name":"_GlassRimRefractionStrength","label":"\u73BB\u7483\u8FB9\u7F18\u6298\u5C04\u4EAE\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_GlassRimUseMask","label":"\u4F7F\u7528\u8FB9\u7F18\u906E\u7F69","kind":"SWITCH","size":1,"default":[0]},{"name":"_GlassRimMaskChannel","label":"\u8FB9\u7F18\u906E\u7F69\u901A\u9053","kind":"VALUE","size":1,"default":[0]},{"name":"_UseVertexColorAsRimMask","label":"\u4F7F\u7528\u9876\u70B9\u8272\u4F5C\u4E3A\u8FB9\u7F18\u906E\u7F69","kind":"SWITCH","size":1,"default":[0]},{"name":"_GlassMaskOpacity","label":"\u73BB\u7483\u906E\u7F69\u4E0D\u900F\u660E\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.9950000047683716]},{"name":"_EnableIce","label":"\u51B0\u5757\u6548\u679C","kind":"SWITCH","size":1,"default":[0]},{"name":"_IceRefractionColor","label":"\u51B0\u5757\u6298\u5C04\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_IceRefractionBrightness","label":"\u51B0\u5757\u6298\u5C04\u4EAE\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_IceRefractionStrength","label":"\u51B0\u5757\u6298\u5C04\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_IceRefractionMipBias","label":"\u51B0\u5757\u6298\u5C04\u91C7\u6837Mip\u504F\u79FB","kind":"VALUE","size":1,"default":[0]},{"name":"_IceOpacityMapTilling","label":"\u51B0\u5757\u4E0D\u900F\u660E\u5EA6\u8D34\u56FE\u5E73\u94FA","kind":"SLIDER","size":1,"min":0.01,"max":20,"default":[1]},{"name":"_IceOpacityThreshold","label":"\u51B0\u5757\u4E0D\u900F\u660E\u5EA6\u9608\u503C","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_EnableContainerWater","label":"\u5BB9\u5668\u6DB2\u4F53\u6548\u679C","kind":"SWITCH","size":1,"default":[0]},{"name":"_WaterShallowColor","label":"\u6D45\u6C34\u989C\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterDeepColor","label":"\u6DF1\u6C34\u989C\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterRefractionColor","label":"\u6C34\u6298\u5C04\u989C\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterScatteringColor","label":"\u6563\u5C04\u989C\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterAbsorptionColor","label":"\u5438\u6536\u989C\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterSurfaceNormalScale","label":"\u6C34\u9762\u6CD5\u7EBF\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_WaterNormalSpeed","label":"\u6C34\u9762\u6CE2\u52A8\u901F\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.009999999776482582]},{"name":"_WaterFresnelPower","label":"\u6C34\u9762\u83F2\u6D85\u5C14\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_WaterReflectionStrength","label":"\u6C34\u9762\u53CD\u5C04\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":3,"default":[1]},{"name":"_WaterRefractionStrength","label":"\u6C34\u9762\u6298\u5C04\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":3,"default":[1]},{"name":"_WaterRefractionBrightness","label":"\u6C34\u9762\u6298\u5C04\u4EAE\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterCupRadius","label":"\u676F\u4F53\u534A\u5F84","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterMeniscusWidth","label":"Meniscus\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterBaseOpacity","label":"\u57FA\u7840\u4E0D\u900F\u660E\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterOpacityDepthFactor","label":"\u6DF1\u5EA6\u4E0D\u900F\u660E\u5EA6\u7CFB\u6570","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterOpacityFresnelFactor","label":"\u83F2\u6D85\u5C14\u4E0D\u900F\u660E\u5EA6\u7CFB\u6570","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterOpacityMinimum","label":"\u6700\u5C0F\u4E0D\u900F\u660E\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterOpacityMaximum","label":"\u6700\u5927\u4E0D\u900F\u660E\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterEdgeOpacity","label":"\u8FB9\u7F18\u4E0D\u900F\u660E\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterTurbidity","label":"\u6D51\u6D4A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterCausticStrength","label":"\u6C34\u6CE2\u7EB9\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterCausticSpeed","label":"\u6C34\u6CE2\u7EB9\u901F\u5EA6","kind":"SLIDER","size":1,"min":0,"max":5,"default":[1]},{"name":"_IceballRadius","label":"\u51B0\u7403\u534A\u5F84","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_IceballWaterlineWidth","label":"\u51B0\u7403\u6C34\u7EBF\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_IcePosition","label":"\u51B0\u5757\u4F4D\u7F6E","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_DisplacementNormalStrength","label":"\u7F6E\u6362\u6CD5\u7EBF\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_NormalMapBlendWeight","label":"\u6CD5\u7EBF\u8D34\u56FE\u6DF7\u5408\u6743\u91CD","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_WaterStrokeDistance","label":"\u63CF\u8FB9\u8DDD\u79BB","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.039500001817941666]},{"name":"_WaterStrokeWidth","label":"\u63CF\u8FB9\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0.0001,"max":0.1,"default":[0.03519999980926514]},{"name":"_WaterStrokeColor","label":"\u63CF\u8FB9\u989C\u8272","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_WaterStrokeOpacity","label":"\u63CF\u8FB9\u4E0D\u900F\u660E\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_WaterStrokeSoftness","label":"\u63CF\u8FB9\u8FB9\u7F18\u67D4\u548C\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":0.1,"default":[0.0024999999441206455]},{"name":"_ParallaxIgnorePostExposure","label":"Parallax Ignore Post Exposure","kind":"SWITCH","size":1,"default":[1]},{"name":"_ShadowReceiverPartID","label":"Shadow Receiver Part ID","kind":"VALUE","size":1,"default":[0]},{"name":"_ALerpIntensity","label":"Color(A) Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_AMax","label":"Max","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_AMin","label":"Min","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_AOClamp_Rump","label":"Rump AO \u6700\u5C0F\u503C","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_AOColorSaturation","label":"AO\u989C\u8272\u9971\u548C\u5EA6","kind":"SLIDER","size":1,"min":0,"max":3,"default":[1]},{"name":"_AOIntensity","label":"AO\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_AOIntensity_Rump","label":"Rump AO\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_AORampPower","label":"Ramp AO\u8303\u56F4","kind":"SLIDER","size":1,"min":0.1,"max":20,"default":[1]},{"name":"_AddMatCapOn","label":"\u542F\u7528\u9644\u52A0Matcap","kind":"SWITCH","size":1,"default":[0]},{"name":"_AddMatcapBrightness","label":"\u9644\u52A0Matcap\u4EAE\u5EA6","kind":"SLIDER","size":1,"min":0,"max":50,"default":[1]},{"name":"_AddMatcapColor","label":"\u9644\u52A0Matcap\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_AddMatcapHue","label":"\u9644\u52A0Matcap\u8272\u76F8","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_AddMatcapSaturation","label":"\u9644\u52A0Matcap\u9971\u548C\u5EA6","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_AnisotropyBias","label":"Anisotropy Bias","kind":"SLIDER","size":1,"min":0,"max":0.5,"default":[0]},{"name":"_AnisotropyHueColor","label":"Anisotropy Hue","kind":"COLOR","size":4,"default":[1,1,1,0],"gamma":true},{"name":"_AnisotropySmoothness","label":"Anisotropy Smoothness","kind":"SLIDER","size":1,"min":0.01,"max":0.5,"default":[0.20000000298023224]},{"name":"_BLerpIntensity","label":"Color(B) Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_BackFresnelMax","label":"\u8FB9\u7F18\u5149\uFF08\u80CC\u5149\uFF09\u6700\u5927\u503C","kind":"SLIDER","size":1,"min":-1,"max":2,"default":[1]},{"name":"_BackFresnelMin","label":"\u8FB9\u7F18\u5149\uFF08\u80CC\u5149\uFF09\u6700\u5C0F\u503C","kind":"SLIDER","size":1,"min":-1,"max":2,"default":[0.5]},{"name":"_BackRimIntensity","label":"\u8FB9\u7F18\u5149\uFF08\u80CC\u5149\uFF09\u5F3A\u5EA6","kind":"VALUE","size":1,"default":[0]},{"name":"_BrightenColor","label":"\u5C40\u90E8\u63D0\u4EAE\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorA","label":"Color(A)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorB","label":"Color(B)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorG","label":"Color(G)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorMax","label":"Color Max","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorMaxR","label":"\u5934\u53D1\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorMin","label":"Color Min","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorMinR","label":"\u5934\u53D1\u8FC7\u6E21\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorSaturation","label":"\u6697\u90E8\u9971\u548C\u5EA6\u8C03\u6574","kind":"VALUE","size":1,"default":[1]},{"name":"_DarkColor","label":"Dark Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DayColor","label":"Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DebugDiffseLayer","label":"Debug \u6F2B\u53CD\u5C04\u5C42","kind":"VALUE","size":1,"default":[0]},{"name":"_DebugSpecularLayer","label":"Debug \u9AD8\u5149\u5C42","kind":"VALUE","size":1,"default":[0]},{"name":"_DiffuseColorInfluence","label":"\u56FA\u6709\u8272\u5F71\u54CD\u81EA\u53D1\u5149\u989C\u8272","kind":"SLIDER","size":1,"min":0,"max":5,"default":[0]},{"name":"_DyeingColor","label":"\u7EA2\u901A\u9053\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DyeingColor2","label":"\u7EFF\u901A\u9053\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DyeingColor3","label":"\u84DD\u901A\u9053\u989C\u8272\uFF08\u76AE\u80A4\uFF09","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DyeingColor4","label":"Alpha\u901A\u9053\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DyeingColorA","label":"\u776B\u6BDB\u53CD\u5149 (A)","kind":"COLOR","size":4,"default":[1,1,1,0],"gamma":true},{"name":"_DyeingColorAMax","label":"\u4E0A\u776B\u6BDB Max","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DyeingColorAMin","label":"\u4E0A\u776B\u6BDB Min","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DyeingColorB","label":"\u5507\u5F69 (B)","kind":"COLOR","size":4,"default":[1,1,1,0],"gamma":true},{"name":"_DyeingColorG","label":"\u816E\u7EA2 (G)","kind":"COLOR","size":4,"default":[1,1,1,0],"gamma":true},{"name":"_DyeingColorR","label":"\u773C\u5F71 (R)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DyeingIntensity4","label":"Alpha\u901A\u9053\u989C\u8272\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_DyeingLerpMode","label":"\u5207\u6362\u4E3ALerp\u6A21\u5F0F","kind":"SWITCH","size":1,"default":[0]},{"name":"_EmissiveGetRampEffect","label":"\u81EA\u53D1\u5149\u533A\u57DF\u53D7Ramp\u5F71\u54CD","kind":"SWITCH","size":1,"default":[0]},{"name":"_EmissiveRampMode","label":"  \u81EA\u53D1\u5149\u533A\u57DFRamp\u8DDF\u968F\u533A\u57DF","kind":"VALUE","size":2,"default":[3]},{"name":"_ExpressionColorMask","label":"Expresssion Color Mask","kind":"VALUE","size":1,"default":[0]},{"name":"_ExpressionIntensity","label":"Expression Intensity","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_ExpressionMaskColor","label":"Expression Mask Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ExpressionMaskIntensity","label":"Expression Mask Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_ExpressionOffsetU","label":"Expression OffsetU","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_ExpressionOffsetV","label":"Expression OffsetV","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_ExpressionScale3","label":"Expression Scale 3","kind":"SLIDER","size":1,"min":0.2,"max":2,"default":[1]},{"name":"_EyebrowDarkColor","label":"\u7709\u6BDB\u6697\u90E8\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_EyebrowNoRamp","label":"\u7709\u6BDB\u4E0D\u4F7F\u7528Ramp","kind":"SWITCH","size":1,"default":[0]},{"name":"_FadeClip","label":"Fade Threshold","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_FresnelMax","label":"\u8FB9\u7F18\u5149\u6700\u5927\u503C","kind":"SLIDER","size":1,"min":-1,"max":2,"default":[1]},{"name":"_FresnelMin","label":"\u8FB9\u7F18\u5149\u6700\u5C0F\u503C","kind":"SLIDER","size":1,"min":-1,"max":2,"default":[0.5]},{"name":"_FresnelPow","label":"_FresnelPow","kind":"VALUE","size":1,"default":[5]},{"name":"_GLerpIntensity","label":"Color(G) Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_HighLightColor1","label":"Hight Light Color 1","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_HighLightColor2","label":"Hight Light Color 2","kind":"COLOR","size":4,"default":[0.4392000138759613,0.8352000117301941,1,1],"gamma":true},{"name":"_HighLightIntensity2","label":"\u5634\u5507\u9AD8\u5149(\u5E38\u9A7B) \u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_HighLightMoveDistance2","label":"High Light Move Distance","kind":"SLIDER","size":1,"min":0,"max":0.02,"default":[0.019999999552965164]},{"name":"_HighlightIntensity1","label":"Intensity 1","kind":"SLIDER","size":1,"min":0,"max":2,"default":[2]},{"name":"_HighlightIntensity2","label":"Intensity 2","kind":"SLIDER","size":1,"min":0,"max":2,"default":[0.05999999865889549]},{"name":"_HighlightIntensity3","label":"Intensity 3","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_HorizontalAmount2","label":"Horizontal Amount","kind":"VALUE","size":1,"default":[4]},{"name":"_IsLumInverse","label":"\u53CD\u5411ToneMap","kind":"SWITCH","size":1,"default":[1]},{"name":"_KiboEnable","label":"\u5947\u6CE2\u5149\u7167\u8BBE\u7F6E","kind":"SWITCH","size":1,"default":[0]},{"name":"_Layer3Mode","label":"Layer3 Mode","kind":"VALUE","size":1,"default":[0]},{"name":"_MakeupColor","label":"Makeup Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_MaskColor02","label":"\u4E0B\u776B\u6BDB (0.2)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_MaskColor03","label":"\u773C\u767D\u7259\u9F7F (0.4)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_MaskColor04","label":"\u820C\u5934 (0.3)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_MaskColor05","label":"\u53E3\u8154\u7259\u5E8A (0.5)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_MaskColor06","label":"\u776B\u6BDB\u63CF\u8FB9 (0.6)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_MaskColor07","label":"NPC\u773C\u775B (0.7)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_MaskColor08","label":"NPC\u7709\u6BDB (0.8)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_Max","label":"Max","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_MetalMapOff","label":"\u5173\u95EDILM\u91D1\u5C5E\u5EA6(\u4EC5\u9644\u52A0Matcap\u90E8\u5206)","kind":"SWITCH","size":1,"default":[0]},{"name":"_Min","label":"Min","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_NormalMapOn","label":"Normal Map On","kind":"SWITCH","size":1,"default":[0]},{"name":"_PaintHighlightDayColor","label":"\u9AD8\u5149\u989C\u8272(G\u901A\u9053)","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_PartColor","label":"\u6311\u67D3\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RampColor","label":"Ramp\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RampPartColor","label":"Ramp\u6311\u67D3\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_Range","label":"Range","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_RimColor","label":"\u8FB9\u7F18\u5149\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RimIntensity","label":"\u8FB9\u7F18\u5149\u5F3A\u5EA6","kind":"VALUE","size":1,"default":[0]},{"name":"_RimLightColor","label":"_RimLightColor","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RimLightColorRatio","label":"\u56FA\u6709\u8272\u989C\u8272\u5F71\u54CD\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_RimLightStrength","label":"_RimLightStrength","kind":"VALUE","size":1,"default":[0]},{"name":"_RimMainLightRatio","label":"\u4E3B\u5149\u6E90\u989C\u8272\u5F71\u54CD\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.20000000298023224]},{"name":"_RimMaskVal","label":"\u9876\u70B9\u8272\u63A7\u5236\u6BD4\u4F8B","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_RimNoiseIntensity","label":"Noise\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_RimNoiseMax","label":"Noise\u6700\u5927\u503C","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_RimNoiseMin","label":"Noise\u6700\u5C0F\u503C","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_RimNoiseScale","label":"Noise\u5927\u5C0F","kind":"VALUE","size":1,"default":[10]},{"name":"_RotateAngle1","label":"Anim Rotate Angle 1","kind":"SLIDER","size":1,"min":-180,"max":180,"default":[0]},{"name":"_RotateAngle2","label":"Anim Rotate Angle 2","kind":"SLIDER","size":1,"min":-180,"max":180,"default":[0]},{"name":"_RotateAngle3","label":"Anim Rotate Angle 3","kind":"SLIDER","size":1,"min":-180,"max":180,"default":[0]},{"name":"_ScaleX1","label":"Scale X 1","kind":"SLIDER","size":1,"min":0.2,"max":2,"default":[1]},{"name":"_ScaleX2","label":"Scale X 2","kind":"SLIDER","size":1,"min":0.2,"max":2,"default":[1]},{"name":"_ScaleY1","label":"Scale Y 1","kind":"SLIDER","size":1,"min":0.2,"max":2,"default":[1]},{"name":"_ScaleY2","label":"Scale Y 2","kind":"SLIDER","size":1,"min":0.2,"max":2,"default":[1]},{"name":"_ShiftIntensity","label":"\u6270\u52A8\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_SiwaBlackWhiteExchange","label":"\u9ED1\u767D\u4E1D\u889C\u8D28\u611F\u8F6C\u6362","kind":"SWITCH","size":1,"default":[0]},{"name":"_SiwaColor","label":"\u4E1D\u889C\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_SiwaFresnelMax","label":"\u4E1D\u889C\u83F2\u6D85\u5C14\u6700\u5927\u503C","kind":"VALUE","size":1,"default":[0]},{"name":"_SiwaFresnelMin","label":"\u4E1D\u889C\u83F2\u6D85\u5C14\u6700\u5C0F\u503C","kind":"VALUE","size":1,"default":[0]},{"name":"_SkinColor","label":"\u76AE\u80A4\u8C03\u8272","kind":"COLOR","size":4,"default":[1,1,1,0],"gamma":true},{"name":"_SpecularColor","label":"\u9AD8\u5149\u989C\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_SpecularExponent","label":"\u9AD8\u5149\u5BBD\u7A84","kind":"SLIDER","size":1,"min":0.01,"max":500,"default":[50]},{"name":"_SpecularFlipHorizontal","label":"Flip Horizontal","kind":"SWITCH","size":2,"default":[0]},{"name":"_SwitchToMultiply","label":"\u5207\u6362\u6B63\u7247\u53E0\u5E95\u53E0\u52A0\u6A21\u5F0F","kind":"SWITCH","size":2,"default":[0]},{"name":"_TestAngle","label":"Test Light Angle","kind":"SLIDER","size":1,"min":0,"max":360,"default":[0]},{"name":"_UseBrighten","label":"Use Brighten","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseDiffuse","label":"\u776B\u6BDB\u989C\u8272\u4F7F\u7528Base Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseRampPartColor","label":"\u6311\u67D3\u5904\u4F7F\u7528\u7279\u6709\u989C\u8272","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseRimNoiseMask","label":"Noise\u906E\u7F69\u5F00\u5173","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseTestLightDir","label":"Use Test Light Direction ?","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseVertexColorForColor","label":"Use Vertex Color(G) For Color","kind":"SWITCH","size":1,"default":[0]},{"name":"_VerticalAmount2","label":"Vertical Amount","kind":"VALUE","size":1,"default":[2]},{"name":"RampIdRegion0","label":"\u5206\u533A 0 \u659C\u5761\u884C","kind":"VALUE","size":1,"default":[0]},{"name":"RampIdRegion1","label":"\u5206\u533A 1 \u659C\u5761\u884C","kind":"VALUE","size":1,"default":[1]},{"name":"RampIdRegion2","label":"\u5206\u533A 2 \u659C\u5761\u884C","kind":"VALUE","size":1,"default":[2]},{"name":"RampIdRegion3","label":"\u5206\u533A 3 \u659C\u5761\u884C","kind":"VALUE","size":1,"default":[3]},{"name":"RampIdRegion4","label":"\u5206\u533A 4 \u659C\u5761\u884C","kind":"VALUE","size":1,"default":[4]},{"name":"RampIntensityRegion0","label":"\u5206\u533A 0 \u659C\u5761\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"RampIntensityRegion1","label":"\u5206\u533A 1 \u659C\u5761\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"RampIntensityRegion2","label":"\u5206\u533A 2 \u659C\u5761\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"RampIntensityRegion3","label":"\u5206\u533A 3 \u659C\u5761\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"RampIntensityRegion4","label":"\u5206\u533A 4 \u659C\u5761\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"UseRampIDMask","label":"\u6309\u5206\u533A\u9009\u659C\u5761\u884C","kind":"SWITCH","size":1,"default":[0]},{"name":"RampPosition","label":"\u659C\u5761\u884C\u4F4D\u7F6E","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.30000001192092896]},{"name":"RampInt","label":"\u659C\u5761\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"SkinMin","label":"\u76AE\u80A4\u5206\u533A\u4E0B\u754C","kind":"VALUE","size":1,"default":[0]},{"name":"SkinMax","label":"\u76AE\u80A4\u5206\u533A\u4E0A\u754C","kind":"VALUE","size":1,"default":[0]},{"name":"UseFaceAni_SkinMask","label":"\u975E\u76AE\u80A4\u5206\u533A\u659C\u5761\u6743\u91CD","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"SkinColor","label":"\u76AE\u80A4\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"GlobalCharSkyLightIntensity","label":"\u5929\u5149\u5F3A\u5EA6","kind":"VALUE","size":1,"default":[1]},{"name":"DecodeShadowThreshold","label":"\u70D8\u7119\u9634\u5F71\u89E3\u7801\u9608\u503C","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.5]},{"name":"SolidShadowProcess","label":"\u5B9E\u5FC3\u9634\u5F71\u9608\u503C","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.20000000298023224]},{"name":"SolidShadowWidth","label":"\u5B9E\u5FC3\u9634\u5F71\u534A\u5BBD","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.10000000149011612]},{"name":"ShadowWidth","label":"\u9634\u5F71\u8F6F\u8FB9\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.009999999776482582]},{"name":"ShadowWidthUseID","label":"\u6309\u5206\u533A\u9009\u8F6F\u8FB9\u5BBD\u5EA6","kind":"SWITCH","size":1,"default":[0]},{"name":"ShadowWidthRegion0","label":"\u5206\u533A 0 \u8F6F\u8FB9\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.009999999776482582]},{"name":"ShadowWidthRegion1","label":"\u5206\u533A 1 \u8F6F\u8FB9\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.009999999776482582]},{"name":"ShadowWidthRegion2","label":"\u5206\u533A 2 \u8F6F\u8FB9\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.009999999776482582]},{"name":"ShadowWidthRegion3","label":"\u5206\u533A 3 \u8F6F\u8FB9\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.009999999776482582]},{"name":"ShadowWidthRegion4","label":"\u5206\u533A 4 \u8F6F\u8FB9\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":1,"default":[0.009999999776482582]},{"name":"SolidShadowStrength","label":"\u5B9E\u5FC3\u9634\u5F71\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"Desaturation","label":"\u53BB\u9971\u548C","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"ShadowProcess","label":"\u9762\u90E8\u9634\u5F71\u4E2D\u5FC3\u4F4D","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"SolidShadow_RampPosition","label":"\u9762\u90E8\u9634\u5F71\u4E0A\u9650","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"SDFPitchPosition","label":"\u9762\u90E8\u56FE\u4FEF\u4EF0\u5206\u5F20","kind":"VALUE","size":1,"default":[0]},{"name":"_ToonShadowTint","label":"Shadow Tint","kind":"COLOR","size":4,"default":[0.5,0.5,0.6000000238418579,1],"gamma":true},{"name":"_ToonLightTint","label":"Light Tint","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ToonFarShadowTint","label":"Far Shadow Tint","kind":"COLOR","size":4,"default":[0.5,0.5,0.6000000238418579,1],"gamma":true},{"name":"_ToonFarLightTint","label":"Far Light Tint","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ToonDepthTintControls","label":"Depth Tint Controls","kind":"VECTOR","size":4,"default":[1000,1,0,0]},{"name":"_ToonTransition","label":"Toon Transition","kind":"VECTOR","size":4,"default":[0.30000001192092896,0.699999988079071,0.20000000298023224,0]},{"name":"_ToonLightingScales","label":"Lighting Scales","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_ToonOcclusionScale","label":"Occlusion Scale","kind":"VALUE","size":1,"default":[1]},{"name":"_ToonFilmCurve","label":"Film Curve","kind":"SWITCH","size":1,"default":[1]},{"name":"_ToonRimControl","label":"Rim Control","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_ToonRimWidthFactor","label":"Rim Width Factor","kind":"VALUE","size":1,"default":[1]},{"name":"_ToonRimColor","label":"Rim Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"HighlightPosition0","label":"\u9AD8\u5149\u5E26\u4F4D\u7F6E 0","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"HighlightPosition1","label":"\u9AD8\u5149\u5E26\u4F4D\u7F6E 1","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"HighlightPosition2","label":"\u9AD8\u5149\u5E26\u4F4D\u7F6E 2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"HighlightWidth0","label":"\u9AD8\u5149\u5E26\u534A\u5BBD 0","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightWidth1","label":"\u9AD8\u5149\u5E26\u534A\u5BBD 1","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightWidth2","label":"\u9AD8\u5149\u5E26\u534A\u5BBD 2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightScale0","label":"\u9AD8\u5149\u5E26\u7F29\u653E 0","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightScale1","label":"\u9AD8\u5149\u5E26\u7F29\u653E 1","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightScale2","label":"\u9AD8\u5149\u5E26\u7F29\u653E 2","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightFlowMin0","label":"\u9AD8\u5149\u5E26\u7F29\u653E\u4E0B\u9650 0","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightFlowMin1","label":"\u9AD8\u5149\u5E26\u7F29\u653E\u4E0B\u9650 1","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightFlowMin2","label":"\u9AD8\u5149\u5E26\u7F29\u653E\u4E0B\u9650 2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightEdgeLift0","label":"\u9AD8\u5149\u5E26\u8F6E\u5ED3\u62AC\u5347 0","kind":"VALUE","size":1,"default":[0]},{"name":"HighlightEdgeLift1","label":"\u9AD8\u5149\u5E26\u8F6E\u5ED3\u62AC\u5347 1","kind":"VALUE","size":1,"default":[0]},{"name":"HighlightEdgeLift2","label":"\u9AD8\u5149\u5E26\u8F6E\u5ED3\u62AC\u5347 2","kind":"VALUE","size":1,"default":[0]},{"name":"HairMaskChannel0","label":"\u9AD8\u5149\u5E26\u906E\u7F69\u901A\u9053 0","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HairMaskChannel1","label":"\u9AD8\u5149\u5E26\u906E\u7F69\u901A\u9053 1","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HairMaskChannel2","label":"\u9AD8\u5149\u5E26\u906E\u7F69\u901A\u9053 2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HairRimHiddenChannel0","label":"\u9AD8\u5149\u5E26\u8FB9\u7F18\u9690\u85CF\u901A\u9053 0","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HairRimHiddenChannel1","label":"\u9AD8\u5149\u5E26\u8FB9\u7F18\u9690\u85CF\u901A\u9053 1","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HairRimHiddenChannel2","label":"\u9AD8\u5149\u5E26\u8FB9\u7F18\u9690\u85CF\u901A\u9053 2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightColorIntensity0","label":"\u9AD8\u5149\u5E26\u4EAE\u5EA6 0","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightColorIntensity1","label":"\u9AD8\u5149\u5E26\u4EAE\u5EA6 1","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightColorIntensity2","label":"\u9AD8\u5149\u5E26\u4EAE\u5EA6 2","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseTiling1","label":"\u9AD8\u5149\u566A\u58F0 1 \u5E73\u94FA","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseOffset1","label":"\u9AD8\u5149\u566A\u58F0 1 \u504F\u79FB","kind":"VALUE","size":1,"default":[0]},{"name":"HighlightNoiseIntensity1","label":"\u9AD8\u5149\u566A\u58F0 1 \u5F3A\u5EA6","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseTiling2","label":"\u9AD8\u5149\u566A\u58F0 2 \u5E73\u94FA","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseOffset2","label":"\u9AD8\u5149\u566A\u58F0 2 \u504F\u79FB","kind":"VALUE","size":1,"default":[0]},{"name":"HighlightNoiseIntensity2","label":"\u9AD8\u5149\u566A\u58F0 2 \u5F3A\u5EA6","kind":"VALUE","size":1,"default":[0]},{"name":"HighlightUseNoise0","label":"\u9AD8\u5149\u5E26\u7528\u566A\u58F0 0","kind":"SWITCH","size":1,"default":[0]},{"name":"HighlightUseNoise1","label":"\u9AD8\u5149\u5E26\u7528\u566A\u58F0 1","kind":"SWITCH","size":1,"default":[0]},{"name":"HighlightUseNoise2","label":"\u9AD8\u5149\u5E26\u7528\u566A\u58F0 2","kind":"SWITCH","size":1,"default":[0]},{"name":"HighlightUseNoiseOffset0","label":"\u9AD8\u5149\u5E26\u7528\u566A\u58F0\u504F\u79FB 0","kind":"SWITCH","size":1,"default":[0]},{"name":"HighlightUseNoiseOffset1","label":"\u9AD8\u5149\u5E26\u7528\u566A\u58F0\u504F\u79FB 1","kind":"SWITCH","size":1,"default":[0]},{"name":"HighlightUseNoiseOffset2","label":"\u9AD8\u5149\u5E26\u7528\u566A\u58F0\u504F\u79FB 2","kind":"SWITCH","size":1,"default":[0]},{"name":"HighlightNoiseUpIntensity0","label":"\u9AD8\u5149\u5E26\u566A\u58F0\u4E0A\u5F3A\u5EA6 0","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseUpIntensity1","label":"\u9AD8\u5149\u5E26\u566A\u58F0\u4E0A\u5F3A\u5EA6 1","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseUpIntensity2","label":"\u9AD8\u5149\u5E26\u566A\u58F0\u4E0A\u5F3A\u5EA6 2","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseDownIntensity0","label":"\u9AD8\u5149\u5E26\u566A\u58F0\u4E0B\u5F3A\u5EA6 0","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseDownIntensity1","label":"\u9AD8\u5149\u5E26\u566A\u58F0\u4E0B\u5F3A\u5EA6 1","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightNoiseDownIntensity2","label":"\u9AD8\u5149\u5E26\u566A\u58F0\u4E0B\u5F3A\u5EA6 2","kind":"VALUE","size":1,"default":[1]},{"name":"HighlightUseMiddleMute0","label":"\u9AD8\u5149\u5E26\u4E2D\u6BB5\u9759\u97F3 0","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightUseMiddleMute1","label":"\u9AD8\u5149\u5E26\u4E2D\u6BB5\u9759\u97F3 1","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"HighlightUseMiddleMute2","label":"\u9AD8\u5149\u5E26\u4E2D\u6BB5\u9759\u97F3 2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_IsSceneEffect","label":"Scene Effect (color grade)","kind":"SWITCH","size":1,"default":[0]},{"name":"_Responsive","label":"Responsive","kind":"SWITCH","size":1,"default":[0]},{"name":"_EnableTransparentMV","label":"Enable Transparent MV","kind":"SWITCH","size":1,"default":[0]},{"name":"_MainTexMipmapBias","label":"MainTex Mipmap Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_RowsColumns","label":"Frame Rows/Columns","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_Frame","label":"Frame Index","kind":"VALUE","size":1,"default":[1]},{"name":"_ScaleOffset","label":"Frame Scale/Offset","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_CutsceneBaseColor","label":"Cutscene Base Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_LightRange1","label":"Light Range 1","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_LightRange2","label":"Light Range 2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_LeftFadeRange","label":"Left Fade Range","kind":"VALUE","size":1,"default":[0.10000000149011612]},{"name":"_RightFadeRange","label":"Right Fade Range","kind":"VALUE","size":1,"default":[0.10000000149011612]},{"name":"_ColorOption","label":"Color Option (\u4EAE/\u6697)","kind":"SWITCH","size":1,"default":[0]},{"name":"_ShapeOption","label":"Shape Option (\u7EB5\u5411/\u5F84\u5411)","kind":"SWITCH","size":1,"default":[0]},{"name":"_DepthFadePosition","label":"Depth Fade Position","kind":"VALUE","size":1,"default":[0]},{"name":"_NearFadeIntensity","label":"Near Fade Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_DepthFadeRange","label":"Depth Fade Range","kind":"VALUE","size":1,"default":[1]},{"name":"_LightIntensity","label":"Light Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_DarkIntensity","label":"Dark Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_EnableuseInvertFade","label":"Use Invert Fade","kind":"SWITCH","size":1,"default":[0]},{"name":"_RainColor","label":"Rain Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_RainTex0_ST","label":"RainTex0 Tiling/Offset","kind":"VECTOR","size":4,"default":[1,1,0,1]},{"name":"_DecalBaseColor","label":"Decal Base Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_EdgeFadeX","label":"Decal Edge Fade X","kind":"SLIDER","size":1,"min":0,"max":0.5,"default":[0]},{"name":"_EdgeFadeZ","label":"Decal Edge Fade Z","kind":"SLIDER","size":1,"min":0,"max":0.5,"default":[0]},{"name":"_EdgeFadeIntensity","label":"Decal Edge Fade Intensity","kind":"VALUE","size":1,"default":[0.009999999776482582]},{"name":"_HeightFade","label":"Decal Height Fade","kind":"VALUE","size":1,"default":[1]},{"name":"_HeightFadeOffset","label":"Decal Height Fade Offset","kind":"VALUE","size":1,"default":[0]},{"name":"_MainCustomData","label":"Decal Main Custom Data","kind":"VALUE","size":1,"default":[0]},{"name":"_MaskCustomData","label":"Decal Mask Custom Data","kind":"VALUE","size":1,"default":[0]},{"name":"_FogColor","label":"Fog Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_FogDensity","label":"Fog Density","kind":"VALUE","size":1,"default":[1]},{"name":"_FogExponent","label":"Fog Exponent","kind":"VALUE","size":1,"default":[1]},{"name":"_CubEdgeFade","label":"Fog Cube Edge Fade","kind":"VALUE","size":1,"default":[1]},{"name":"_HeightOffset","label":"Fog Height Offset","kind":"VALUE","size":1,"default":[0]},{"name":"_HeightFalloff","label":"Fog Height Falloff","kind":"VALUE","size":1,"default":[0]},{"name":"_VerticalFalloffMin","label":"Fog Vertical Falloff Min","kind":"VALUE","size":1,"default":[0]},{"name":"_VerticalFalloffMax","label":"Fog Vertical Falloff Max","kind":"VALUE","size":1,"default":[0]},{"name":"_BlendDisableVertColor","label":"BlendTex Disable Vertex Color","kind":"SWITCH","size":1,"default":[0]},{"name":"_InkSimulationWorldToUV","label":"Ink Simulation World To UV","kind":"VECTOR","size":4,"default":[0,0,0,1]},{"name":"_MaskTexUseInkSimulation","label":"MaskTex Use Ink Simulation","kind":"SWITCH","size":1,"default":[0]},{"name":"_DisturbTex1UseInkSimulation","label":"DisturbTex1 Use Ink Simulation","kind":"SWITCH","size":1,"default":[0]},{"name":"_DitherTilling","label":"Dither Tilling","kind":"VALUE","size":1,"default":[1]},{"name":"_DitherAlphaExp","label":"Dither Alpha Exp","kind":"VALUE","size":1,"default":[1]},{"name":"_DitherAlphaMode","label":"Dither Alpha Mode (0 = Add, 1 = Multiply)","kind":"VALUE","size":1,"default":[0]},{"name":"_DitherAlphaEdge","label":"Dither Alpha Edge","kind":"SLIDER","size":1,"min":0,"max":0.1,"default":[0.03999999910593033]},{"name":"_DirSpecularStrength","label":"Dir Specular Strength","kind":"VALUE","size":1,"default":[0]},{"name":"_FresnelStrength","label":"Fresnel Strength","kind":"VALUE","size":1,"default":[1]},{"name":"_IndirectSaturation","label":"Indirect Saturation","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_UseFresnelAsOpacity","label":"Use Fresnel As Opacity","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseVertexColorAsOpacity","label":"Use Vertex Color As Opacity","kind":"SWITCH","size":1,"default":[0]},{"name":"_WaterRandomUV","label":"Water Random UV","kind":"SWITCH","size":1,"default":[0]},{"name":"_AbsorptionRange","label":"Absorption Range","kind":"VALUE","size":1,"default":[1]},{"name":"_EnvLightSaturation","label":"Env Light Saturation","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_LightMapUVRotate","label":"Lightmap UV Rotate (\u5EA6)","kind":"VALUE","size":1,"default":[0]},{"name":"_LightMapUVSpeed","label":"Lightmap UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_LightMapControls","label":"Lightmap Tiling/Offset","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_Intensity","label":"Refract Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_RefractIsNormal","label":"Refract Tex Is Normal","kind":"SWITCH","size":1,"default":[0]},{"name":"_Bi_Refract","label":"Bi Refract","kind":"VALUE","size":1,"default":[0]},{"name":"_RefractDir","label":"Refract Direction","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_RefractTexUVRotate","label":"RefractTex UV Rotate (\u5EA6)","kind":"VALUE","size":1,"default":[0]},{"name":"_RefractUVSpeed","label":"RefractTex UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_MaskTexUseRefract","label":"MaskTex Use Refract","kind":"VALUE","size":1,"default":[0]},{"name":"_Use_Global_Appear","label":"\u5168\u5C40\u663E\u9690","kind":"SWITCH","size":1,"default":[0]},{"name":"_DoughnutRadius","label":"\u73AF\u5F62\u534A\u5F84","kind":"SLIDER","size":1,"min":0,"max":50,"default":[10]},{"name":"_DoughnutWidth","label":"\u73AF\u5F62\u5BBD\u5EA6","kind":"SLIDER","size":1,"min":0,"max":20,"default":[5]},{"name":"_UseRefract","label":"Use Refract","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSubsurface","label":"Use Subsurface","kind":"SWITCH","size":1,"default":[0]},{"name":"_SubsurfaceIndirect","label":"\u6B21\u8868\u9762\u5BF9\u95F4\u63A5\u5149\u5F71\u54CD","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_SubsurfaceColor","label":"\u6B21\u8868\u9762\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_SubsurfaceHue","label":"\u6B21\u8868\u9762\u8272\u76F8","kind":"VALUE","size":1,"default":[1]},{"name":"_SubsurfaceSaturation","label":"\u6B21\u8868\u9762\u9971\u548C","kind":"VALUE","size":1,"default":[1]},{"name":"_SubsurfaceValue","label":"\u6B21\u8868\u9762\u660E\u5EA6","kind":"VALUE","size":1,"default":[1]},{"name":"_UseIceGrow","label":"Use Ice Grow","kind":"SWITCH","size":1,"default":[0]},{"name":"_CharHeight","label":"Char Height","kind":"VALUE","size":1,"default":[1.5]},{"name":"_GrowStart","label":"Grow Start","kind":"VALUE","size":1,"default":[0]},{"name":"_GrowSchedule","label":"Grow Schedule","kind":"VALUE","size":1,"default":[0]},{"name":"_UseVertexOffset","label":"Use Vertex Offset","kind":"SWITCH","size":1,"default":[0]},{"name":"_OffsetSpeed","label":"Offset Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_OffsetDir","label":"Offset Dir (xyz \u8F74, w \u6309\u81EA\u5B9A\u4E49\u6570\u636E)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_OffsetSwitchDir","label":"Offset Dir Switch (0=\u7269\u4F53 1=\u4E16\u754C 2=\u6CD5\u7EBF)","kind":"VALUE","size":1,"default":[0]},{"name":"_OffsetIntensity","label":"Offset Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_Bi_Offset","label":"Bi Offset","kind":"SWITCH","size":1,"default":[0]},{"name":"_OffsetUVSet","label":"Offset UV Set (0=UV0 1=UV1)","kind":"VALUE","size":1,"default":[0]},{"name":"_UseVertexOffsetMask","label":"Use Vertex Offset Mask","kind":"SWITCH","size":1,"default":[0]},{"name":"_OffsetMaskSpeed","label":"Offset Mask Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_OffsetMaskPower","label":"Offset Mask Power","kind":"VALUE","size":1,"default":[1]},{"name":"_UseVertexOffsetCharPos","label":"Use Vertex Offset CharPos","kind":"SWITCH","size":1,"default":[0]},{"name":"_VertexOffsetDoughnutIntensity","label":"Doughnut Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_VertexOffsetDoughnutRadius","label":"Doughnut Radius","kind":"SLIDER","size":1,"min":0,"max":100,"default":[5]},{"name":"_VertexOffsetDoughnutWidth","label":"Doughnut Width","kind":"SLIDER","size":1,"min":0,"max":200,"default":[10]},{"name":"_HoudiniFPS","label":"Houdini FPS","kind":"VALUE","size":1,"default":[0]},{"name":"_UseColorGradient","label":"Use Color Gradient","kind":"SWITCH","size":1,"default":[0]},{"name":"_ColorTop","label":"Color Top","kind":"COLOR","size":4,"default":[0,0,0,1],"gamma":true},{"name":"_ColorBottom","label":"Color Bottom","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ColorGradientCenter","label":"Color Gradient Center","kind":"VALUE","size":1,"default":[0]},{"name":"_ColorGradientRange","label":"Color Gradient Range","kind":"VALUE","size":1,"default":[0.20000000298023224]},{"name":"_UseCubeMap","label":"Use CubeMap","kind":"SWITCH","size":1,"default":[0]},{"name":"_CubeMapColor","label":"Cube Map Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_UseMain2","label":"Use Main 2","kind":"SWITCH","size":1,"default":[0]},{"name":"_MainTex2Color","label":"Main Tex 2 Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_UseMainTex2AsAlpha","label":"Use MainTex2 As Alpha","kind":"SWITCH","size":1,"default":[1]},{"name":"_MainTex2UVSpeed","label":"MainTex2 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_MainTex2UVRotateMat","label":"MainTex2 UV Rotate Mat","kind":"VECTOR","size":4,"default":[1,0,0,1]},{"name":"_MainTex2UVWeights","label":"MainTex2 UV Weights","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_MainTex2BlendMode","label":"MainTex2 Blend (0=\u4E58 1=\u52A0)","kind":"VALUE","size":1,"default":[0]},{"name":"_UseInkSimulation","label":"Use Ink Simulation","kind":"SWITCH","size":1,"default":[0]},{"name":"_InkColor","label":"Ink Color","kind":"COLOR","size":4,"default":[0,0,0,1],"gamma":true},{"name":"_InkStrength","label":"Ink Strength","kind":"VALUE","size":1,"default":[15]},{"name":"_InkMaxAlpha","label":"Ink Max Alpha","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.800000011920929]},{"name":"_InkDisturbOffset","label":"Ink Disturb Offset","kind":"SLIDER","size":1,"min":0,"max":0.1,"default":[0.02500000037252903]},{"name":"_UseFlowmap","label":"Use Flowmap","kind":"SWITCH","size":1,"default":[0]},{"name":"_FlowmapUVPannerSpeed","label":"Flowmap UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_FlowmapUVRotate","label":"Flowmap UV Rotate (\u5EA6)","kind":"VALUE","size":1,"default":[0]},{"name":"_FlowmapStrength","label":"Flowmap Disturb Strength","kind":"VALUE","size":1,"default":[0.5]},{"name":"_FlowmapSpeed","label":"Flowmap Velocity","kind":"VALUE","size":1,"default":[0.10000000149011612]},{"name":"_MainTexUseFlowmap","label":"MainTex Use Flowmap","kind":"SWITCH","size":1,"default":[1]},{"name":"_UseAirWallTexture","label":"Use AirWall Texture","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseAirWallTexAsAlpha","label":"Use AirWall Tex As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_AirWallUVWeights","label":"AirWall UV Weights","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_UseHeightColorGradient","label":"Use Height Color Gradient","kind":"SWITCH","size":1,"default":[0]},{"name":"_HeightColorGradientColor","label":"Height Gradient Color","kind":"HDRCOLOR","size":4,"default":[1.850000023841858,1.850000023841858,1.850000023841858,1],"gamma":true},{"name":"_HeightColorGradientLocationDown","label":"Height Gradient Location Down","kind":"VALUE","size":1,"default":[1.4199999570846558]},{"name":"_HeightColorGradientLocationTop","label":"Height Gradient Location Top","kind":"VALUE","size":1,"default":[100]},{"name":"_HeightColorGradientSmooth","label":"Height Gradient Smooth","kind":"SLIDER","size":1,"min":0.01,"max":0.8,"default":[0.7799999713897705]},{"name":"_HeightColorGradientAffectColor","label":"Height Gradient Affect Color","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_HeightColorGradientAffectAlpha","label":"Height Gradient Affect Alpha","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_HeightColorGradientColor2","label":"Height Gradient Color2","kind":"HDRCOLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_HeightColorGradientLocationDown2","label":"Height Gradient Location Down2","kind":"VALUE","size":1,"default":[-10]},{"name":"_HeightColorGradientLocationTop2","label":"Height Gradient Location Top2","kind":"VALUE","size":1,"default":[0.30000001192092896]},{"name":"_HeightColorGradientSmooth2","label":"Height Gradient Smooth2","kind":"SLIDER","size":1,"min":0.01,"max":0.8,"default":[0.30000001192092896]},{"name":"_HeightColorGradientAffectColor2","label":"Height Gradient Affect Color2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_HeightColorGradientAffectAlpha2","label":"Height Gradient Affect Alpha2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_UseUnderGround","label":"Use Under Ground","kind":"SWITCH","size":1,"default":[0]},{"name":"_UnderGroundPlaneYOffset","label":"Under Ground Plane Y Offset","kind":"VALUE","size":1,"default":[0]},{"name":"_UnderGroundFadeDistance","label":"Under Ground Fade Distance","kind":"VALUE","size":1,"default":[1]},{"name":"_UseMainTex","label":"Use Main Tex","kind":"SWITCH","size":1,"default":[0]},{"name":"_SixWayLightMap","label":"Six Way Light Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseEmissiveRampMap","label":"Use Emissive Ramp","kind":"SWITCH","size":1,"default":[0]},{"name":"_LightMapUseDisturb","label":"LightMap Use Disturb","kind":"SWITCH","size":1,"default":[1]},{"name":"_DisturbUVSpeed2","label":"Disturb2 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_DisturbUIntensity2","label":"Disturb2 U Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_DisturbVIntensity2","label":"Disturb2 V Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_DisturbTex2Normal","label":"Disturb2 Is Normal","kind":"SWITCH","size":1,"default":[0]},{"name":"_WeightTexUVSpeed","label":"WeightTex UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_WeightTexUVRotate","label":"WeightTex UV Rotate (\u5EA6)","kind":"VALUE","size":1,"default":[0]},{"name":"_GameTimeAtFirstFrame","label":"Game Time At First Frame","kind":"VALUE","size":1,"default":[0]},{"name":"_DisplayFrame","label":"Display Frame","kind":"VALUE","size":1,"default":[0]},{"name":"_PlaybackSpeed","label":"Playback Speed","kind":"VALUE","size":1,"default":[0]},{"name":"_LightMapFPS","label":"LightMap FPS","kind":"VALUE","size":1,"default":[0]},{"name":"_SequenceFrameSize","label":"Sequence Frame Size (xy)","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_UseRBOffset","label":"Use RBOffset","kind":"SWITCH","size":1,"default":[0]},{"name":"_RBIntensity","label":"RBOffset Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_RBOffset","label":"RBOffset","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_GOffset","label":"Offset Of G Channel","kind":"SLIDER","size":1,"min":-2,"max":2,"default":[-1]},{"name":"_RBMainColorMask","label":"Main Color Mask","kind":"COLOR","size":4,"default":[1,0,0,1],"gamma":true},{"name":"_RBOffsetColorMask","label":"RBOffset Color Mask","kind":"COLOR","size":4,"default":[0,1,1,1],"gamma":true},{"name":"_RBOffset1ColorMask","label":"RBOffset1 Color Mask","kind":"COLOR","size":4,"default":[0,1,0,1],"gamma":true},{"name":"_RBOffset2ColorMask","label":"RBOffset2 Color Mask","kind":"COLOR","size":4,"default":[0,0,1,1],"gamma":true},{"name":"_UseMainTexAsMask","label":"Use MainTex As Mask","kind":"SWITCH","size":1,"default":[0]},{"name":"_SaturationValue","label":"Saturation","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_ColorBlendIntensity","label":"Color Blend Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_ColorIntensity","label":"Color Intensity","kind":"VALUE","size":1,"default":[1]},{"name":"_SpreadUVSpeed","label":"Spread UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SpreadUVRotate","label":"Spread UV Rotate (\u5EA6)","kind":"VALUE","size":1,"default":[0]},{"name":"_SpreadScheduleOffset","label":"Spread Schedule Offset","kind":"VALUE","size":1,"default":[0]},{"name":"_SpreadRange","label":"Spread Range","kind":"VALUE","size":1,"default":[1]},{"name":"_SpreadFlip","label":"Spread Flip","kind":"SWITCH","size":1,"default":[0]},{"name":"_SpreadAlphaCurve","label":"Spread Alpha Curve","kind":"VALUE","size":1,"default":[1]},{"name":"_RadialBlurIntensity","label":"Radial Blur Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_Power","label":"Radial Blur Power","kind":"VALUE","size":1,"default":[1]},{"name":"_CanterOffset","label":"Radial Blur Center Offset","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_MainTexUVRotate","label":"MainTex UV Rotate (\u5EA6)","kind":"VALUE","size":1,"default":[0]},{"name":"_MaskTexUVRotate","label":"MaskTex UV Rotate (\u5EA6)","kind":"VALUE","size":1,"default":[0]},{"name":"_Color","label":"Smoke Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_Opacity","label":"Smoke Opacity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_HighLightColor","label":"Wire Highlight Color","kind":"HDRCOLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_HighLightPos","label":"Wire Highlight Pos","kind":"VALUE","size":1,"default":[0]},{"name":"_HighLightOffset","label":"Wire Highlight Width","kind":"VALUE","size":1,"default":[0]},{"name":"_UVSet","label":"Ice UV Set (1=\u7269\u4F53\u8F74\u6295\u5F71)","kind":"SWITCH","size":1,"default":[0]},{"name":"_TilingOffset","label":"Ice Tiling Offset","kind":"VECTOR","size":4,"default":[1,1,0,0]},{"name":"_EmmissiveColor","label":"Ice Emissive Color","kind":"HDRCOLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_UseAnimBreathing","label":"Use Anim Breathing","kind":"SWITCH","size":1,"default":[0]},{"name":"_BreathingSpeed","label":"Breathing Speed","kind":"VALUE","size":1,"default":[1]},{"name":"_BreathingPower","label":"Breathing Power","kind":"VALUE","size":1,"default":[1]},{"name":"_BreathingMinAlpha","label":"Breathing Min Alpha","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_UseEdgeColor","label":"Use Edge Color","kind":"SWITCH","size":1,"default":[0]},{"name":"_EdgeColor","label":"Edge Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_EdgeDistance","label":"Edge Distance","kind":"VALUE","size":1,"default":[1]},{"name":"_EdgeDistanceOffset","label":"Edge Distance Offset","kind":"VALUE","size":1,"default":[0]},{"name":"_EdgeColorMode","label":"Edge Color Mode (1 = \u52A0, 0 = \u4E58)","kind":"VALUE","size":1,"default":[1]},{"name":"_LocalPivortSpace","label":"Local Pivot Space (\u5C4F\u5E55 uv \u6362\u6210\u8F74\u70B9\u5C40\u90E8)","kind":"SWITCH","size":1,"default":[0]},{"name":"_UsePosYAsScreenV","label":"Use PosY As Screen V (\u4E16\u754C Y \u5F53 V)","kind":"SWITCH","size":1,"default":[0]},{"name":"_ScreenUVUseDepth","label":"Screen UV Use Depth (\u5C4F\u5E55\u5750\u6807\u53D7\u76F8\u673A\u8DDD\u79BB\u5F71\u54CD)","kind":"SWITCH","size":1,"default":[1]},{"name":"_SoftDistance","label":"Soft Distance","kind":"VALUE","size":1,"default":[1]},{"name":"_SoftBias","label":"Soft Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_MainSwitchUV","label":"Main Switch UV","kind":"VALUE","size":1,"default":[0]},{"name":"_MaskSwitchUV","label":"Mask Switch UV","kind":"VALUE","size":1,"default":[0]},{"name":"_DissolveSwitchUV","label":"Dissolve Switch UV","kind":"VALUE","size":1,"default":[0]},{"name":"_DisturbSwitchUV","label":"Disturb Switch UV","kind":"VALUE","size":1,"default":[0]},{"name":"_BlendSwitchUV","label":"Blend Switch UV","kind":"VALUE","size":1,"default":[0]},{"name":"_DissolveDir","label":"Ice Dissolve Direction","kind":"VECTOR","size":4,"default":[0,1,0,0]},{"name":"_CutOffPosY","label":"CutOff Pos","kind":"VALUE","size":1,"default":[0]},{"name":"_CutOffSpace","label":"CutOff Space (1=\u4E16\u754C 0=\u7269\u4F53)","kind":"SWITCH","size":1,"default":[1]},{"name":"_CutOffWidth","label":"CutOff Width","kind":"VALUE","size":1,"default":[0]},{"name":"_CutOffTransition","label":"CutOff Transition","kind":"VALUE","size":1,"default":[1]},{"name":"_CutOffAffectOpacity","label":"CutOff Affect Opacity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_CutOffDirection","label":"CutOff Direction","kind":"VECTOR","size":4,"default":[0,1,0,0]},{"name":"_UseLighting","label":"Use Lighting (\u5EF6\u8FDF\u817F\u5149\u7167\u5360\u6BD4)","kind":"SWITCH","size":1,"default":[0]},{"name":"_ExpThreshold","label":"Exp Threshold","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_ExpIntensity","label":"Exp Intensity","kind":"SLIDER","size":1,"min":0,"max":100,"default":[0]},{"name":"_UseParticleDisturb","label":"Use Particle Disturb","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseDissolve","label":"Use Dissolve","kind":"SWITCH","size":1,"default":[0]},{"name":"_DissolveScheduleOffset","label":"Dissolve Schedule Offset","kind":"VALUE","size":1,"default":[0]},{"name":"_DissolveEdgeSharp","label":"Dissolve Edge Sharp","kind":"VALUE","size":1,"default":[1]},{"name":"_DissolveEmissiveEdge","label":"Dissolve Emissive Edge","kind":"VALUE","size":1,"default":[0]},{"name":"_DissolveEmissiveColor","label":"Dissolve Emissive Color","kind":"HDRCOLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_DissolveUseWeight","label":"Dissolve Use Weight","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseWeightTex","label":"Use Weight Tex","kind":"SWITCH","size":1,"default":[0]},{"name":"_WeightTexIntensity","label":"Weight Tex Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_UseBright","label":"Use Bright","kind":"SWITCH","size":1,"default":[0]},{"name":"_BrightCenter","label":"Bright Center (w = \u7528\u6750\u8D28\u70B9)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_BrightColor","label":"Bright Color","kind":"HDRCOLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_BrightType","label":"Bright Type (0=Radius 1=ScanLine)","kind":"VALUE","size":1,"default":[0]},{"name":"_BrightUseVertColor","label":"Bright Use Vert Color","kind":"SWITCH","size":1,"default":[0]},{"name":"_CharacterHeight","label":"Character Height","kind":"VALUE","size":1,"default":[0]},{"name":"_ScanFillColor","label":"Scan Fill Color","kind":"HDRCOLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_ScanLineSchedule","label":"Scan Line Schedule","kind":"VALUE","size":1,"default":[0]},{"name":"_OuterRadius","label":"Outer Radius","kind":"VALUE","size":1,"default":[0]},{"name":"_InnerRadius","label":"Inner Radius","kind":"VALUE","size":1,"default":[0]},{"name":"_DistortAlpha","label":"Distort Alpha","kind":"VALUE","size":1,"default":[1]},{"name":"_DistortIntensity","label":"Distort Intensity","kind":"VALUE","size":1,"default":[0]},{"name":"_DistortOnEdge","label":"Distort On Edge","kind":"VALUE","size":1,"default":[0]},{"name":"_DistortScale","label":"Distort Scale","kind":"VALUE","size":1,"default":[1]},{"name":"_DistortSpeed","label":"Distort Speed","kind":"VALUE","size":1,"default":[0]},{"name":"_UseSampleTex0","label":"Use SampleTex0","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSampleTex0AsAlpha","label":"SampleTex0 As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_SampleTex0MipmapBias","label":"SampleTex0 Mipmap Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex0UVSpeed","label":"SampleTex0 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SampleTex0UseWeight0","label":"SampleTex0 \u2192 \u6270\u52A8","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex0UseWeight2","label":"SampleTex0 \u2192 \u6EB6\u89E3\u6743\u91CD","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex0UseWeight3","label":"SampleTex0 \u2192 \u906E\u7F69","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex0UseWeight4","label":"SampleTex0 \u2192 \u53E0\u8272","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex0UseWeight5","label":"SampleTex0 \u2192 \u6EB6\u89E3\u6392\u7A0B","kind":"VALUE","size":1,"default":[0]},{"name":"_UseSampleTex1","label":"Use SampleTex1","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSampleTex1AsAlpha","label":"SampleTex1 As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_SampleTex1MipmapBias","label":"SampleTex1 Mipmap Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex1UVSpeed","label":"SampleTex1 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SampleTex1UseWeight0","label":"SampleTex1 \u2192 \u6270\u52A8","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex1UseWeight2","label":"SampleTex1 \u2192 \u6EB6\u89E3\u6743\u91CD","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex1UseWeight3","label":"SampleTex1 \u2192 \u906E\u7F69","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex1UseWeight4","label":"SampleTex1 \u2192 \u53E0\u8272","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex1UseWeight5","label":"SampleTex1 \u2192 \u6EB6\u89E3\u6392\u7A0B","kind":"VALUE","size":1,"default":[0]},{"name":"_UseSampleTex2","label":"Use SampleTex2","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSampleTex2AsAlpha","label":"SampleTex2 As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_SampleTex2MipmapBias","label":"SampleTex2 Mipmap Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex2UVSpeed","label":"SampleTex2 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SampleTex2UseWeight0","label":"SampleTex2 \u2192 \u6270\u52A8","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex2UseWeight2","label":"SampleTex2 \u2192 \u6EB6\u89E3\u6743\u91CD","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex2UseWeight3","label":"SampleTex2 \u2192 \u906E\u7F69","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex2UseWeight4","label":"SampleTex2 \u2192 \u53E0\u8272","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex2UseWeight5","label":"SampleTex2 \u2192 \u6EB6\u89E3\u6392\u7A0B","kind":"VALUE","size":1,"default":[0]},{"name":"_UseSampleTex3","label":"Use SampleTex3","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSampleTex3AsAlpha","label":"SampleTex3 As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_SampleTex3MipmapBias","label":"SampleTex3 Mipmap Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex3UVSpeed","label":"SampleTex3 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SampleTex3UseWeight0","label":"SampleTex3 \u2192 \u6270\u52A8","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex3UseWeight2","label":"SampleTex3 \u2192 \u6EB6\u89E3\u6743\u91CD","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex3UseWeight3","label":"SampleTex3 \u2192 \u906E\u7F69","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex3UseWeight4","label":"SampleTex3 \u2192 \u53E0\u8272","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex3UseWeight5","label":"SampleTex3 \u2192 \u6EB6\u89E3\u6392\u7A0B","kind":"VALUE","size":1,"default":[0]},{"name":"_UseSampleTex4","label":"Use SampleTex4","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSampleTex4AsAlpha","label":"SampleTex4 As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_SampleTex4MipmapBias","label":"SampleTex4 Mipmap Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex4UVSpeed","label":"SampleTex4 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SampleTex4UseWeight0","label":"SampleTex4 \u2192 \u6270\u52A8","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex4UseWeight2","label":"SampleTex4 \u2192 \u6EB6\u89E3\u6743\u91CD","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex4UseWeight3","label":"SampleTex4 \u2192 \u906E\u7F69","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex4UseWeight4","label":"SampleTex4 \u2192 \u53E0\u8272","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex4UseWeight5","label":"SampleTex4 \u2192 \u6EB6\u89E3\u6392\u7A0B","kind":"VALUE","size":1,"default":[0]},{"name":"_UseSampleTex5","label":"Use SampleTex5","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSampleTex5AsAlpha","label":"SampleTex5 As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_SampleTex5MipmapBias","label":"SampleTex5 Mipmap Bias","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex5UVSpeed","label":"SampleTex5 UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_SampleTex5UseWeight0","label":"SampleTex5 \u2192 \u6270\u52A8","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex5UseWeight2","label":"SampleTex5 \u2192 \u6EB6\u89E3\u6743\u91CD","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex5UseWeight3","label":"SampleTex5 \u2192 \u906E\u7F69","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex5UseWeight4","label":"SampleTex5 \u2192 \u53E0\u8272","kind":"VALUE","size":1,"default":[0]},{"name":"_SampleTex5UseWeight5","label":"SampleTex5 \u2192 \u6EB6\u89E3\u6392\u7A0B","kind":"VALUE","size":1,"default":[0]},{"name":"_ConeParams0","label":"Cone Params 0 (xy \u8D77\u6B62\u534A\u5F84, zw \u9525\u5761 cos/sin)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_ConeParams1","label":"Cone Params 1 (xyz \u672C\u5730\u524D\u5411, w \u753B\u7AEF\u76D6)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_DistanceFallOff","label":"Distance Fall Off (x \u8D77, y \u6B62, z \u51E0\u4F55\u957F\u5EA6, w \u8D77\u70B9\u6E10\u5165)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_TiltVectorX","label":"Tilt Vector X","kind":"VALUE","size":1,"default":[0]},{"name":"_TiltVectorY","label":"Tilt Vector Y","kind":"VALUE","size":1,"default":[0]},{"name":"_ConeGeomProps","label":"Cone Geom Props (\u865A\u9876\u70B9\u6CBF\u8F74\u7684\u504F\u79FB)","kind":"VALUE","size":1,"default":[0]},{"name":"_ColorFlat","label":"Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_AlphaInside","label":"Alpha Inside","kind":"VALUE","size":1,"default":[1]},{"name":"_AlphaOutside","label":"Alpha Outside","kind":"VALUE","size":1,"default":[1]},{"name":"_DistanceCamClipping","label":"Camera Clipping Distance","kind":"VALUE","size":1,"default":[0.5]},{"name":"_DistanceFadeStart","label":"Distance Fade Start","kind":"SLIDER","size":1,"min":0.001,"max":3000,"default":[0.0010000000474974513]},{"name":"_DistanceFadeEnd","label":"Distance Fade End","kind":"SLIDER","size":1,"min":0.001,"max":3000,"default":[0.0010000000474974513]},{"name":"_DistanceFadeStartSecond","label":"Distance Fade Start Second","kind":"SLIDER","size":1,"min":0.001,"max":3000,"default":[0.0010000000474974513]},{"name":"_DistanceFadeEndSecond","label":"Distance Fade End Second","kind":"SLIDER","size":1,"min":0.001,"max":3000,"default":[0.0010000000474974513]},{"name":"_AttenuationLerpLinearQuad","label":"Lerp between attenuation linear and quad","kind":"VALUE","size":1,"default":[0.5]},{"name":"_DepthBlendDistance","label":"Depth Blend Distance","kind":"VALUE","size":1,"default":[2]},{"name":"_DepthBlendCapOff","label":"Depth Blend Cap Off","kind":"SWITCH","size":1,"default":[0]},{"name":"_GlareFrontal","label":"Glare Frontal","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_GlareBehind","label":"Glare from Behind","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_UseClippingPlane","label":"Use Clipping Plane","kind":"SWITCH","size":1,"default":[0]},{"name":"_AdditionalClippingPlaneWS","label":"Additional Clipping Plane WS","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_ClippingPlaneTransition","label":"Clipping Plane Transition","kind":"SLIDER","size":1,"min":0.01,"max":10,"default":[1]},{"name":"_ShadowColor","label":"Shadow Color","kind":"COLOR","size":4,"default":[0,0,0,1],"gamma":true},{"name":"_CircleFade","label":"Circle Fade","kind":"SWITCH","size":1,"default":[0]},{"name":"_CircleFadeDistance","label":"Circle Fade Distance","kind":"VALUE","size":1,"default":[1]},{"name":"_CircleFadeSmoothness","label":"Circle Fade Smoothness","kind":"VALUE","size":1,"default":[0.20000000298023224]},{"name":"_DisableSceneShadow","label":"Disable Scene Shadow","kind":"SWITCH","size":1,"default":[0]},{"name":"_DisableCharacterSelfShadow","label":"Disable Character Self Shadow","kind":"SWITCH","size":1,"default":[0]},{"name":"_CapsuleAoColor","label":"Capsule AO Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true}]},{"name":"\u5F15\u64CE\u5168\u5C40 CP","gate":null,"rows":[{"name":"_CharacterParams0","label":"CP0 (.y=\u4E3B\u5149\u7CFB\u6570 .z=\u73AF\u5883\u9634\u5F71\u7CFB\u6570 .w=\u73AF\u5883\u5149\u7CFB\u6570)","kind":"VECTOR","size":4,"default":[0,0.8999999761581421,0.800000011920929,0.800000011920929]},{"name":"_CharacterParams1","label":"CP1 (.x=brightMix .y=shadowStr .z=\u5FFD\u7565\u4E3B\u5149\u9634\u5F71 .w=\u65B9\u5411\u8986\u5199\u91CF)","kind":"VECTOR","size":4,"default":[0,0,1,0]},{"name":"_CharacterParams2","label":"CP2 (\u9634\u5F71\u8272\u503E\u5411 rgb\uFF0C\u76AE\u80A4\u4EE5\u5916)","kind":"VECTOR","size":4,"default":[0.7830188274383545,0.8293082118034363,1,0]},{"name":"_CharacterParams3","label":"CP3 (\u9634\u5F71\u8272\u503E\u5411 rgb\uFF0C\u76AE\u80A4)","kind":"VECTOR","size":4,"default":[1,0.7811464667320251,0.6849056482315063,0]},{"name":"_CharacterParams4","label":"CP4 (\u4E3B\u5149\u81EA\u5B9A\u4E49\u989C\u8272 rgb\uFF0C\u76AE\u80A4)","kind":"VECTOR","size":4,"default":[1,1,1,1]},{"name":"_CharacterParams5","label":"CP5 (\u4E3B\u5149\u81EA\u5B9A\u4E49\u989C\u8272 rgb\uFF0C\u76AE\u80A4\u4EE5\u5916)","kind":"VECTOR","size":4,"default":[1,1,1,1]},{"name":"_CharacterParams6","label":"CP6 (\u73AF\u5883\u5149\u65B9\u5411 = charGlobalAmbientParam0)","kind":"VECTOR","size":4,"default":[0,1,4.371138828673793E-08,0]},{"name":"_CharacterParams7","label":"CP7 (\u73AF\u5883\u5149\u7CFB\u6570 = charGlobalAmbientParam1)","kind":"VECTOR","size":4,"default":[0.15000000596046448,1.5,0.5,0]},{"name":"_CharacterParams8","label":"CP8 (skin spec color rgb \u002B .w=intensity)","kind":"VECTOR","size":4,"default":[0,0,0,1]},{"name":"_CharacterParams9","label":"CP9 (skin spec .xy=dir .z=tint .w=width)","kind":"VECTOR","size":4,"default":[0,1,0,0.4000000059604645]},{"name":"_CharacterParams10","label":"CP10 (height darken control)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_RuriCharacterEnvironmentEffect","label":"\u73AF\u5883\u6548\u679C\u91CF (.x=\u96E8 .y=\u6C34\u4F4D\u91CF .z=\u6D78\u6DA6 .w=\u96EA)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_RuriCharacterEnvironmentWater","label":"\u73AF\u5883\u6548\u679C\u6C34\u9762 (.x=\u4E16\u754C\u9AD8\u5EA6)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_CharacterParams11","label":"CP11 (\u65B9\u5411\u8986\u5199 xyz \u002B .w=\u660E\u6697\u4EA4\u754C\u7EBF\u504F\u79FB)","kind":"VECTOR","size":4,"default":[-0.43299999833106995,0.5,0.75,-0.4000000059604645]},{"name":"_CharacterParams12","label":"CP12 (.x=\u706F\u5149\u624B\u52A8\u63A7\u5236 .y=\u4E3B\u5149\u8272\u8986\u5199\u91CF .z=shadowGate .w=exposureBlend)","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_CharacterParams13","label":"CP13 (.w=GGX specular toggle)","kind":"VECTOR","size":4,"default":[0,0,0,1]},{"name":"_CharacterParams14","label":"CP14 (secondary spec color rgb \u002B .w=intensity)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_CharacterParams15","label":"CP15 (.z=SDF secondary threshold)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_EnvironmentGlobalParams0","label":"EnvGlobalParams0","kind":"VECTOR","size":4,"default":[1.6699999570846558,1.5,1,0]}]},{"name":"PBR \u57FA\u7840","gate":null,"rows":[{"name":"_MetallicGlossMap","label":"RGBA:Metal,Spec,Shadow,Smooth","kind":"TEXTURE"},{"name":"_UseMetallicGlossMap","label":"Use MetallicGlossMap","kind":"SWITCH","size":1,"default":[0]},{"name":"_Metallic","label":"Metallic","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0],"gamma":true},{"name":"_Smoothness","label":"Smoothness","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]}]},{"name":"\u81EA\u53D1\u5149","gate":null,"rows":[{"name":"_EmissionBrightness","label":"Emission Brightness","kind":"VALUE","size":1,"default":[1]}]},{"name":"Ramp","gate":null,"rows":[{"name":"_DiffRampMap","label":"Diffuse Ramp","kind":"TEXTURE"},{"name":"_SpecRampMap","label":"Specular Ramp","kind":"TEXTURE"},{"name":"_UseDiffRampMap","label":"Diffuse Ramp","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseSpecRampMap","label":"Specular Ramp","kind":"SWITCH","size":1,"default":[0]},{"name":"_SpecRampIridescentMode","label":"\u5F69\u8679\u8272\u6A21\u5F0F(\u956D\u5C04\u5851\u6599\u8BF7\u52FE\u9009)","kind":"SWITCH","size":1,"default":[0]}]},{"name":"\u9634\u5F71\u8272","gate":null,"rows":[{"name":"_ShadowLutTex","label":"Shadow Color Lut","kind":"TEXTURE"},{"name":"_UseShadowLutTex","label":"Use Shadow Color LUT Tex","kind":"SWITCH","size":1,"default":[0]},{"name":"_ShadowColorBrightness","label":"Shadow Color Brightness","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_ShadowColorSaturation","label":"Shadow Color Saturation","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]}]},{"name":"\u8138\u90E8 SDF/\u8868\u60C5","gate":null,"rows":[{"name":"_SDFMask","label":"RimMask/SDFMask/FlatSHMask","kind":"TEXTURE"},{"name":"_SDFLightmap","label":"SDF Lightmap","kind":"TEXTURE"},{"name":"_EmotionMap","label":"Emotion Map","kind":"TEXTURE"},{"name":"_HighlightMap","label":"HighlightMap","kind":"TEXTURE"},{"name":"_UseSDFLightmap","label":"Use SDF Lightmap","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseEmotionMap","label":"Use Emotion Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_EmotionIndex","label":"Emotion Index","kind":"SLIDER","size":1,"min":0,"max":3,"default":[0]},{"name":"_EmotionBlend","label":"Emotion Blend","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_SDFRimColor","label":"Skin Rim Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_SkinRimOffScale","label":"Skin Rim Scale","kind":"SLIDER","size":1,"min":0,"max":1.5,"default":[0.5]},{"name":"_FaceRimOffScale","label":"Face Rim Scale (SDF Area)","kind":"SLIDER","size":1,"min":0,"max":1.5,"default":[1]},{"name":"_FaceHighlightMap","label":"Use Face Highlight Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_HighlightMapVector","label":"HighlightMap Vector","kind":"VECTOR","size":4,"default":[0.03999999910593033,-0.009999999776482582,0,0]}]},{"name":"\u8138\u90E8\u8D34\u82B1","gate":null,"rows":[{"name":"_FaceDecalTintColor","label":"Face Decal Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_FaceDecalCenterX","label":"Face Decal Center X","kind":"SLIDER","size":1,"min":-0.5,"max":0.5,"default":[0]},{"name":"_FaceDecalCenterY","label":"Face Decal Center Y","kind":"SLIDER","size":1,"min":-0.5,"max":0.5,"default":[0]},{"name":"_FaceDecalInvertX","label":"Face Decal Invert X","kind":"SWITCH","size":1,"default":[0]},{"name":"_FaceDecalInvertY","label":"Face Decal Invert Y","kind":"SWITCH","size":1,"default":[0]},{"name":"_FaceDecalSize","label":"Face Decal Size","kind":"SLIDER","size":1,"min":0.05,"max":2,"default":[0.20000000298023224]},{"name":"_FaceDecalRotation","label":"Face Decal Rotation","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_FaceDecalMirrorMode","label":"Face Decal Mirror Mode","kind":"VALUE","size":1,"default":[0]},{"name":"_FaceDecalMirrorSplit","label":"Face Decal Mirror Split","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_FaceDecalBrightnessMask","label":"Face Decal Brightness Mask","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.699999988079071]}]},{"name":"\u773C\u775B Matcap","gate":null,"rows":[{"name":"_MatcapTex","label":"Matcap","kind":"TEXTURE"},{"name":"_UseMatcap","label":"Use Matcap","kind":"SWITCH","size":1,"default":[0]},{"name":"_EyeHighLight","label":"Eye High Light","kind":"SWITCH","size":1,"default":[0]},{"name":"_MatcapNormalScale","label":"Matcap Normal Scale","kind":"SLIDER","size":1,"min":0,"max":1.5,"default":[1]},{"name":"_MatcapColor","label":"Matcap Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_EyeHighLightColor","label":"High Light Color","kind":"HDRCOLOR","size":4,"default":[2,2,2,1]},{"name":"_EyeScatteringColor","label":"Scattering Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]},{"name":"_EyeTintColor","label":"Eye Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true}]},{"name":"\u5934\u53D1\u9AD8\u5149/\u63CF\u7EBF","gate":null,"rows":[{"name":"_SplitNormalMap","label":"Hair Normal Map","kind":"TEXTURE"},{"name":"_StrokeMap","label":"Stroke Map(R:anisotropy G:specular offset)","kind":"TEXTURE"},{"name":"_LineMap","label":"Line Map","kind":"TEXTURE"},{"name":"_UseSpecBumpMap","label":"Split Diffuse / Specular Normal","kind":"SWITCH","size":1,"default":[0]},{"name":"_SpecBumpScale","label":"Spec Scale","kind":"VALUE","size":1,"default":[1]},{"name":"_StrokeOn","label":"Use Stroke Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_SpecularLine","label":"SpecularLine","kind":"SWITCH","size":1,"default":[0]},{"name":"_DrawUnderBrow","label":"Draw Under Brow","kind":"SWITCH","size":1,"default":[0]},{"name":"_AnisotropyValue","label":"Anisotropy Value","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.3499999940395355]},{"name":"_AnisotropyValue2","label":"Anisotropy Value2","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.4000000059604645]},{"name":"_AnisotropyDirX","label":"Anisotropy Direction X","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_AnisotropyIntensity","label":"Anisotropy Intensity","kind":"SLIDER","size":1,"min":0,"max":3,"default":[1]},{"name":"_AnisotropyEdgeFade","label":"Anisotropy Edge Fade","kind":"SLIDER","size":1,"min":0.01,"max":10,"default":[1]},{"name":"_AnisotropyRange2","label":"Anisotropy Range2","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_AnisotropyColor2","label":"Anisotropy Color2","kind":"COLOR","size":4,"default":[0,0,0,1],"gamma":true},{"name":"_StrokeScale","label":"Stroke Scale","kind":"VALUE","size":1,"default":[1]},{"name":"_UseLineMap","label":"Use Line Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_LineAmount","label":"Line Amount","kind":"VALUE","size":1,"default":[300]},{"name":"_LineValue","label":"Line Value","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_LineRange","label":"Line Range","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_LineIntensity","label":"Line Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_LineSaturation","label":"Line Saturation","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_HairBaseTintColor","label":"Hair Base Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_HairAddTintColor","label":"Hair Add Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true}]},{"name":"\u76AE\u6BDB","gate":"_UseCharacterFur","rows":[{"name":"_UseCharacterFur","label":"Use CharacterFur","kind":"SWITCH","size":1,"default":[0]},{"name":"_FurMap","label":"Fur Noise","kind":"TEXTURE"},{"name":"_FurDirMap","label":"\u6BDB\u53D1\u65B9\u5411(RG)\u758F\u5BC6(B)\u957F\u77ED(A)","kind":"TEXTURE"},{"name":"_FurDyeMap","label":"\u76AE\u6BDB\u67D3\u8272","kind":"TEXTURE"},{"name":"_FurDyeEnable","label":"\u4F7F\u7528\u76AE\u6BDB\u67D3\u8272\u529F\u80FD","kind":"SWITCH","size":1,"default":[0]},{"name":"_FurDyeIntensity","label":"\u67D3\u8272\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_FurLengthIntensity","label":"\u6BDB\u53D1\u957F\u5EA6","kind":"SLIDER","size":1,"min":0.001,"max":6,"default":[1]},{"name":"_FurCutoffStart","label":"\u53D1\u6839CutOff","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_FurCutoffEnd","label":"\u53D1\u5C3ECutOff","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_FurAO","label":"\u53D1\u6839AO","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_FurEdgeFade","label":"\u8FB9\u7F18\u5E73\u6ED1\u8FC7\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_FurGravityStrength","label":"\u91CD\u529B\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_FurTTIntensity","label":"\u76F4\u5C04\u5149\u900F\u5149\u5F3A\u5EA6","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_FurDirMapEnable","label":"\u4F7F\u7528\u6BDB\u53D1\u65B9\u5411\u8D34\u56FE(RG)","kind":"SWITCH","size":1,"default":[0]},{"name":"_FurColorEnable","label":"\u4F7F\u7528\u5C16\u7AEF\u8C03\u8272","kind":"SWITCH","size":1,"default":[0]},{"name":"_FurColor","label":"\u5C16\u7AEF\u8C03\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_FurSharpen","label":"\u76AE\u6BDB\u5C16\u9510","kind":"SWITCH","size":1,"default":[0]},{"name":"_FurNoise","label":"\u76AE\u6BDB\u53E0\u52A0\u566A\u58F0","kind":"SWITCH","size":1,"default":[0]}]},{"name":"\u6E05\u6F06","gate":"_ClearCoat","rows":[{"name":"_ClearCoat","label":"ClearCoat Effect","kind":"SWITCH","size":1,"default":[0]},{"name":"_ClearCoatMask","label":"ClearCoat Mask","kind":"TEXTURE"},{"name":"_ClearCoatColor","label":"ClearCoat Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ClearCoatSmoothness","label":"ClearCoat Smoothness","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.949999988079071]},{"name":"_ClearCoatMetallic","label":"ClearCoat Metallic","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_ClearCoatNormalMode","label":"ClearCoat Normal","kind":"VALUE","size":1,"default":[0]}]},{"name":"\u89C6\u5DEE","gate":"_UseParallax","rows":[{"name":"_UseParallax","label":"Use Parallax","kind":"SWITCH","size":1,"default":[0]},{"name":"_ParallaxTex","label":"Parallax Tex","kind":"TEXTURE"},{"name":"_ParallaxUseNormal","label":"Parallax Use Normal Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_ParallaxMarchNum","label":"Parallax March Num","kind":"SLIDER","size":1,"min":1,"max":5,"default":[3]},{"name":"_ParallaxScale","label":"Parallax Scale","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_ParallaxColor","label":"Parallax Color","kind":"HDRCOLOR","size":4,"default":[0,0,0,1],"gamma":true}]},{"name":"\u4E1D\u889C","gate":"_SilkStockings","rows":[{"name":"_SilkStockings","label":"Silk Stockings","kind":"SWITCH","size":1,"default":[0]},{"name":"_SilkStockingsMask","label":"\u4E1D\u889C\u906E\u7F69","kind":"TEXTURE"},{"name":"_SilkStockingsColor","label":"\u4E1D\u889C\u8FB9\u7F18\u989C\u8272","kind":"COLOR","size":4,"default":[0,0,0,1],"gamma":true},{"name":"_SilkStockingsSpecularInt","label":"\u4E1D\u889C\u9AD8\u5149\u5F3A\u5EA6Remap","kind":"VALUE","size":1,"default":[5]},{"name":"_SilkStockingsSpecularValue","label":"\u4E1D\u889C\u9AD8\u5149\u4F4D\u7F6E\u504F\u79FB","kind":"SLIDER","size":1,"min":-2,"max":2,"default":[2]},{"name":"_SilkStockingsAnisoDirection","label":"\u4E1D\u889C\u9510\u5229\u5EA6G","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_SilkStockingsDryColor","label":"\u4E1D\u889C\u5E38\u6001\u504F\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_SilkStockingsWetColor","label":"\u4E1D\u889C\u6E7F\u6DA6\u504F\u8272","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_SilkStockingsMinAffect","label":"\u4E1D\u889C\u6700\u6D45\u8986\u76D6","kind":"SLIDER","size":1,"min":0,"max":0.49,"default":[0.05000000074505806]},{"name":"_SilkStockingsMaxAffect","label":"\u4E1D\u889C\u6700\u6DF1\u8986\u76D6","kind":"SLIDER","size":1,"min":0.5,"max":0.9,"default":[0.8999999761581421]},{"name":"_SilkStockingsAdvance","label":"\u4E1D\u889C\u9AD8\u7EA7\u6A21\u5F0F(\u4F7F\u7528\u8D34\u56FE)","kind":"SWITCH","size":1,"default":[0]},{"name":"_SilkStockingsSpecularMinAtMinWetness","label":"\u4E1D\u889C\u9AD8\u5149\u5E72\u71E5\u6001\u6700\u5C0F\u503C","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_SilkStockingsSpecularFalloff","label":"\u4E1D\u889C\u9AD8\u5149\u900F\u8089\u8870\u51CF\u503C","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.800000011920929]},{"name":"_SilkStockingsRainWetMaskScale","label":"\u4E1D\u889C\u6D78\u6DA6\u5185\u7F6E\u906E\u7F69\u5F71\u54CD","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.699999988079071]},{"name":"_SilkStockingsAlbedoAffectType","label":"\u6D78\u6DA6\u6216\u6C34\u4E0B\u65F6\u900F\u8089or\u538B\u6697","kind":"SLIDER","size":1,"min":-0.9,"max":0.5,"default":[0.5]}]},{"name":"\u5404\u5411\u5F02\u6027","gate":"_UseAnisotropy","rows":[{"name":"_UseAnisotropy","label":"Use Anisotropy","kind":"SWITCH","size":1,"default":[0]},{"name":"_AnisotropyUseGeometryTangent","label":"\u4F7F\u7528\u6A21\u578B\u5207\u7EBF","kind":"SWITCH","size":1,"default":[1]},{"name":"_AnisotropyDirectionMain","label":"\u57FA\u7840\u5404\u9879\u5F02\u6027\u9AD8\u5149\u65B9\u5411","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_AnisotropyIntensityMultiplier","label":"\u57FA\u7840\u5404\u9879\u5F02\u6027\u9AD8\u5149\u5F3A\u5EA6\u7CFB\u6570","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_AnisotropyDirectionAdditional","label":"\u7B2C\u4E8C\u5C42\u5404\u5411\u5F02\u6027\u65B9\u5411","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_AnisotropyOffsetAdditional","label":"\u7B2C\u4E8C\u5C42\u5404\u5411\u5F02\u6027\u4F4D\u7F6E\u504F\u79FB","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_AnisotropyColorAdditional","label":"\u7B2C\u4E8C\u5C42\u5404\u5411\u5F02\u6027\u989C\u8272","kind":"COLOR","size":4,"default":[0.20000000298023224,0.20000000298023224,0.20000000298023224,1],"gamma":true}]},{"name":"UV2 \u67D3\u8272","gate":null,"rows":[{"name":"_UseUV2Color","label":"UV2 Color","kind":"SWITCH","size":1,"default":[0]},{"name":"_ExtraRootTintColor","label":"Root Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ExtraDepthTintColor","label":"Depth Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_ViewFade","label":"View Fade","kind":"SLIDER","size":1,"min":0,"max":0.5,"default":[0]}]},{"name":"\u634F\u4EBA\u67D3\u8272","gate":"_AvatarCustomizeEnable","rows":[{"name":"_AvatarCustomizeEnable","label":"Avatar System Input","kind":"SWITCH","size":1,"default":[0]},{"name":"_CustomizeBaseColor","label":"Customize Base Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_CustomizeBaseTintColor","label":"Customize Base Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_CustomizeAddTintColor","label":"Customize Add Tint Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true}]},{"name":"\u6DF1\u5EA6\u6DE1\u51FA","gate":"_UseDepthFade","rows":[{"name":"_UseDepthFade","label":"Use Depth Fade","kind":"SWITCH","size":1,"default":[0]},{"name":"_DepthFadeValue","label":"Depth Fade Value","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_DepthFadeExp","label":"Depth Fade Exp","kind":"SLIDER","size":1,"min":0.001,"max":50,"default":[10]}]},{"name":"\u4FB5\u8680","gate":"_UseCharacterErosion","rows":[{"name":"_UseCharacterErosion","label":"Use Character Erosion","kind":"SWITCH","size":1,"default":[0]},{"name":"_ErosionMetallic","label":"Erosion Metallic","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_ErosionSmoothnessBias","label":"Erosion Smoothness Bias","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_ErosionNormalScale","label":"Erosion Normal Scale","kind":"SLIDER","size":1,"min":0,"max":4,"default":[1]},{"name":"_ErosionBaseColor","label":"Erosion Base Color","kind":"COLOR","size":4,"default":[0.800000011920929,0.4000000059604645,0.5,1],"gamma":true},{"name":"_ErosionUV2Tint","label":"Erosion Tint UV2 Enable","kind":"SWITCH","size":1,"default":[0]},{"name":"_ErosionBaseRootColor","label":"Erosion Base Root Color","kind":"COLOR","size":4,"default":[0.10000000149011612,0.10000000149011612,0.10000000149011612,1],"gamma":true},{"name":"_ErosionBaseRootColorLocation","label":"Erosion Root Color Location","kind":"SLIDER","size":1,"min":0,"max":0.9,"default":[0.10000000149011612]},{"name":"_ErosionBaseRootColorSmooth","label":"Erosion Root Color Smooth","kind":"SLIDER","size":1,"min":0,"max":0.25,"default":[0.10000000149011612]},{"name":"_ErosionBaseTopColor","label":"Erosion Top Color","kind":"COLOR","size":4,"default":[0.75,0.75,0.75,1],"gamma":true},{"name":"_ErosionBaseTopColorLocation","label":"Erosion Top Color Location","kind":"SLIDER","size":1,"min":0,"max":0.9,"default":[0.699999988079071]},{"name":"_ErosionBaseTopColorSmooth","label":"Erosion Top Color Smooth","kind":"SLIDER","size":1,"min":0,"max":0.25,"default":[0.10000000149011612]},{"name":"_ErosionPatternTintColor","label":"Erosion Pattern Tint Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1]}]},{"name":"\u5080\u5121","gate":"_UsePuppet","rows":[{"name":"_UsePuppet","label":"Use Puppet Effect","kind":"SWITCH","size":1,"default":[0]},{"name":"_PuppetUV2AreaMask","label":"Puppet UV2 Area Mask","kind":"SWITCH","size":1,"default":[0]},{"name":"_PuppetMaskLocationDown","label":"Puppet Mask Location Down","kind":"SLIDER","size":1,"min":0,"max":0.9,"default":[0.10000000149011612]},{"name":"_PuppetMaskLocationTop","label":"Puppet Mask Location Top","kind":"SLIDER","size":1,"min":0,"max":0.9,"default":[0.5]},{"name":"_PuppetMaskSmooth","label":"Puppet Mask Smooth","kind":"SLIDER","size":1,"min":0.01,"max":0.25,"default":[0.10000000149011612]},{"name":"_PuppetProceduralDCurveEnable","label":"Puppet Procedural DCurve Color","kind":"SWITCH","size":1,"default":[0]},{"name":"_PuppetPDCurveUVScaleSpeed","label":"Puppet DCurve UV2 Scale(XY) Speed(ZW)","kind":"VECTOR","size":4,"default":[120,12,0,-0.05999999865889549]},{"name":"_PuppetPDCurveDistortSpeed","label":"Puppet DCurve Distort Speed","kind":"VALUE","size":1,"default":[0.5]},{"name":"_PuppetPDCurveDistortPeriodSpeed","label":"Puppet DCurve Period Speed","kind":"VALUE","size":1,"default":[0.5]},{"name":"_PuppetPDCurveBaseColor","label":"Puppet DCurve Base Color","kind":"COLOR","size":4,"default":[0.38999998569488525,0.5799999833106995,0.699999988079071,1],"gamma":true},{"name":"_PuppetPDCurveLightColor","label":"Puppet DCurve Light Color","kind":"COLOR","size":4,"default":[0.5699999928474426,0.30000001192092896,0.8299999833106995,0.5],"gamma":true},{"name":"_PuppetPDCurveEdgeColor","label":"Puppet DCurve Edge Color","kind":"COLOR","size":4,"default":[0.44999998807907104,0.3799999952316284,0.7300000190734863,0.5],"gamma":true},{"name":"_PuppetPDCurveEdgeLocation","label":"Puppet DCurve Edge Location(1 = Unuse)","kind":"SLIDER","size":1,"min":0.01,"max":1,"default":[0.30000001192092896]},{"name":"_PuppetPatternSpeed","label":"Puppet Pattern Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_PuppetPatternMapUseRGB","label":"Puppet Pattern Map Use RGB","kind":"VALUE","size":1,"default":[0]},{"name":"_PuppetBaseColor","label":"Puppet Base Color","kind":"COLOR","size":4,"default":[0.5,0.6499999761581421,0.800000011920929,1],"gamma":true},{"name":"_PuppetPatternTintColor","label":"Puppet Pattern Tint Color","kind":"HDRCOLOR","size":4,"default":[0.4000000059604645,0.20000000298023224,0.9399999976158142,1]},{"name":"_PuppetPatternTintEdgeColor","label":"Puppet Pattern Tint Edge Color","kind":"COLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_PuppetPatternTintEdgeLocation","label":"Puppet Pattern Tint Edge Location(1 = Unuse)","kind":"SLIDER","size":1,"min":0.01,"max":1,"default":[1]},{"name":"_PuppetMetallic","label":"Puppet Metallic","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_PuppetRoughness","label":"Puppet Roughness","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]}]},{"name":"\u98CE\u683C\u5316\u83F2\u6D85\u5C14","gate":"_EnableStylizedFresnel","rows":[{"name":"_EnableStylizedFresnel","label":"Stylized Fresnel","kind":"SWITCH","size":1,"default":[0]},{"name":"_StylizedFresnelColor","label":"Color(A = Emission)","kind":"COLOR","size":4,"default":[0,0,0,0],"gamma":true},{"name":"_StylizedFresnelPow","label":"Pow","kind":"SLIDER","size":1,"min":0,"max":10,"default":[2]},{"name":"_StylizedFresnelAmount","label":"Amount","kind":"VALUE","size":1,"default":[2]},{"name":"_StylizedFresnelNoiseSpeed","label":"Noise Speed","kind":"VALUE","size":1,"default":[0]},{"name":"_StylizedNoiseContrast","label":"Noise Contrast","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]}]},{"name":"\u53D7\u51FB\u95EA\u5149","gate":"_EnableEnemyHitFlash","rows":[{"name":"_EnableEnemyHitFlash","label":"Enemy Hit Flash","kind":"SWITCH","size":1,"default":[0]},{"name":"_EnemyHitFlashBrightColor","label":"Bright(Scanline) Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_EnemyHitFlashInnerRadius","label":"\u7FBD\u5316\u5185\u534A\u5F84","kind":"SLIDER","size":1,"min":0,"max":10,"default":[0]},{"name":"_EnemyHitFlashOuterRadius","label":"\u7FBD\u5316\u5916\u534A\u5F84","kind":"SLIDER","size":1,"min":0,"max":10,"default":[2]},{"name":"_EnemyHitFlashBrightCenter","label":"\u8986\u76D6\u4E2D\u5FC3\u5750\u6807,0\u4E3A\u9ED8\u8BA4\u4E3B\u89D2\u4F4D\u7F6E","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_EnemyHitFlashFresnelColor","label":"Fresnel Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_EnemyHitFlashFresnelBias","label":"Fresnel Bias(Default:0)","kind":"SLIDER","size":1,"min":-1,"max":2,"default":[0]},{"name":"_EnemyHitFlashFresnelAffectOpacity","label":"Fresnel Affect Opacity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_EnemyHitFlashNormalScale","label":"Normal Scale","kind":"SLIDER","size":1,"min":0,"max":3,"default":[1]},{"name":"_EnemyHitFlashBrightColorAdjust","label":"Bright Color Adjust","kind":"VALUE","size":1,"default":[1]},{"name":"_EnemyHitFlashFresnelColorAdjust","label":"Fresnel Color Adjust","kind":"VALUE","size":1,"default":[1]}]},{"name":"\u7403\u5F62\u6296\u52A8\u6D88\u9690","gate":"_EnableDitherSphere","rows":[{"name":"_EnableDitherSphere","label":"Enable Sphere Dither","kind":"SWITCH","size":1,"default":[0]},{"name":"_DitherSphereRadius","label":"Dither Sphere Radius","kind":"SLIDER","size":1,"min":0,"max":0.3,"default":[0.05000000074505806]},{"name":"_DitherSphereSmoothness","label":"Dither Sphere Smoothness","kind":"SLIDER","size":1,"min":0,"max":0.5,"default":[0.20000000298023224]}]},{"name":"VAT \u52A8\u753B","gate":"_UseVATMap","rows":[{"name":"_UseVATMap","label":"UseVATMap","kind":"SWITCH","size":1,"default":[0]},{"name":"_DebugVATFrameIndex","label":"DebugVATFrame","kind":"SWITCH","size":1,"default":[0]},{"name":"_VATFrameIndex","label":"VAT Frame Index","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]}]},{"name":"UV \u6D41\u52A8/\u547C\u5438","gate":null,"rows":[{"name":"_BaseMapUVSpeed","label":"BaseMap UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_EmissionMapUVSpeed","label":"EmissionMap UV Speed","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_EmissionAlphaBrightBreath","label":"Emission\u547C\u5438\uFF08A\uFF09","kind":"SWITCH","size":1,"default":[0]},{"name":"_EmissionAlphaBrightBreathSpeed","label":"Emission\u547C\u5438\u901F\u5EA6","kind":"VALUE","size":1,"default":[1]},{"name":"_EmissionAlphaBrightBreathScaleMin","label":"Emission\u547C\u5438\u6700\u5C0F\u4EAE\u5EA6","kind":"VALUE","size":1,"default":[0.5]},{"name":"_EmissionAlphaBrightBreathScaleMax","label":"Emission\u547C\u5438\u6700\u5927\u4EAE\u5EA6","kind":"VALUE","size":1,"default":[1]}]},{"name":"\u9876\u70B9\u52A8\u753B","gate":"_VertexAnimationEnable","rows":[{"name":"_VertexAnimationEnable","label":"Vertex Animation","kind":"SWITCH","size":1,"default":[0]},{"name":"_VertexAnimationIntensity","label":"Vertex Animation Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.10000000149011612]},{"name":"_VertexAnimationFrequency","label":"Vertex Animation Frequency","kind":"SLIDER","size":1,"min":0,"max":30,"default":[0.5]},{"name":"_VertexAnimationWaveLength","label":"Vertex Animation WaveLength","kind":"SLIDER","size":1,"min":0,"max":20,"default":[0]},{"name":"_VertexAnimationFalloff","label":"Vertex Animation Falloff","kind":"SLIDER","size":1,"min":0.1,"max":10,"default":[1]},{"name":"_VertexAnimationExpandOnly","label":"Vertex Animation Expand Only","kind":"SWITCH","size":1,"default":[0]},{"name":"_VertexAnimationDirection","label":"Vertex Animation Direction","kind":"VECTOR","size":4,"default":[1,0,1,0]},{"name":"_VertexAnimationNoiseIntensity","label":"Vertex Animation Noise Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_VertexAnimationNoiseTiling","label":"Vertex Animation Noise Tiling","kind":"SLIDER","size":1,"min":0.5,"max":4,"default":[1]},{"name":"_VertexAnimationNoiseFrequency","label":"Vertex Animation Noise Frequency","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.20000000298023224]}]},{"name":"\u81EA\u9634\u5F71","gate":null,"rows":[{"name":"_DisableSelfShadow","label":"Disable Self Shadow","kind":"SWITCH","size":1,"default":[0]}]},{"name":"\u89D2\u8272 VFX","gate":null,"rows":[{"name":"_EnableCharacterVFX","label":"Character VFX","kind":"SWITCH","size":1,"default":[0]}]},{"name":"VFX \u5408\u6210","gate":null,"rows":[{"name":"_VFXSpecialMainTex","label":"VFX Special Main Tex","kind":"TEXTURE"},{"name":"_VFXSpecialBlendTex","label":"VFX Special Blend Tex","kind":"TEXTURE"},{"name":"_UseMask","label":"Use Mask (\u53EA\u5F71\u54CDAlpha)","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseDisturb","label":"Use Disturb","kind":"SWITCH","size":1,"default":[0]},{"name":"_VFXColor","label":"VFX Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_VFXColorIntensity","label":"VFX Color Intensity (Default 1)","kind":"SLIDER","size":1,"min":1,"max":100,"default":[1]},{"name":"_VFXColorAlpha","label":"VFX Color Alpha (Default 1)","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_UseVFXMainTexAsAlpha","label":"UseMainTexAsAlpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_VFXSpecialBlendTexRForDisturb","label":"Use Blend Tex R For Disturb","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_VFXBlendTint","label":"BlendTint","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_VFXSpecialParam","label":"VFX Special Param(XY: MainTex, ZW: BlendTex)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_VFXFresnelColor","label":"Fresnel Color","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_VFXFresnelBias","label":"Fresnel Bias(Default:0)","kind":"SLIDER","size":1,"min":-1,"max":2,"default":[0]},{"name":"_VFXFresnelAffectOpacity","label":"Fresnel Affect Opacity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_VFXFresnelPower","label":"Fresnel Power(Default:1)","kind":"SLIDER","size":1,"min":1,"max":100,"default":[1]},{"name":"_VFXFresnelFlip","label":"Fresnel Flip","kind":"SWITCH","size":1,"default":[0.0010000000474974513]},{"name":"_SpecialDissolveScheduleOffset","label":"Dissolve Schedule Offset","kind":"SLIDER","size":1,"min":0,"max":2,"default":[0]}]},{"name":"\u7279\u6548\u8D34\u56FE/\u6D41\u52A8","gate":null,"rows":[{"name":"_MainTex","label":"Main Tex","kind":"TEXTURE"},{"name":"_MaskTex","label":"Mask Tex","kind":"TEXTURE"},{"name":"_DisturbTex1","label":"Disturb Tex 1","kind":"TEXTURE"},{"name":"_BlendMode","label":"Blend Type","kind":"VALUE","size":1,"default":[0]},{"name":"_DisableVertColor","label":"Disable VertColor","kind":"SWITCH","size":1,"default":[0]},{"name":"_InParticle","label":"Use In Particle","kind":"SWITCH","size":1,"default":[1]},{"name":"_VertCameraOffset","label":"\u9876\u70B9\u5411\u76F8\u673A\u504F\u79FB(\u5355\u4F4D\u7C73)","kind":"VALUE","size":1,"default":[0]},{"name":"_TintColor","label":"TintColor","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_TintColorIntensity","label":"Tint Color Intensity (Default 1)","kind":"SLIDER","size":1,"min":1,"max":100,"default":[1]},{"name":"_TintColorAlpha","label":"Tint Color Alpha (Default 1)","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_UseMainTexAsAlpha","label":"UseMainTexAsAlpha","kind":"SWITCH","size":1,"default":[1]},{"name":"_MainTexUseDisturb","label":"Main Tex Use Disturb","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_MainTexUVSpeed","label":"MainTexUVSpeed(XY:By Time,ZW:By Custom1.X)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_MainTexUVRotateMat","label":"MainTexUVRotateMat","kind":"VECTOR","size":4,"default":[1,0,0,1]},{"name":"_MainTexUVWeights","label":"\u0027_MainTexUVWeights\u0027","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_UseMaskTexAsAlpha","label":"UseMaskTexAsAlpha","kind":"SWITCH","size":1,"default":[1]},{"name":"_MaskTexUseDisturb","label":"Mask Tex Use Disturb","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_MaskTexUVSpeed","label":"MaskTaexUVSpeed(XY:By Time,ZW:By Custom1.Y)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_MaskTexUVRotateMat","label":"MaskTexUVRotateMat","kind":"VECTOR","size":4,"default":[1,0,0,1]},{"name":"_MaskTexUVWeights","label":"\u0027_MaskTexUVWeights\u0027","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_BlendTint","label":"BlendTint","kind":"HDRCOLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_Bi_Disturb","label":"Disturbe in 2 Direction","kind":"SWITCH","size":1,"default":[0]},{"name":"_DisturbTex1Normal","label":"Disturb Tex1 is Normal","kind":"SWITCH","size":1,"default":[0]},{"name":"_DisturbUIntensity1","label":"UIntensity1","kind":"VALUE","size":1,"default":[0]},{"name":"_DisturbVIntensity1","label":"VIntensity1(Unused In Normal)","kind":"VALUE","size":1,"default":[0]},{"name":"_DisturbUVSpeed1","label":"DisturbUVSpeed(XY:By Time,ZW:By Custom1.Y)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_DisturbUVRotateMat1","label":"DisturbUVRotateMat","kind":"VECTOR","size":4,"default":[1,0,0,1]},{"name":"_DisturbUVWeights1","label":"\u0027_DisturbTexUVWeights\u0027","kind":"VECTOR","size":4,"default":[1,0,0,0]},{"name":"_EnableNormalMap","label":"Normal Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_NormalMapUVSpeed","label":"NormalMapUVSpeed(XY:By Time,ZW:By Custom1.Y)","kind":"VECTOR","size":4,"default":[0,0,0,0]},{"name":"_NormalMapUVRotateMat","label":"NormalMapUVRotateMat","kind":"VECTOR","size":4,"default":[1,0,0,1]},{"name":"_NormalMapUVWeights","label":"\u0027_NormalMapUVWeights\u0027","kind":"VECTOR","size":4,"default":[1,0,0,0]}]},{"name":"\u7279\u6548\u83F2\u6D85\u5C14/\u8FD1\u6DE1\u51FA","gate":null,"rows":[{"name":"_UseNearCameraFade","label":"Use Near Camera Fade","kind":"SWITCH","size":1,"default":[0]},{"name":"_NearCameraFadeDistanceStart","label":"\u6D88\u5931\u8DDD\u79BB1","kind":"SLIDER","size":1,"min":0.001,"max":3000,"default":[0.0010000000474974513]},{"name":"_NearCameraFadeDistanceEnd","label":"\u51FA\u73B0\u8DDD\u79BB1","kind":"SLIDER","size":1,"min":0.001,"max":3000,"default":[10]},{"name":"_NearCameraFadeDistanceEnd2","label":"\u51FA\u73B0\u8DDD\u79BB2","kind":"SLIDER","size":1,"min":0.002,"max":3000,"default":[100]},{"name":"_NearCameraFadeDistanceStart2","label":"\u6D88\u5931\u8DDD\u79BB2","kind":"SLIDER","size":1,"min":0.001,"max":3000,"default":[120]}]},{"name":"\u7279\u6548\u6742\u9879","gate":null,"rows":[{"name":"_UseGrayAsAlpha","label":"Use Gray As Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_ShadowAngleRange","label":"Shadow Angle Range","kind":"SLIDER","size":1,"min":-0.01,"max":0.01,"default":[0]}]},{"name":"\u7279\u6548\u8C03\u8272","gate":"_EnableVFXColorAdjustment","rows":[{"name":"_EnableVFXColorAdjustment","label":"VFX Color Adjustment","kind":"SWITCH","size":1,"default":[0]},{"name":"_ColorAdjustmentContrast","label":"Color Adjustment Contrast","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_ColorAdjustmentSaturation","label":"Color Adjustment Saturation","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_ColorAdjustmentBrightness","label":"Color Adjustment Brightness","kind":"SLIDER","size":1,"min":0.5,"max":1.5,"default":[1]},{"name":"_ColorAdjustmentRimWidth","label":"Color Adjustment Rim Width","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.3499999940395355]},{"name":"_ColorAdjustmentRimIntensity","label":"Color Adjustment Rim Intensity","kind":"SLIDER","size":1,"min":0,"max":10,"default":[4]},{"name":"_ColorAdjustmentColorBlend","label":"Color Adjustment Color Blend","kind":"COLOR","size":4,"default":[1,1,1,0],"gamma":true},{"name":"_ColorAdjustmentRimColor","label":"Color Adjustment Rim Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true}]},{"name":"\u63CF\u8FB9","gate":null,"rows":[{"name":"_OutlineColorBrightness","label":"Outline Color Brightness","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.5]},{"name":"_OutlineColorSaturation","label":"Outline Color Saturation","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1.5]}]},{"name":"State","gate":null,"rows":[{"name":"_DoubleSided","label":"Double Sided","kind":"SWITCH","size":1,"default":[0]},{"name":"_Cull","label":"Cull","kind":"VALUE","size":1,"default":[2]},{"name":"_Cutoff","label":"Alpha Cutoff","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.15000000596046448]},{"name":"_PreMulAlpha","label":"Pre Mul Alpha","kind":"SWITCH","size":1,"default":[0]},{"name":"_OutlineOffset","label":"Outline Offset","kind":"SLIDER","size":1,"min":0,"max":20,"default":[0]},{"name":"_OutlineColor","label":"Outline Color","kind":"COLOR","size":4,"default":[0.6000000238418579,0.6000000238418579,0.6000000238418579,0.10000000149011612],"gamma":true},{"name":"_OutlineShadowColor","label":"Outline Shadow Color","kind":"COLOR","size":4,"default":[0.6000000238418579,0.6000000238418579,0.6000000238418579,1],"gamma":true}]},{"name":"Stocking","gate":null,"rows":[{"name":"_UseStockingFalloff","label":"Use Stocking Falloff","kind":"SWITCH","size":1,"default":[0]},{"name":"_AnisotropicGXX","label":"Anisotropic GGX","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_UseGlitter","label":"Use Stocking Glitter ","kind":"SWITCH","size":1,"default":[0]},{"name":"_GlitterDensity","label":"Glitter Density","kind":"SLIDER","size":1,"min":1,"max":200,"default":[20]},{"name":"_GlitterRimFalloff","label":"Glitter Rim Falloff","kind":"SLIDER","size":1,"min":0.1,"max":10,"default":[1]},{"name":"_GlitterViewWeight","label":"Glitter View Weight","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.05000000074505806]},{"name":"_GlitterRimMin","label":"Glitter Rim Center","kind":"SLIDER","size":1,"min":0,"max":0.5,"default":[0]},{"name":"_GlitterRimMax","label":"Glitter Rim Side","kind":"SLIDER","size":1,"min":0.5001,"max":2,"default":[1]},{"name":"_GlitterRimIntensity","label":"Glitter Rim Intensity","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_GlitterSpecIntensity","label":"Glitter Spec Intensity","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_GlitterSpeed","label":"Glitter Speed","kind":"SLIDER","size":1,"min":0,"max":10,"default":[1]},{"name":"_GlitterRoughness","label":"Glitter Roughness\t","kind":"SLIDER","size":1,"min":-10,"max":10,"default":[0]},{"name":"_GlitterMetallic","label":"Glitter Metallic","kind":"SLIDER","size":1,"min":-10,"max":10,"default":[0]},{"name":"_GlitterCurvature","label":"Glitter Curvature","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_StencilComp","label":"Stencil Comparison","kind":"VALUE","size":1,"default":[0]},{"name":"_StencilOp","label":"Stencil Operation","kind":"VALUE","size":1,"default":[0]},{"name":"_StencilRefH","label":"_StencilRefH","kind":"VALUE","size":1,"default":[203]},{"name":"_StencilRefE","label":"_StencilRefE","kind":"VALUE","size":1,"default":[204]},{"name":"_StencilRefF","label":"_StencilRefF","kind":"VALUE","size":1,"default":[200]},{"name":"_StencilRefC","label":"_StencilRefC","kind":"VALUE","size":1,"default":[206]},{"name":"_WriteMask","label":"_WriteMask","kind":"VALUE","size":1,"default":[255]},{"name":"_StencilRefCharStart","label":"_StencilRefCharStart","kind":"VALUE","size":1,"default":[200]},{"name":"_DirOutlineWidthExt","label":"DirOutline Width Extend","kind":"SLIDER","size":1,"min":0,"max":0.3,"default":[0]},{"name":"_CampColorIndex","label":"Camp Color Index","kind":"VALUE","size":1,"default":[0]},{"name":"_UseGIFlatten","label":"Use GI Flatten","kind":"SWITCH","size":1,"default":[0]},{"name":"_OutlineZBias","label":"Outline Z-Bias","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_OutlineIntensity","label":"Outline Intensity","kind":"SLIDER","size":1,"min":1,"max":30,"default":[1]},{"name":"_AnisotropicSpecular","label":"Use Anisotropic Specular","kind":"SWITCH","size":1,"default":[0]},{"name":"_AdjustShadowBias","label":"Adjust Shadow Bias","kind":"SWITCH","size":1,"default":[0]},{"name":"_ShadowBiasDistance","label":"Shadow Bias Distance","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.10000000149011612]},{"name":"_UseSpecularUV2","label":"Use UV2","kind":"SWITCH","size":1,"default":[0]},{"name":"_UseBlendTex","label":"Use Blend Tex (FaceSDF)","kind":"SWITCH","size":1,"default":[0]},{"name":"_BlendSmoothness","label":"Blend Smoothness","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.10000000149011612]},{"name":"_UseFurShell","label":"Use Fur Shell","kind":"SWITCH","size":1,"default":[0]},{"name":"_FurShellThickness","label":"Fur Shell Thickness","kind":"SLIDER","size":1,"min":0.01,"max":5,"default":[0.5]},{"name":"_UseVolumetricEffect","label":"Use Volumetric Effect","kind":"SWITCH","size":1,"default":[0]},{"name":"_BaseInsideLerp","label":"BaseInsideLerp","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_InsideBaseColor","label":"InsideBaseColor","kind":"HDRCOLOR","size":4,"default":[1,1,1,0]},{"name":"_InsideColorContrast","label":"InsideColorContrast","kind":"SLIDER","size":1,"min":0,"max":15,"default":[1]},{"name":"_InsideColorBias","label":"InsideColorBias","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0.5]},{"name":"_InsideHeightContrast","label":"InsideHeightContrast","kind":"SLIDER","size":1,"min":0,"max":2,"default":[1]},{"name":"_InsideHeightBias","label":"InsideHeightBias","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_FakeIntensity","label":"FakeIntersity","kind":"SLIDER","size":1,"min":0,"max":2,"default":[0.25]},{"name":"_ReflectionIntensity","label":"ReflectionIntensity","kind":"SLIDER","size":1,"min":0,"max":5,"default":[0.3499999940395355]},{"name":"_ReflectionFresnelF0","label":"ReflectionFresnelF0","kind":"SLIDER","size":1,"min":-1,"max":1,"default":[0]},{"name":"_UseMatcapRef","label":"_UseMatcapRef","kind":"SWITCH","size":1,"default":[0]},{"name":"_MatcapIntensity","label":"Matcap Intensity","kind":"SLIDER","size":1,"min":0.1,"max":10,"default":[1]},{"name":"_MatcapRimPower","label":"Matcap Rim Power","kind":"SLIDER","size":1,"min":0.01,"max":1,"default":[1]},{"name":"_UseDetailMap","label":"Use Detail Map","kind":"SWITCH","size":1,"default":[0]},{"name":"_DetailAlphaMode","label":"Detail Alpha Mode","kind":"VALUE","size":1,"default":[1]},{"name":"_DetailAlphaIntensity","label":"Detail Alpha Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_DetailAlbedoIntensity","label":"Detail Albedo Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_DetailNormalIntensity","label":"Detail Normal Intensity","kind":"SLIDER","size":1,"min":0,"max":2,"default":[0]},{"name":"_DetailRMIntensity","label":"Detail RM Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_AdditionalLightShadow","label":"Additional Light Shadow","kind":"SLIDER","size":1,"min":0,"max":1,"default":[1]},{"name":"_UseBillboard","label":"Use Billboard","kind":"SWITCH","size":1,"default":[0]}]},{"name":"Character Effect","gate":null,"rows":[{"name":"_FinalTint","label":"Final Tint","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_AoeSelect","label":"Aoe Select","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_AoeSelectColor","label":"Aoe Select Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_DissolveIntensity","label":"Dissolve Lerp","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_EnableHolographicScanline","label":"_EnableHolographicScanline","kind":"VALUE","size":1,"default":[0]},{"name":"_HolographicColor","label":"Holographic Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_HolographicIntensity","label":"Holographic Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_HolographicWidth","label":"Holographic Width","kind":"VALUE","size":1,"default":[200]},{"name":"_ConcealLerp","label":"Conceal Lerp","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_Tutorial","label":"Tutorial","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_TutorialColor","label":"Tutorial Color","kind":"COLOR","size":4,"default":[1,1,1,1],"gamma":true},{"name":"_OnHitColor","label":"On Hit Color","kind":"COLOR","size":4,"default":[0,0,0,1],"gamma":true},{"name":"_CharSaturation","label":"Char Saturation","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0]},{"name":"_PaintInfluence","label":"_PaintInfluence","kind":"VALUE","size":1,"default":[0]},{"name":"_ColorOffset","label":"_ColorOffset","kind":"VALUE","size":1,"default":[0]},{"name":"_Moisture","label":"_Moisture","kind":"VALUE","size":1,"default":[0]},{"name":"_WetFlowStrength","label":"_WetFlowStrength","kind":"VALUE","size":1,"default":[0]},{"name":"_WetTraceStrength","label":"_WetTraceStrength","kind":"VALUE","size":1,"default":[0]},{"name":"_WetFlowSpeed","label":"_WetFlowSpeed","kind":"VALUE","size":1,"default":[0]},{"name":"_WetFlowSize","label":"_WetFlowSize","kind":"VALUE","size":1,"default":[0]},{"name":"_FaceLightDirAdjustment","label":"_WetFlowSize","kind":"VALUE","size":1,"default":[0]},{"name":"_HairDummyDirection","label":"_HairDummyDirection","kind":"VECTOR","size":4,"default":[0,0,0,0.15000000596046448]},{"name":"_HairDummyPosition","label":"_HairDummyPosition","kind":"VECTOR","size":4,"default":[0,1,0,0.15000000596046448]},{"name":"_ShadowIntensity","label":"Shadow Intensity","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.25]},{"name":"_CorneaParallax","label":"Cornea Parallax","kind":"SLIDER","size":1,"min":0,"max":0.5,"default":[0.30000001192092896]},{"name":"_SpecularParallax","label":"Specular Parallax","kind":"SLIDER","size":1,"min":0,"max":1,"default":[0.30000001192092896]},{"name":"_QueueOffset","label":"Queue offset","kind":"VALUE","size":1,"default":[1]},{"name":"_MainColor","label":"Main Color","kind":"COLOR","size":4,"default":[1,1,1,0.8500000238418579],"gamma":true}]}],"srgb_params":["_BaseColor","_StockingCenterColor","_StockingFalloffColor","_EmissionColor","_OutlineTintColor","_FresnelColor","_RefractionColor","_RefractionFresnelColor","_RefractTint","_GlassRimColor","_IceRefractionColor","_AddMatcapColor","_AnisotropyHueColor","_BrightenColor","_ColorA","_ColorB","_ColorG","_ColorMax","_ColorMaxR","_ColorMin","_ColorMinR","_DarkColor","_DayColor","_DyeingColor","_DyeingColor2","_DyeingColor3","_DyeingColor4","_DyeingColorA","_DyeingColorAMax","_DyeingColorAMin","_DyeingColorB","_DyeingColorG","_DyeingColorR","_ExpressionMaskColor","_EyebrowDarkColor","_HighLightColor1","_HighLightColor2","_MakeupColor","_MaskColor02","_MaskColor03","_MaskColor04","_MaskColor05","_MaskColor06","_MaskColor07","_MaskColor08","_PaintHighlightDayColor","_PartColor","_RampColor","_RampPartColor","_RimColor","_RimLightColor","_SiwaColor","_SkinColor","_SpecularColor","SkinColor","_ToonShadowTint","_ToonLightTint","_ToonFarShadowTint","_ToonFarLightTint","_CutsceneBaseColor","_RainColor","_DecalBaseColor","_FogColor","_SubsurfaceColor","_ColorTop","_ColorBottom","_CubeMapColor","_MainTex2Color","_InkColor","_HeightColorGradientColor","_HeightColorGradientColor2","_RBMainColorMask","_RBOffsetColorMask","_RBOffset1ColorMask","_RBOffset2ColorMask","_Color","_HighLightColor","_EmmissiveColor","_DissolveEmissiveColor","_BrightColor","_ScanFillColor","_ColorFlat","_ShadowColor","_CapsuleAoColor","_Metallic","_SDFRimColor","_FaceDecalTintColor","_EyeTintColor","_AnisotropyColor2","_HairBaseTintColor","_HairAddTintColor","_FurColor","_ClearCoatColor","_ParallaxColor","_SilkStockingsColor","_SilkStockingsDryColor","_SilkStockingsWetColor","_AnisotropyColorAdditional","_ExtraRootTintColor","_ExtraDepthTintColor","_CustomizeBaseColor","_CustomizeBaseTintColor","_CustomizeAddTintColor","_ErosionBaseColor","_ErosionBaseRootColor","_ErosionBaseTopColor","_PuppetPDCurveBaseColor","_PuppetPDCurveLightColor","_PuppetPDCurveEdgeColor","_PuppetBaseColor","_PuppetPatternTintEdgeColor","_StylizedFresnelColor","_EnemyHitFlashBrightColor","_EnemyHitFlashFresnelColor","_VFXColor","_VFXBlendTint","_VFXFresnelColor","_TintColor","_BlendTint","_ColorAdjustmentColorBlend","_ColorAdjustmentRimColor","_OutlineColor","_OutlineShadowColor","_FinalTint","_AoeSelectColor","_HolographicColor","_TutorialColor","_OnHitColor","_MainColor"],"part_meta":{"Standard":{"id":0,"transparent":false,"blend":null,"cull":null,"outline":false,"shell_stack":false,"shader":"Lens Render Pipeline/Character/Standard","aliases":[],"discriminator":null},"Face":{"id":1,"transparent":false,"blend":null,"cull":null,"outline":false,"shell_stack":false,"shader":"Lens Render Pipeline/Character/NewFace","aliases":[],"discriminator":null},"Eyes":{"id":2,"transparent":false,"blend":null,"cull":null,"outline":false,"shell_stack":false,"shader":"Lens Render Pipeline/Character/Eyes","aliases":[],"discriminator":null},"Hair":{"id":3,"transparent":false,"blend":null,"cull":null,"outline":false,"shell_stack":false,"shader":"Lens Render Pipeline/Character/Hair","aliases":[],"discriminator":null},"Eyebrow":{"id":5,"transparent":false,"blend":null,"cull":null,"outline":false,"shell_stack":false,"shader":"Lens Render Pipeline/Character/Eyebrow","aliases":[],"discriminator":null}},"non_shading":["Lens Render Pipeline/Weather/MotionInteractionRenderElement"],"host_shadow_casters":false,"source_names":{"_AlphaClipThreshold":"_AlphaClip"},"cull":{"property":"_Cull","fixed":2},"host":{"registry_module":"RuriRipperImporter.Host.Blender.material_builder","register_fn":"register_graph_provider","unregister_fn":"unregister_graph_provider","register_vertex_stage_fn":"register_vertex_stage","unregister_vertex_stage_fn":"unregister_vertex_stage","register_post_stage_fn":"","unregister_post_stage_fn":"","load_image_fn":"_load_image","rig_identity_module":"RuriRipperImporter.Host.Blender.rig_identity","rig_bone_fn":"bone_for_unity_name","rig_unity_name_fn":"unity_name_for_bone","world_basis":[[-1,0,0],[0,0,-1],[0,1,0]],"world_basis_fn":"world_basis","register_level_globals_fn":"register_level_globals","unregister_level_globals_fn":"unregister_level_globals","register_volume_textures_fn":"register_volume_textures","unregister_volume_textures_fn":"unregister_volume_textures","volume_image_fn":"volume_image"},"post":null,"group_names":["Ruri AzurPromilia Uber Z0 s0","Ruri AzurPromilia Uber Z0 s1","Ruri AzurPromilia Uber Z1 s0","Ruri AzurPromilia Uber Z1 s1","Ruri AzurPromilia Uber Z2 s0","Ruri AzurPromilia Uber Z2 s1","Ruri AzurPromilia Uber Z3 s0","Ruri AzurPromilia Uber Z3 s1","Ruri AzurPromilia Uber Standard s0","Ruri AzurPromilia Uber Standard s1","Ruri AzurPromilia Uber Standard s2","Ruri AzurPromilia Uber Standard s3","Ruri AzurPromilia Uber Standard s4","Ruri AzurPromilia Uber Standard s5","Ruri AzurPromilia Uber Z4 s0","Ruri AzurPromilia Uber Z4 s1","Ruri AzurPromilia Uber Z5 s0","Ruri AzurPromilia Uber Z5 s1","Ruri AzurPromilia Uber Z6 s0","Ruri AzurPromilia Uber Z6 s1","Ruri AzurPromilia Uber Face s0","Ruri AzurPromilia Uber Face s1","Ruri AzurPromilia Uber Face s2","Ruri AzurPromilia Uber Face s3","Ruri AzurPromilia Uber Face s4","Ruri AzurPromilia Uber Z7 s0","Ruri AzurPromilia Uber Z7 s1","Ruri AzurPromilia Uber Z8 s0","Ruri AzurPromilia Uber Z8 s1","Ruri AzurPromilia Uber Eyes s0","Ruri AzurPromilia Uber Eyes s1","Ruri AzurPromilia Uber Eyes s2","Ruri AzurPromilia Uber Z9 s0","Ruri AzurPromilia Uber Z9 s1","Ruri AzurPromilia Uber Hair s0","Ruri AzurPromilia Uber Hair s1","Ruri AzurPromilia Uber Hair s2","Ruri AzurPromilia Uber Hair s3","Ruri AzurPromilia Uber Eyebrow s0","Ruri AzurPromilia Uber Eyebrow s1","Ruri AzurPromilia Uber Eyebrow s2","Ruri AzurPromilia Uber Outline"]}]''')
+
+OWN_SAMPLER = 'TEXTURE'
+OWN_SAMPLER_WRAPS = ('repeat', 'clamp', 'mirror', 'mirroronce')
+OWN_SAMPLER_SOCKETS = ('__wrap_u', '__wrap_v', '__point')
+
+MATH_ARITY = {
+    'ADD': 2,
+    'SUBTRACT': 2,
+    'MULTIPLY': 2,
+    'DIVIDE': 2,
+    'POWER': 2,
+    'LOGARITHM': 2,
+    'MINIMUM': 2,
+    'MAXIMUM': 2,
+    'LESS_THAN': 2,
+    'GREATER_THAN': 2,
+    'MODULO': 2,
+    'FLOORED_MODULO': 2,
+    'SNAP': 2,
+    'PINGPONG': 2,
+    'ARCTAN2': 2,
+    'MULTIPLY_ADD': 3,
+    'COMPARE': 3,
+    'SMOOTH_MIN': 3,
+    'SMOOTH_MAX': 3,
+    'WRAP': 3,
+    'SQRT': 1,
+    'INVERSE_SQRT': 1,
+    'ABSOLUTE': 1,
+    'EXPONENT': 1,
+    'SIGN': 1,
+    'ROUND': 1,
+    'FLOOR': 1,
+    'CEIL': 1,
+    'TRUNC': 1,
+    'FRACT': 1,
+    'RADIANS': 1,
+    'DEGREES': 1,
+    'SINE': 1,
+    'COSINE': 1,
+    'TANGENT': 1,
+    'SINH': 1,
+    'COSH': 1,
+    'TANH': 1,
+    'ARCSINE': 1,
+    'ARCCOSINE': 1,
+    'ARCTANGENT': 1,
+}
+
+VECT_ARITY = {
+    'ADD': (0, 1),
+    'SUBTRACT': (0, 1),
+    'MULTIPLY': (0, 1),
+    'DIVIDE': (0, 1),
+    'CROSS_PRODUCT': (0, 1),
+    'PROJECT': (0, 1),
+    'REFLECT': (0, 1),
+    'DOT_PRODUCT': (0, 1),
+    'DISTANCE': (0, 1),
+    'MODULO': (0, 1),
+    'SNAP': (0, 1),
+    'MINIMUM': (0, 1),
+    'MAXIMUM': (0, 1),
+    'POWER': (0, 1),
+    'MULTIPLY_ADD': (0, 1, 2),
+    'WRAP': (0, 1, 2),
+    'FACEFORWARD': (0, 1, 2),
+    'REFRACT': (0, 1, 3),
+    'SCALE': (0, 3),
+    'NORMALIZE': (0,),
+    'LENGTH': (0,),
+    'ABSOLUTE': (0,),
+    'SIGN': (0,),
+    'ROUND': (0,),
+    'FLOOR': (0,),
+    'CEIL': (0,),
+    'FRACTION': (0,),
+    'SINE': (0,),
+    'COSINE': (0,),
+    'TANGENT': (0,),
+}
+
+# 宿主世界基(真源世界 -> 宿主世界,行优先 b = M.u)。着色内核在真源世界系里算,运行时建的
+# 兑现物(灯方向、环境询问的法线/方向)经它进出,与生成期物化的模板组同一套约定。
+# 由栈清单声明,注册时与宿主模块核对;没声明就不该有任何世界量要换,碰到即响亮失败。
+_WORLD_BASIS = []
+
+
+def declare_world_basis(rows):
+    """栈清单里的世界基。多个栈声明必须一致 -- 一个会话只有一个宿主世界系。"""
+    if not rows:
+        return
+    stated = [[float(value) for value in row] for row in rows]
+    if _WORLD_BASIS and _WORLD_BASIS[0] != stated:
+        raise RuntimeError('[Ruri] 栈清单的宿主世界基互相矛盾: {0} vs {1}'.format(_WORLD_BASIS[0], stated))
+    _WORLD_BASIS[:] = [stated]
+
+
+def _world_basis():
+    if not _WORLD_BASIS:
+        raise RuntimeError('[Ruri] 要换世界系,但没有任何栈声明宿主世界基(host.world_basis)')
+    return _WORLD_BASIS[0]
+
+
+class G:
+    """材质树接线器(运行时只在本地材质平面建小规模兑现物;模板全在 .blend 里)。"""
+
+    def __init__(self, tree, is_group=False):
+        self.t = tree
+        self.n = 0
+        self.is_group = is_group
+        self._sep_cache = {}
+        self._cse = {}
+        self._geo = None
+        self._texco = None
+        self._tbn = None
+
+    def _ck(self, *parts):
+        out = []
+        for p in parts:
+            if isinstance(p, bpy.types.NodeSocket):
+                out.append(p.as_pointer())
+            elif isinstance(p, (tuple, list)):
+                out.append(tuple(round(float(x), 9) for x in p))
+            elif isinstance(p, (int, float)):
+                out.append(round(float(p), 9))
+            else:
+                out.append(p)
+        return tuple(out)
+
+    def _nd(self, typ):
+        nd = self.t.nodes.new(typ)
+        nd.location = ((self.n % 40) * 200.0, -(self.n // 40) * 240.0)
+        self.n += 1
+        return nd
+
+    def _set(self, sock, v):
+        if isinstance(v, bpy.types.NodeSocket):
+            self.t.links.new(v, sock)
+            return
+        if not isinstance(v, (int, float)):
+            v = v[0] if sock.type not in ('RGBA', 'VECTOR') else v
+        if sock.type == 'RGBA':
+            sock.default_value = (v, v, v, 1.0) if isinstance(v, (int, float)) else (v[0], v[1], v[2], 1.0)
+        elif sock.type == 'VECTOR':
+            sock.default_value = (v, v, v) if isinstance(v, (int, float)) else (v[0], v[1], v[2])
+        elif sock.type == 'INT':
+            sock.default_value = int(v)
+        elif sock.type == 'BOOLEAN':
+            sock.default_value = bool(v)
+        else:
+            sock.default_value = float(v)
+
+    def math(self, op, a, b=0.0, c=0.0, clamp=False):
+        # 三操作数算子必须显式设满(第三口默认 0.5);只读 1~2 个操作数的算子按表精确写。
+        n = MATH_ARITY.get(op, 3)
+        ops = (a, b, c)[:n]
+        k = ('m', op, bool(clamp), self._ck(*ops))
+        hit = self._cse.get(k)
+        if hit is not None:
+            return hit
+        nd = self._nd('ShaderNodeMath')
+        nd.operation = op
+        nd.use_clamp = bool(clamp)
+        for i in range(n):
+            self._set(nd.inputs[i], ops[i])
+        self._cse[k] = nd.outputs[0]
+        return nd.outputs[0]
+
+    def vmath(self, op, a, b=(0.0, 0.0, 0.0), c=(0.0, 0.0, 0.0), s=1.0):
+        idx = VECT_ARITY.get(op, (0, 1, 2, 3))
+        vals = (a, b, c, s)
+        k = ('v', op, self._ck(*[vals[i] for i in idx]))
+        hit = self._cse.get(k)
+        if hit is not None:
+            return hit
+        nd = self._nd('ShaderNodeVectorMath')
+        nd.operation = op
+        for i in idx:
+            self._set(nd.inputs[i], vals[i])
+        out = nd.outputs[1] if op in ('LENGTH', 'DOT_PRODUCT', 'DISTANCE') else nd.outputs[0]
+        self._cse[k] = out
+        return out
+
+    def mixf(self, fac, a, b):
+        # clamp_factor 默认 True 会钳 lerp 的 t,必须关。fac=0→a, 1→b。
+        k = ('mf', self._ck(fac, a, b))
+        hit = self._cse.get(k)
+        if hit is not None:
+            return hit
+        nd = self._nd('ShaderNodeMix')
+        nd.data_type = 'FLOAT'
+        nd.clamp_factor = False
+        self._set(nd.inputs[0], fac)
+        self._set(nd.inputs[2], a)
+        self._set(nd.inputs[3], b)
+        self._cse[k] = nd.outputs[0]
+        return nd.outputs[0]
+
+    def mixv(self, fac, a, b):
+        k = ('mv', self._ck(fac, a, b))
+        hit = self._cse.get(k)
+        if hit is not None:
+            return hit
+        nd = self._nd('ShaderNodeMix')
+        nd.data_type = 'VECTOR'
+        nd.factor_mode = 'UNIFORM'
+        nd.clamp_factor = False
+        self._set(nd.inputs[0], fac)
+        self._set(nd.inputs[4], a)
+        self._set(nd.inputs[5], b)
+        self._cse[k] = nd.outputs[1]
+        return nd.outputs[1]
+
+    def clampn(self, x, mn=0.0, mx=1.0):
+        k = ('cl', self._ck(x, mn, mx))
+        hit = self._cse.get(k)
+        if hit is not None:
+            return hit
+        nd = self._nd('ShaderNodeClamp')
+        self._set(nd.inputs[0], x)
+        self._set(nd.inputs[1], mn)
+        self._set(nd.inputs[2], mx)
+        self._cse[k] = nd.outputs[0]
+        return nd.outputs[0]
+
+    def sep(self, v):
+        key = v.as_pointer() if isinstance(v, bpy.types.NodeSocket) else None
+        if key is not None and key in self._sep_cache:
+            return self._sep_cache[key]
+        nd = self._nd('ShaderNodeSeparateXYZ')
+        self._set(nd.inputs[0], v)
+        r = (nd.outputs[0], nd.outputs[1], nd.outputs[2])
+        if key is not None:
+            self._sep_cache[key] = r
+        return r
+
+    def comb(self, x, y, z):
+        k = ('cb', self._ck(x, y, z))
+        hit = self._cse.get(k)
+        if hit is not None:
+            return hit
+        nd = self._nd('ShaderNodeCombineXYZ')
+        self._set(nd.inputs[0], x)
+        self._set(nd.inputs[1], y)
+        self._set(nd.inputs[2], z)
+        self._cse[k] = nd.outputs[0]
+        return nd.outputs[0]
+
+    def bc(self, s):
+        if isinstance(s, (int, float)):
+            return (s, s, s)
+        return self.comb(s, s, s)
+
+    def vtrans(self, v, frm, to, kind='VECTOR'):
+        k = ('vt', frm, to, kind, self._ck(v))
+        hit = self._cse.get(k)
+        if hit is not None:
+            return hit
+        nd = self._nd('ShaderNodeVectorTransform')
+        nd.vector_type = kind
+        nd.convert_from = frm
+        nd.convert_to = to
+        self._set(nd.inputs[0], v)
+        self._cse[k] = nd.outputs[0]
+        return nd.outputs[0]
+
+    def _basis(self, v, rows):
+        comps = self.sep(v)
+        parts = []
+        for row in rows:
+            total = None
+            for weight, comp in zip(row, comps):
+                if weight == 0.0:
+                    continue
+                term = comp if weight == 1.0 else self.math('MULTIPLY', comp, weight)
+                total = term if total is None else self.math('ADD', total, term)
+            parts.append(0.0 if total is None else total)
+        return self.comb(parts[0], parts[1], parts[2])
+
+    def b2u(self, v, point=False):
+        # 宿主世界 -> 真源世界:世界基的逆(正交,转置)。点与向量同式 -- 基里没有平移。
+        _ = point
+        rows = _world_basis()
+        return self._basis(v, [[rows[j][i] for j in range(3)] for i in range(3)])
+
+    def u2b(self, v):
+        return self._basis(v, _world_basis())
+
+    def geo(self):
+        if self._geo is None:
+            self._geo = self._nd('ShaderNodeNewGeometry')
+        return self._geo
+
+    def texco(self):
+        if self._texco is None:
+            self._texco = self._nd('ShaderNodeTexCoord')
+        return self._texco
+
+    def attr(self, name):
+        nd = self._nd('ShaderNodeAttribute')
+        nd.attribute_name = name
+        return nd
+
+    def _tbn_axis(self, x, y, z):
+        nd = self._nd('ShaderNodeNormalMap')
+        nd.space = 'TANGENT'
+        nd.uv_map = ''
+        self._set(nd.inputs['Strength'], 1.0)
+        self._set(nd.inputs['Color'], (x * 0.5 + 0.5, y * 0.5 + 0.5, z * 0.5 + 0.5))
+        return nd.outputs['Normal']
+
+    def tbn(self):
+        """(tangentWS, w) —— **宿主自己的**切线基,不读任何烘焙网格属性。
+
+        Normal Map 节点(TANGENT 空间、Strength=1)算的就是 normalize(T*x + B*y + N*z),
+        其中 T/B 是它按活动 UV 现算的 MikkTSpace 基,B 已经带着 bitangent_sign。所以喂
+        (1,0,0) 出来的是 T、喂 (0,1,0) 出来的是 B,两个都在世界空间。
+
+        w 取的是 **Unity 口径**,不是 Blender 口径:段图把 tangentWS 先换到 Unity 空间
+        (WORLD→OBJECT 的 VectorTransform + Y/Z 对调)**再**做 cross(N,T)*w。那次换轴是反射
+        (det = -1),叉积随之反号 ⇒ w_unity = -w_blender。所以这里反解写 cross(T,N):
+        w = sign(dot(cross(T,N), B)) == -sign(dot(cross(N,T), B))。
+        判据不是推导:在生成的段组里从 input_tangentWS 走一遍,第一跳就是那个
+        WORLD→OBJECT 的 VectorTransform,第三跳 CombineXYZ 之后才 CROSS_PRODUCT。
+
+        为什么不读属性:读属性要求每张网格事先烘好 ruri_tangent/ruri_tangent_sign,而
+        Attribute 节点**缺属性与读到零向量无法区分**,两者都静默把切线基压塌 —— 法线贴图
+        整条失效而一个字不报。改过拓扑的网格会保留属性名把新增 corner 填零,于是「属性在」
+        这个判据也跟着失效。基由宿主现算就没有这一类失效面,也不再有第二份切线真源。"""
+        if self._tbn is None:
+            tangent = self._tbn_axis(1.0, 0.0, 0.0)
+            bitangent = self._tbn_axis(0.0, 1.0, 0.0)
+            normal = self.geo().outputs['Normal']
+            w = self.math('SIGN', self.vmath(
+                'DOT_PRODUCT', self.vmath('CROSS_PRODUCT', tangent, normal), bitangent))
+            self._tbn = (tangent, w)
+        return self._tbn
+
+    ENV_PREFILTER_TAPS = (
+        (0.0, 0.0, 1.0),
+        (1.0, 0.0, 0.5), (-1.0, 0.0, 0.5), (0.0, 1.0, 0.5), (0.0, -1.0, 0.5),
+        (0.7071, 0.7071, 0.35), (-0.7071, 0.7071, 0.35),
+        (0.7071, -0.7071, 0.35), (-0.7071, -0.7071, 0.35),
+    )
+
+    def _env_tap(self, image, projection, spec, strength, direction):
+        if spec is not None:
+            vector_type, location, rotation, scale = spec
+            md = self._nd('ShaderNodeMapping')
+            md.vector_type = vector_type
+            md.inputs['Location'].default_value = location
+            md.inputs['Rotation'].default_value = rotation
+            md.inputs['Scale'].default_value = scale
+            self._set(md.inputs['Vector'], direction)
+            direction = md.outputs[0]
+        nd = self._nd('ShaderNodeTexEnvironment')
+        nd.image = image
+        nd.projection = projection
+        nd.interpolation = 'Linear'
+        self._set(nd.inputs[0], direction)
+        color = nd.outputs[0]
+        if strength != 1.0:
+            color = self.vmath('SCALE', color, s=strength)
+        return color
+
+    def env_image(self, image, direction, mip=None, spread=None):
+        """锥形预滤波的等距环境采样(mip 按真源 mip↔粗糙度式反解;两者皆无 = 锐反射单抽样)。"""
+        if mip is None and spread is None:
+            return (self._env_tap(image, 'EQUIRECTANGULAR', None, 1.0, direction), 1.0)
+        if spread is None:
+            roughness = self.math('POWER', 2.0, self.math('DIVIDE', self.math('SUBTRACT', mip, 5.0), 1.2))
+            spread = self.math('MINIMUM', self.math('MULTIPLY', roughness, roughness), 1.0)
+        _dx, _dy, dz = self.sep(direction)
+        polar = self.math('GREATER_THAN', self.math('ABSOLUTE', dz), 0.9)
+        tangent = self.vmath('NORMALIZE', self.mixv(
+            polar,
+            self.vmath('CROSS_PRODUCT', direction, (0.0, 0.0, 1.0)),
+            self.vmath('CROSS_PRODUCT', direction, (1.0, 0.0, 0.0))))
+        bitangent = self.vmath('NORMALIZE', self.vmath('CROSS_PRODUCT', direction, tangent))
+        total = None
+        weight_sum = 0.0
+        for offset_x, offset_y, weight in self.ENV_PREFILTER_TAPS:
+            if offset_x or offset_y:
+                offset = self.vmath('ADD',
+                                    self.vmath('SCALE', tangent, s=offset_x),
+                                    self.vmath('SCALE', bitangent, s=offset_y))
+                tap = self.vmath('NORMALIZE',
+                                 self.vmath('ADD', direction, self.vmath('SCALE', offset, s=spread)))
+            else:
+                tap = direction
+            sample = self._env_tap(image, 'EQUIRECTANGULAR', None, 1.0, tap)
+            total = (self.vmath('SCALE', sample, s=weight) if total is None
+                     else self.vmath('ADD', total, self.vmath('SCALE', sample, s=weight)))
+            weight_sum += weight
+        return (self.vmath('SCALE', total, s=1.0 / weight_sum), 1.0)
+
+
+# ==================== 图像纪律(全部踩过坑,逐条保命) ====================
+
+def _linear_to_srgb(c):
+    """_srgb_to_linear 的**精确逆**——两支都要对上,否则「作者值→uniform→作者值」的往返
+    在 HDR 段(≥1)不闭合,写回材质会每次都读出一个新数,依赖图永远脏。"""
+    c = float(c)
+    if c <= 0.0031308:
+        return 12.92 * c
+    if c < 1.0:
+        return 1.055 * (c ** (1.0 / 2.4)) - 0.055
+    return c ** (1.0 / 2.2)
+
+
+def _srgb_to_linear(c):
+    """Unity 上传材质 Color 属性时做的那一次线性化(GammaToLinearSpace 逐字:≥1 走 2.2 次幂,
+    HDR 颜色的超一值域正靠这一支)。清单的 srgb_params 说哪些属性要过这里。"""
+    c = float(c)
+    if c <= 0.04045:
+        return c / 12.92
+    if c < 1.0:
+        return ((c + 0.055) / 1.055) ** 2.4
+    return c ** 2.2
+
+
+def _image_stored(image):
+    # pack() 是唯一能清 dirty 的合法手段,否则关文件弹「N 张图片未保存」。
+    try:
+        image.pack()
+    except Exception:
+        pass
+
+
+def _set_colorspace(image, want):
+    # 写色彩空间会丢弃并重建像素缓冲(generated 图被抹黑;真图失效全部使用者 = O(N²))。
+    # 唯一幂等写法 = 先比后写;每一处设色彩空间都必须走这里。
+    # 带 ruri_colorspace_stated 的图是宿主按**资产自己声明的**色彩空间定死的,槽语义不许改写它:
+    # 一张图可以同时挂在法线槽和自发光槽上,而色彩空间住在共享数据块上,按槽写就是后写的赢。
+    if image is None:
+        return
+    try:
+        if image.get('ruri_colorspace_stated'):
+            return
+    except Exception:
+        pass
+    try:
+        if image.colorspace_settings.name != want:
+            image.colorspace_settings.name = want
+    except Exception:
+        pass
+
+
+def _image_uploaded(image):
+    # update/update_tag 都不够:EEVEE 继续用已上传纹理;gl_free 丢句柄强制重传。
+    image.update()
+    image.update_tag()
+    try:
+        image.gl_free()
+    except Exception:
+        pass
+
+
+def _slot_of(image_name):
+    base, dot, tail = image_name.rpartition('.')
+    return base if dot and tail.isdigit() else image_name
+
+
+def _fix_two_channel_layout(real):
+    """BC5 类双通道容器(R恒白/G=B=X/A=Y)就地还原 R<-G;只对 Non-Color 调用。"""
+    if real.get('ruri_rg_layout_fixed'):
+        return
+    real['ruri_rg_layout_fixed'] = 1
+    try:
+        import numpy as _np
+        w, h = real.size
+        if w and h:
+            buf = _np.empty(w * h * 4, dtype=_np.float32)
+            real.pixels.foreach_get(buf)
+            px = buf.reshape(-1, 4)
+            if (float(px[:, 0].mean()) > 0.99 and float(px[:, 0].std()) < 0.02
+                    and float(px[:, 1].std()) > 1e-3
+                    and float(_np.abs(px[:, 1] - px[:, 2]).mean()) < 0.01):
+                px[:, 0] = px[:, 1]
+                real.pixels.foreach_set(buf)
+                real.update()
+                if real.packed_file is not None:
+                    real.pack()
+                print('[ruri-uber] {0}: 双通道导出布局已恢复 R<-G'.format(real.name), flush=True)
+    except Exception as exc:
+        print('[ruri-uber] {0} 通道布局检测失败: {1}'.format(real.name, exc), flush=True)
+
+
+def _swap_image(node, real):
+    # 色彩空间跟着占位图走(生成期按真源 .meta 定死);先比后写,见 _set_colorspace。
+    non_color = node.image is not None and node.image.colorspace_settings.name == 'Non-Color'
+    node.image = real
+    _set_colorspace(real, 'Non-Color' if non_color else 'sRGB')
+    if non_color:
+        _fix_two_channel_layout(real)
+    if node.get(OWN_SAMPLER_KEY):
+        _apply_own_sampler(node, real)
+
+
+OWN_SAMPLER_KEY = 'ruri_own_sampler'
+# 宿主把贴图自己陈述的采样状态烙在图上(material_builder.SAMPLING_STATED_PROPERTY)。
+SAMPLING_STATED_PROPERTY = 'ruri_sampling'
+_NATIVE_EXTENSION = {'repeat': 'REPEAT', 'clamp': 'EXTEND', 'mirror': 'MIRROR'}
+
+
+def _own_sampler_state(image):
+    """(u 向寻址, v 向寻址, 是否点采样):图自己陈述的那份。没有陈述的图(用户自己的图、中性占位)
+    带的就是 Blender 图像自己的状态 —— 重复寻址、线性过滤 —— 不是替谁猜的值。"""
+    stated = image.get(SAMPLING_STATED_PROPERTY) if image is not None else None
+    if stated is None:
+        return OWN_SAMPLER_WRAPS[0], OWN_SAMPLER_WRAPS[0], False
+    return str(stated['wrap_u']), str(stated['wrap_v']), str(stated['filter']) == 'point'
+
+
+def _apply_own_sampler(node, image):
+    """片元图节点按绑定那张图自带的采样器设寻址与过滤。图节点的扩展方式两轴共用一个且带 mip,
+    所以只有两轴相同的 repeat/clamp/mirror 是精确的;其余组合没有等价物,响亮拒绝而不是挑一个近似。"""
+    wrap_u, wrap_v, point = _own_sampler_state(image)
+    extension = _NATIVE_EXTENSION.get(wrap_u) if wrap_u == wrap_v else None
+    if extension is None:
+        raise RuntimeError('[ruri-uber] 贴图 {0} 自带的寻址是 u={1} v={2}:Blender 图像节点的扩展方式两轴共用且'
+                           '只有 repeat/clamp/mirror,这一组没有精确等价物。'.format(
+                               image.name if image is not None else '?', wrap_u, wrap_v))
+    node.extension = extension
+    node.interpolation = 'Closest' if point else 'Linear'
+
+
+_NEUTRAL_IMAGES = {}
+
+
+def _neutral_image(rgb, alpha, non_color):
+    """1x1 图,颜色 = 割点自己声明的 neutral(缺图时该采到什么;与占位图的槽语义中性不是一回事)。"""
+    key = (tuple(round(float(c), 6) for c in rgb), round(float(alpha), 6), bool(non_color))
+    img = _NEUTRAL_IMAGES.get(key)
+    if img is not None:
+        try:
+            img.name
+            return img
+        except ReferenceError:
+            pass
+    name = 'RuriNeutral_{0:.3f}_{1:.3f}_{2:.3f}_{3:.3f}_{4}'.format(
+        key[0][0], key[0][1], key[0][2], key[1], 'nc' if non_color else 'srgb')
+    img = bpy.data.images.get(name)
+    if img is None or tuple(img.size) != (1, 1):
+        if img is not None:
+            bpy.data.images.remove(img)
+        img = bpy.data.images.new(name, 1, 1, float_buffer=True, alpha=True)
+    _set_colorspace(img, 'Non-Color' if non_color else 'sRGB')
+    img.alpha_mode = 'CHANNEL_PACKED'
+    # 平色用 generated_color(不写 pixels:写像素置 dirty 且不进 .blend);sRGB 图按显示空间反编码。
+    img.generated_color = (
+        key[0][0] if non_color else _linear_to_srgb(key[0][0]),
+        key[0][1] if non_color else _linear_to_srgb(key[0][1]),
+        key[0][2] if non_color else _linear_to_srgb(key[0][2]),
+        key[1])
+    img.update()
+    img['ruri_placeholder'] = 1
+    img.use_fake_user = True
+    _NEUTRAL_IMAGES[key] = img
+    return img
+
+
+# ==================== 灯:主光身份烙在灯上;附加光走灯表 ====================
+
+EEVEE_ENGINE = 'BLENDER_EEVEE'
+CYCLES_ENGINE = 'CYCLES'
+MAIN_LIGHT_OVERRIDE = 'ruri_main_light'
+# 主光身份是**灯物体**的自定义属性,着色器经 Attribute(LIGHT) 逐灯读回。原生光循环没有下标、
+# 没有名字,唯一能分辨「这一圈是不是主光」的通道就是灯自己带着的属性。写在灯上而不是材质上
+# ⇒ 挪灯/换色零重接,换主光只改一个标记。
+MAIN_LIGHT_ROLE = 'ruri_is_main_light'
+NATIVE_LIGHT_LABEL = 'RuriNativeLight'
+# 终色之外多发的那一份:同一条终色,但附加光循环没跑过(生成期 LightTaint.NoLoopFinal)。
+NO_LOOP_FINAL = '__color_noloop'
+
+# Cycles 没有原生灯节点,主光只能走灯表;场上没有主光时用**世界固定**方向的兜底光向
+# (朝下偏前的经典三点主光位)。绝不能用 Incoming:那是头灯,漫反射会跟着相机转。
+FALLBACK_LIGHT_DIRECTION = (0.0247, -0.8220, 0.5690)
+_NO_MAIN_LIGHT_SAID = [False]
+
+# 基座三列的组输入名 —— 与物化脚本 RIG_BASIS_SOCKETS 同一个命名域(那边建组,这边接线)。
+RIG_BASIS_SOCKETS = ('_RuriRigBasis0', '_RuriRigBasis1', '_RuriRigBasis2')
+RIG_ATTR_LABEL = 'RuriRigBasisAttr'
+# 基座三列写在**对象**自定义属性上(逐对象 UBO,不弄脏材质树);Attribute 节点按 ["名"] 读。
+RIG_OBJECT_PROP = 'ruri_face_basis'
+# {对象名: (骨架名, 骨名)} —— push_rig_basis 的工作单,由 rig_apply 在接线时登记。
+# 它是**进程态**:重开文件就空了,而 .blend 里只留着上次写下的属性值 ⇒ 不重建就等于
+# 基座冻结在存盘那一刻,而且完全静默。所以 load_post 把 RIG_SCANNED 打回 False,
+# 下一次 push 现扫一次重建(扫一次,不是每帧扫)。
+RIG_DRIVEN = {}
+RIG_SCANNED = [False]
+
+
+def _light_visible(obj):
+    # visible_get() 依赖图未评估时答 False(刚 link 的灯被判不在场,先后两次渲染不一致)。
+    try:
+        return obj.visible_get()
+    except (RuntimeError, ReferenceError):
+        return not obj.hide_viewport
+
+
+def _override_light(material):
+    """逐角色覆盖灯:挂在材质上(材质先建后挂对象,反查对象必落空)。"""
+    if material is None:
+        return None
+    light = material.get(MAIN_LIGHT_OVERRIDE)
+    return light if light is not None and getattr(light, 'type', '') == 'LIGHT' else None
+
+
+def _choose_main_light():
+    """场上哪盏灯当主光 —— 全场唯一的裁决点(灯表列 0 与原生循环的身份标记都问它)。
+    材质覆盖灯 > 按名序第一盏可见 Sun(用户的优先于兜底的)。主光按内核契约是**方向光**:
+    点光/聚光只能是附加光,拿它当主光内核读到的是带 1/d² 的衰减与指向,整场就是黑的
+    (实锤:场景带着游戏自己的几十盏点光进来,兜底 Sun 一退场,画面全黑)。
+    不照任何表面的灯(漫反射/高光/透射份额全为 0,例如只照参与介质的那盏)不是主光:它在表面上本来就不存在。
+    身份在灯上,一盏灯只能有一个身份:多张材质指了不同覆盖灯时无法两全,取名序第一并喊出来。"""
+    overrides = {}
+    for material in bpy.data.materials:
+        light = _override_light(material)
+        if light is not None:
+            overrides[light.name] = light
+    if len(overrides) > 1:
+        print('[ruri-cap] !! %d 张材质指了不同的覆盖主光 %s:主光身份烙在灯上,只能有一盏,取 %s'
+              % (len(overrides), sorted(overrides), sorted(overrides)[0]), flush=True)
+    if overrides:
+        return overrides[sorted(overrides)[0]]
+    suns = sorted((o for o in bpy.context.scene.objects
+                   if o.type == 'LIGHT' and o.data.type == 'SUN' and _light_visible(o) and _lights_surfaces(o)),
+                  key=lambda o: (1 if o.get(FALLBACK_LIGHT_FLAG) else 0, o.name))
+    return suns[0] if suns else None
+
+
+def _lights_surfaces(obj):
+    data = obj.data
+    return data.diffuse_factor > 0.0 or data.specular_factor > 0.0 or data.transmission_factor > 0.0
+
+
+FALLBACK_LIGHT_NAME = 'RuriFallbackSun'
+FALLBACK_LIGHT_FLAG = 'ruri_fallback_light'
+# 场上一盏灯都没有时的兜底方向(Blender 世界系 toLight,朝下偏前的经典三点主光位)。
+# 原生光循环只对真实的灯转圈,所以兜底必须是一盏**真实的 Sun 物体**:显式、有名字、在大纲里看得见,
+# 用户加了自己的灯它就自己退场。绝不能是头灯(漫反射跟着相机转,画面上与 bug 无法区分)。
+FALLBACK_LIGHT_DIRECTION = (0.0247, -0.8220, 0.5690)
+
+
+def _ensure_fallback_light():
+    """没有可见的用户 Sun → 建兜底 Sun;用户自己的 Sun 出现 → 撤掉自己建的那盏。
+    点光/聚光/面光不算:它们是附加光,主光契约是方向光。幂等:状态没变就一个字节不写。"""
+    scene = bpy.context.scene
+    ours = [o for o in scene.objects if o.type == 'LIGHT' and o.get(FALLBACK_LIGHT_FLAG)]
+    theirs = [o for o in scene.objects if o.type == 'LIGHT' and o.data.type == 'SUN'
+              and not o.get(FALLBACK_LIGHT_FLAG) and _light_visible(o)]
+    if theirs:
+        for obj in ours:
+            data = obj.data
+            bpy.data.objects.remove(obj, do_unlink=True)
+            if data.users == 0:
+                bpy.data.lights.remove(data)
+        return
+    if ours:
+        return
+    data = bpy.data.lights.new(FALLBACK_LIGHT_NAME, 'SUN')
+    data.energy = 1.0
+    obj = bpy.data.objects.new(FALLBACK_LIGHT_NAME, data)
+    obj[FALLBACK_LIGHT_FLAG] = 1
+    import mathutils
+    to_light = mathutils.Vector(FALLBACK_LIGHT_DIRECTION).normalized()
+    obj.rotation_euler = mathutils.Vector((0.0, 0.0, 1.0)).rotation_difference(to_light).to_euler()
+    scene.collection.objects.link(obj)
+    print('[ruri-cap] 场上没有可见的 Sun:已建兜底 Sun「{0}」当主光(世界固定方向)。点光/聚光是附加光,'
+          '加一盏你自己的 Sun 它会自动退场。'.format(FALLBACK_LIGHT_NAME), flush=True)
+
+
+def refresh_main_light_role():
+    """把主光身份写到灯物体上:主光 1、其余 0,返回主光。只写原始数据块:ID 属性一变,
+    依赖图重新求值该灯,EEVEE 下一次同步就把属性带进 LightData;值没变不写,免得在
+    depsgraph handler 里自激。场上没有灯时先立兜底 Sun,原生光循环才有圈可转。"""
+    _ensure_fallback_light()
+    main = _choose_main_light()
+    for obj in bpy.context.scene.objects:
+        if obj.type != 'LIGHT':
+            continue
+        role = 1.0 if obj is main else 0.0
+        if obj.get(MAIN_LIGHT_ROLE) != role:
+            obj[MAIN_LIGHT_ROLE] = role
+    return main
+
+
+def _table_base_name(name):
+    """去掉 Blender 的重名后缀(`....001`)。不引 re:运行时的 import 面越小越好。"""
+    if len(name) > 4 and name[-4] == '.' and name[-3:].isdigit():
+        return name[:-4]
+    return name
+
+
+def _projection_table_image(name, width, height):
+    """投影表 = 运行时按真源重算并写像素的那张图。**必须是本地那一张,且全场只有一张。**
+
+    🔴 从别的 .blend link/append 一个角色过来时,它的采样节点指向的是**那个文件的**表 ——
+    一份存盘那一刻的只读快照。运行时照常往本地表写,画面却在读快照:快照里没有的列(后来
+    才加进来的材质)**整列是零** ⇒ 纹素尺寸读到 0 ⇒ 显式 LOD 的手工双线性除以零 ⇒ 那些部件
+    **整片纯黑,且不报任何错**。实锤(JsspSi):cloth/hair/fx 全黑而 face/eyes 正常 —— 后者
+    恰好在 `WaifuBody.blend` 存盘时就已经有列,前者是之后才加的。
+
+    所以按「本地 + 同基名 + 尺寸对」认表,并把**每一张同基名副本**(重名的 `.001`、以及
+    link 进来的那些)的使用者一律改指到本地这张。名字不去抢:认表不靠名字精确相等,抢名
+    只会和 link 进来的数据块互相顶。"""
+    base = _table_base_name(name)
+    image = next((candidate for candidate in bpy.data.images
+                  if candidate.library is None
+                  and _table_base_name(candidate.name) == base
+                  and tuple(candidate.size) == (width, height) and candidate.is_float), None)
+    if image is None:
+        image = bpy.data.images.new(name, width, height, float_buffer=True, alpha=True)
+        _set_colorspace(image, 'Non-Color')
+        # alpha 装的是数据(类型位/count/参数第四分量)不是不透明度:默认 STRAIGHT 会拿它
+        # 关联 RGB,必须 CHANNEL_PACKED。
+        image.alpha_mode = 'CHANNEL_PACKED'
+        image.use_fake_user = True
+    for other in list(bpy.data.images):
+        if other is image or _table_base_name(other.name) != base:
+            continue
+        other.user_remap(image)
+        # 🔴 remap 够不到 link 进来的材质(只读)。那种件会**永远**读被 link 那一刻的快照:
+        # 灯表恒零 ⇒ 主光恒 0 ⇒ 加多少灯都没有漫反射;参数列恒零 ⇒ 整片纯黑。两者都零报错,
+        # 所以这里必须喊 —— 唯一的修法是把材质 Make Local 后重建,代码救不了只读数据块。
+        if other.users:
+            holders = sorted({mat.name for mat in bpy.data.materials
+                              if mat.library is not None and mat.get('ruri_uber_stack')})
+            print('[ruri-uber] !! 表 {0} 还有 {1} 个够不到的使用者(link 进来的数据块是只读的)。'
+                  '这些件的灯光/参数永远停在被 link 那一刻;把材质本地化再重建才能修。'
+                  '嫌疑材质:{2}'.format(other.name, other.users, holders or '(未找到 link 材质)'),
+                  flush=True)
+    return image
+
+
+# ==================== 闭包探针与能力兑现(身份 × 引擎 的唯一表) ====================
+
+def _lit_probe(g, normal=None, roughness=None):
+    """就地求值一次宿主闭包(Shader to RGB):阴影贴图/光探针体/球探针全在返回色里。
+    normal=None = 用几何法线(与宿主同轴,自遮蔽跟着回来)。只许在 EEVEE 路径调。"""
+    k = ('probe', g._ck(normal, roughness))
+    hit = g._cse.get(k)
+    if hit is not None:
+        return hit
+    if roughness is None:
+        nd = g._nd('ShaderNodeBsdfDiffuse')
+        nd.inputs['Roughness'].default_value = 0.0
+    else:
+        nd = g._nd('ShaderNodeBsdfAnisotropic')
+        g._set(nd.inputs['Roughness'], roughness)
+    nd.inputs['Color'].default_value = (1.0, 1.0, 1.0, 1.0)
+    if normal is not None:
+        g._set(nd.inputs['Normal'], normal)
+    s2r = g._nd('ShaderNodeShaderToRGB')
+    g._set(s2r.inputs['Shader'], nd.outputs['BSDF'])
+    g._cse[k] = s2r.outputs['Color']
+    return s2r.outputs['Color']
+
+
+def _find_native_node(g, type_name, attribute_name=None):
+    for node in g.t.nodes:
+        if node.bl_idname != type_name or node.label != NATIVE_LIGHT_LABEL:
+            continue
+        if attribute_name is not None and node.attribute_name != attribute_name:
+            continue
+        return node
+    node = g._nd(type_name)
+    node.label = NATIVE_LIGHT_LABEL
+    if attribute_name is not None:
+        node.attribute_type = 'LIGHT'
+        node.attribute_name = attribute_name
+    return node
+
+
+def _native_light(g):
+    """当前光循环这一圈的灯,全部来自原生节点(Blender 世界系):零驱动器、零灯表、零探针。
+    只许在 EEVEE 路径调 —— 灯节点一进图,codegen 就把整棵材质树包进光循环,按灯逐圈求值。
+    只许在兑现面的标记区里调(能力建图器 / 闭包):灯源节点与换算链都随兑现面一起回收重建,
+    树里任何时刻只有一条活链;同一次建图内按标签认领,不重复建源节点。"""
+    hit = g._cse.get(('native_light',))
+    if hit is not None:
+        return hit
+    info = _find_native_node(g, 'ShaderNodeLightInfo')
+    evaluation = _find_native_node(g, 'ShaderNodeLightEvaluation')
+    role = _find_native_node(g, 'ShaderNodeAttribute', MAIN_LIGHT_ROLE)
+    # Light Info.Power = 辐射强度/π;内核吃的是 URP 的 color×intensity ⇒ 乘回 π(实测与灯表逐位命中)。
+    color = g.vmath('SCALE', g.vmath('SCALE', info.outputs['Color'], s=info.outputs['Power']),
+                    s=math.pi)
+    distance = evaluation.outputs['Distance']
+    # Mask = 截止平滑 × 聚光锥,平方反比住在 Factor 里而内核自己算 N·L ⇒ 衰减 = Mask / d²。
+    # Sun 的 Distance 恒 1 ⇒ 同一条式子自然退化成 Mask,不分灯型。
+    attenuation = g.math('DIVIDE', evaluation.outputs['Mask'],
+                         g.math('MAXIMUM', g.math('MULTIPLY', distance, distance), 1e-4))
+    answer = {
+        'direction': g.vmath('NORMALIZE', evaluation.outputs['Direction']),
+        'color': color,
+        'attenuation': attenuation,
+        'is_main': role.outputs['Fac'],
+    }
+    g._cse[('native_light',)] = answer
+    return answer
+
+
+def _ambient_irradiance_probe(g, n):
+    """环境辐照(EEVEE 闭包求值口):闭包探针答的是全部灯的直接光 + 间接光,主光那一份用原生真值
+    在循环里减掉:颜色 × N·L/π × Shadow Raycast(闭包里的直接光本就带阴影,不带阴影减就把影区
+    的环境光也减没了)。逐通道钳到 0:两边阴影估值不一致时只可能偏亮不可能压黑。
+
+    探针本身必须无灯:宿主把 Shader to RGB 上游的节点整段提前到光循环之前求值,探针一旦读到灯节点
+    (旧写法的镜像法线兜底支),循环起点也跟着被提前,循环里就裹进了本该在循环外的节点 ——
+    实测整个场景栈 tmp 未声明、材质洋红。附加光仍会漏进环境项,与灯表时代相同。"""
+    light = _native_light(g)
+    ndotl = g.math('MAXIMUM', g.vmath('DOT_PRODUCT', n, light['direction']), 0.0)
+    shadow, _g, _b = g.sep(_find_native_node(g, 'ShaderNodeShadowRaycast').outputs['Color'])
+    direct = g.vmath('SCALE', light['color'],
+                     s=g.math('MULTIPLY', g.math('MULTIPLY', ndotl, shadow), 1.0 / math.pi))
+    return g.vmath('MAXIMUM', g.vmath('SUBTRACT', _lit_probe(g, normal=n), direct), (0.0, 0.0, 0.0))
+
+
+def _world_background(scene):
+    world = getattr(scene, 'world', None)
+    if world is None or not world.use_nodes or world.node_tree is None:
+        return None
+    for nd in world.node_tree.nodes:
+        if nd.type == 'BACKGROUND':
+            return nd
+    return None
+
+
+def _world_sample(g, direction, spread):
+    """沿方向对当前世界环境取一次值(环境图复用其 Mapping;平色世界给常量,精确非近似)。"""
+    bg = _world_background(bpy.context.scene)
+    if bg is None:
+        return None
+    strength = float(bg.inputs['Strength'].default_value)
+    color_in = bg.inputs['Color']
+    src = color_in.links[0].from_node if color_in.is_linked else None
+    if src is not None and src.type == 'TEX_ENVIRONMENT' and src.image is not None:
+        d = g.u2b(direction)
+        if src.inputs['Vector'].is_linked:
+            up = src.inputs['Vector'].links[0].from_node
+            if up.type == 'MAPPING':
+                md = g._nd('ShaderNodeMapping')
+                md.vector_type = up.vector_type
+                for key in ('Location', 'Rotation', 'Scale'):
+                    md.inputs[key].default_value = up.inputs[key].default_value[:]
+                g._set(md.inputs['Vector'], d)
+                d = md.outputs[0]
+        color, _alpha = g.env_image(src.image, d, spread=spread)
+        return g.vmath('SCALE', color, s=strength) if strength != 1.0 else color
+    c = color_in.default_value
+    return (float(c[0]) * strength, float(c[1]) * strength, float(c[2]) * strength)
+
+
+def _cap_ambient_irradiance(g, query, ctx):
+    _ = ctx
+    normal = query.get('normal')
+    if normal is None:
+        return None
+    answer = _world_sample(g, normal, spread=1.0)
+    return None if answer is None else {'': answer}
+
+
+def _cap_ambient_irradiance_probe(g, query, ctx):
+    _ = ctx
+    normal = query.get('normal')
+    if normal is None:
+        return None
+    return {'': _ambient_irradiance_probe(g, g.vmath('NORMALIZE', g.u2b(normal)))}
+
+
+def _cap_specular_radiance(g, query, ctx):
+    _ = ctx
+    direction = query.get('direction')
+    if direction is None:
+        return None
+    roughness = query.get('roughness')
+    spread = None if roughness is None else g.math(
+        'MINIMUM', g.math('MULTIPLY', roughness, roughness), 1.0)
+    answer = _world_sample(g, direction, spread=spread)
+    return None if answer is None else {'': answer}
+
+
+def _cap_main_light(g, query, ctx):
+    """主方向光兑现(EEVEE):当前这一圈的原生灯。哪一圈算主光由出口的身份门裁决
+    (Diffuse Light × 灯上的主光标记),这里只管把灯的真值原样交出去。
+    阴影衰减恒 1 是这条能力自己的语义(无参 GetMainLight 就是填 1),不是降级。"""
+    _ = (query, ctx)
+    light = _native_light(g)
+    return {
+        'direction': g.b2u(light['direction']),
+        'color': light['color'],
+        'distanceAttenuation': light['attenuation'],
+        'shadowAttenuation': 1.0,
+        'layerMask': 1.0,
+    }
+
+
+def _cap_shadow_attenuation(g, query, ctx):
+    """主光阴影衰减(EEVEE):原生 Shadow Raycast —— 虚拟阴影图 + 光追,逐灯、带柔度,
+    在着色点求值(Position 不接 = 表面位置;真源的 shadowCoord 是管线私产,不参与询问)。
+    出口按主光身份门进账,所以答的就是主光那一圈的阴影。"""
+    _ = (query, ctx)
+    raycast = _find_native_node(g, 'ShaderNodeShadowRaycast')
+    shadow, _g, _b = g.sep(raycast.outputs['Color'])
+    return {'': shadow}
+
+
+def _cap_additional_light_count(g, query, ctx):
+    """附加光盏数:恒 1。宿主的光循环已经在逐灯转圈,内核的附加光循环因此只需要
+    在**每一圈**里跑一次体 —— 那一圈的灯就是这一盏。盏数不接灯节点,循环结构才与灯无关。"""
+    _ = (g, query, ctx)
+    return {'': 1.0}
+
+
+def _cap_additional_light(g, query, ctx):
+    """第 index 盏附加光:就是宿主光循环这一圈的灯,index 恒 0。
+    主光那一圈把距离衰减乘零 —— 它的贡献走主光链,绝不能在附加光项里再进账一遍。
+    阴影衰减恒 1:附加光不投影(内核无参附加光的语义)。"""
+    _ = (query, ctx)
+    light = _native_light(g)
+    return {
+        'direction': g.b2u(light['direction']),
+        'color': light['color'],
+        'distanceAttenuation': g.math('MULTIPLY', light['attenuation'],
+                                      g.math('SUBTRACT', 1.0, light['is_main'])),
+        'shadowAttenuation': 1.0,
+        'layerMask': 1.0,
+    }
+
+
+def _preview_light(g):
+    """预览光:一盏钉死的正面光 —— 方向恒指向观察者,颜色恒白。
+
+    这不是场上的灯,也不打算是。EEVEE 那条路上的每一个量都来自真实的灯(原生灯节点 +
+    按灯逐圈求值);Cycles 没有那套东西 —— Light Info / Light Evaluation / Light
+    Accumulation 在它下面一点光都不出(实测把白常量喂进 Light Accumulation:Cycles 全图
+    mean 0.0003,EEVEE 同一张 0.2558),按灯转圈的结构也不存在。于是这里答的是「先把模型
+    看清楚」的那一盏:不衰减、不投影、不随场上的灯变。要还原游戏光照就用 EEVEE。"""
+    hit = g._cse.get(('preview_light',))
+    if hit is not None:
+        return hit
+    answer = {
+        'direction': g.b2u(g.geo().outputs['Incoming']),
+        'color': g.comb(1.0, 1.0, 1.0),
+    }
+    g._cse[('preview_light',)] = answer
+    return answer
+
+
+def _cap_main_light_preview(g, query, ctx):
+    """主方向光兑现(预览):正面光原样交出去,不衰减不投影。"""
+    _ = (query, ctx)
+    light = _preview_light(g)
+    return {
+        'direction': light['direction'],
+        'color': light['color'],
+        'distanceAttenuation': 1.0,
+        'shadowAttenuation': 1.0,
+        'layerMask': 1.0,
+    }
+
+
+def _cap_shadow_attenuation_preview(g, query, ctx):
+    """预览光不投影:恒 1。这是这盏灯的定义,不是取不到阴影时的替代品。"""
+    _ = (g, query, ctx)
+    return {'': 1.0}
+
+
+def _cap_additional_light_count_preview(g, query, ctx):
+    """预览只有主光那一盏,附加光一盏都没有 —— 循环体一圈都不跑。"""
+    _ = (g, query, ctx)
+    return {'': 0.0}
+
+
+def _cap_additional_light_preview(g, query, ctx):
+    """第 index 盏附加光(预览):一盏不发光的灯。盏数已经是 0、循环体一圈都不跑,
+    这里交出的是**显式的「没有」**,而不是让整条询问停在「答不出」上。"""
+    _ = (query, ctx)
+    light = _preview_light(g)
+    return {
+        'direction': light['direction'],
+        'color': g.comb(0.0, 0.0, 0.0),
+        'distanceAttenuation': 0.0,
+        'shadowAttenuation': 1.0,
+        'layerMask': 1.0,
+    }
+
+
+# 能力身份 → {引擎: 建图器}。表里查不到 = 本引擎没有原生等价物:什么都不接,
+# socket 停在能力自声明缺席值上并大声记账 —— 绝不静默落中性数。
+CAP_BUILDERS = {
+    'AmbientIrradiance': {EEVEE_ENGINE: _cap_ambient_irradiance_probe,
+                          '*': _cap_ambient_irradiance},
+    'SpecularRadiance': {'*': _cap_specular_radiance},
+    'MainLight': {EEVEE_ENGINE: _cap_main_light,
+                  CYCLES_ENGINE: _cap_main_light_preview},
+    'ShadowAttenuation': {EEVEE_ENGINE: _cap_shadow_attenuation,
+                          CYCLES_ENGINE: _cap_shadow_attenuation_preview},
+    'AdditionalLightCount': {EEVEE_ENGINE: _cap_additional_light_count,
+                             CYCLES_ENGINE: _cap_additional_light_count_preview},
+    'AdditionalLight': {EEVEE_ENGINE: _cap_additional_light,
+                        CYCLES_ENGINE: _cap_additional_light_preview},
+}
+
+
+def _src_level_global(g, ctx, base, name):
+    """关卡级引擎全局:宿主把关卡数据按「值 - 缺省」写成场景属性,这里用 VIEW_LAYER 属性节点
+    实时读回再加上缺省 -- 改关卡不用重建材质;属性不存在读 0 = 缺省本身,没有关卡数据的会话
+    (单导一个角色)落在配方缺省上,不落在 0 上。"""
+    _ = ctx
+    node = g._nd('ShaderNodeAttribute')
+    node.attribute_type = 'VIEW_LAYER'
+    node.attribute_name = name
+    answer = {'': g.vmath('ADD', node.outputs['Vector'], (float(base[0]), float(base[1]), float(base[2])))}
+    if len(base) > 3:
+        answer['w'] = g.math('ADD', node.outputs['Alpha'], float(base[3]))
+    return answer
+
+
+# 引擎全局的「来源」注册表:一个引擎全局可以声明由宿主某个量算出来,而不是停在配方缺省。
+# 建图器返回 {叶名: 值},'' 是向量口、'w' 是四维全局的 _w 口。
+# (角色的阴影色倾向 _CharacterParams2/3 曾按宿主世界环境的色相调制 -- 那会把世界的颜色乘进
+# NPR 的影色,它是游戏自己的美术常量,不是宿主环境的函数,整条接入已去掉。)
+ENGINE_GLOBAL_BUILDERS = {'level_global': {'*': _src_level_global}}
+
+# ==================== 栈(每个 .blend 产物一个;全部知识来自内嵌清单) ====================
+
+def _mixed(a):
+    return {k: list(v) for k, v in dict(a or {}).items()}
+
+
+# 随绑定真图走的表列:显式 LOD 槽的纹素域尺寸 __size<槽> = (w, h, 1, 0),以及引擎按绑定纹理
+# 自动下发的 <槽>_TexelSize = (1/w, 1/h, w, h)(不是材质属性;宿主不填就停在 0)。
+TEXEL_SIZE_SUFFIX = '_TexelSize'
+
+
+def _image_row_slot(row_name):
+    if row_name.startswith('__size'):
+        return row_name[len('__size'):]
+    if row_name.endswith(TEXEL_SIZE_SUFFIX):
+        return row_name[:-len(TEXEL_SIZE_SUFFIX)]
+    return None
+
+
+def _image_row_value(row_name, image):
+    width, height = float(image.size[0]), float(image.size[1])
+    if row_name.startswith('__size'):
+        return [width, height, 1.0, 0.0]
+    return [1.0 / width, 1.0 / height, width, height]
+
+
+_LINKED = {}
+
+# 导入选项键:模板组 link 一份放在当前 .blend 旁边的产物副本(True),还是**直接包含**
+# 进当前文件(False = 默认 = append)。宿主 importer 的选项字典里同名键即可,
+# 缺席 = 默认 append —— 缺省一律落在「这份文件自己带得走」那一侧。
+LINK_TEMPLATES_OPTION = 'link_shader_templates'
+
+# 认得出、但没有表面可画的那一类(反壳描边的壳 / 只写模板的代理 / 面部阴影代理面片)。
+# 与「不认领」是两码事:不认领会掉回宿主那张不透明的兜底材质,而这些代理面片就贴在角色身上。
+NON_SHADING = object()
+
+# Unity BlendMode 的引擎序:清单里真源 pass 的混合因子、材质属性里的混合值都按它记。
+(BLEND_ZERO, BLEND_ONE, BLEND_DST_COLOR, BLEND_SRC_COLOR, BLEND_ONE_MINUS_DST_COLOR, BLEND_SRC_ALPHA,
+ BLEND_ONE_MINUS_SRC_COLOR, BLEND_DST_ALPHA, BLEND_ONE_MINUS_DST_ALPHA, BLEND_SRC_ALPHA_SATURATE,
+ BLEND_ONE_MINUS_SRC_ALPHA) = range(11)
+# 原样兑现的两种:源 α 的 over 与不透明。乘法帧另走带色透射;其余按「源 × A + 帧 × T」拆。
+OVER_BLENDS = ((BLEND_SRC_ALPHA, BLEND_ONE_MINUS_SRC_ALPHA), (BLEND_ONE, BLEND_ZERO))
+MULTIPLY_BLENDS = ((BLEND_ZERO, BLEND_SRC_COLOR), (BLEND_DST_COLOR, BLEND_ZERO))
+
+
+def _alive(block):
+    # 缓存的是数据块引用,被释放后再碰是 ReferenceError 而不是 None —— 必须判活。
+    if block is None:
+        return False
+    try:
+        block.name
+    except ReferenceError:
+        return False
+    return True
+
+
+def _same_library(lib, blend_path):
+    """链接库是不是本栈这份产物(路径按绝对+大小写归一,Windows 上 C:/ 与 c:\\ 同源)。"""
+    if lib is None:
+        return False
+    try:
+        here = os.path.normcase(os.path.abspath(bpy.path.abspath(lib.filepath)))
+    except Exception:
+        return False
+    return here == os.path.normcase(os.path.abspath(blend_path))
+
+
+def _sidecar(blend_path):
+    """link 模式的库文件 = 产物**在当前 .blend 旁边**的那一份(不是插件目录里那份)。
+
+    🔴 为什么不能直接 link 插件目录:那是「这台机器、这个 profile」的位置,写进 .blend
+    就成了一条只有本机解析得到的绝对路径。换账号、挪 profile、别人拿去用 —— 任何一条断了
+    Blender **不报错**,而是塞一个同名零节点空壳顶上:组实例看着还在,材质输出恒 0,
+    **整个模型变黑**。实锤:AppData 那份路径失效后,角色文件的 Hair/Z2/Post 六个组全成空壳。
+
+    所以 link 的库一律先落到当前文件旁边,再按 `//` 相对引用(libraries.load 的
+    relative= 参数):整个目录搬走、打包发人、换机器都照样解析得到。
+
+    副本落后于插件随附产物就重拷 —— 产物是唯一真源,旁边这份只是它的可搬运副本。"""
+    here = bpy.data.filepath
+    if not here:
+        raise RuntimeError(
+            '[ruri-uber] link 模式要把模板产物放在当前 .blend 旁边,而这份文件还没存过盘:'
+            '先保存再导入,或用默认的 append(模板直接包含进文件)')
+    beside = os.path.join(os.path.dirname(here), os.path.basename(blend_path))
+    if not (os.path.isfile(beside) and filecmp.cmp(blend_path, beside, shallow=False)):
+        shutil.copyfile(blend_path, beside)
+    return beside
+
+
+def _linked_group(blend_path, stamp, wanted, name, link=False):
+    """本栈的模板组。首次真用才取 —— register() 期 bpy.data 还是 _RestrictData。
+
+    两种取法,由导入选项选:
+    - `link=False`(**默认**):**append 进当前文件**,模板成为这份文件自己的数据 ——
+      存盘带得走、被别的文件 link 也带得走、换机器照样画对。这正是「渲染是节点图+数据的
+      纯函数」的前提,所以缺省落在这一侧。
+    - `link=True`(选项 link_shader_templates):link 一份**放在当前 .blend 旁边**的产物
+      副本(见 _sidecar),文件里存的是 `//<产物名>` 相对引用。体积小、同目录多文件共享
+      一份模板;代价是那份副本得跟着 .blend 一起搬,断了就是零节点空壳、模型全黑。
+
+    重复导入不重复取:同名、来源形态与本次模式一致、且 stamp 相同的组直接认领;
+    stamp 不同 = 上一代产物,改名让位再取新的(不静默共存,免得按名寻址撞上旧的)。"""
+    link = bool(link)
+    key = (blend_path, link)          # 两种模式各存一张表,可在同一文件里共存互不顶替
+    table = _LINKED.get(key)
+    if table is not None and all(_alive(g) for g in table.values()):
+        got = table.get(name)
+        if got is not None:
+            return got
+    # 副本同步(link 模式)只在缓存落空这一拍付一次,不在每个材质上重付。
+    source = _sidecar(blend_path) if link else blend_path
+    table = {}
+    missing = []
+    for wanted_name in dict.fromkeys(wanted):
+        got = bpy.data.node_groups.get(wanted_name)
+        if got is None:
+            missing.append(wanted_name)
+            continue
+        # 认领判据 = 来源形态与本次模式对得上,且 stamp 同批。link 模式只认**旁边这份副本**
+        # 链进来的,别把用户从别处 link 的同名组当自己的。
+        same_origin = _same_library(got.library, source) if link else got.library is None
+        if same_origin and got.get('ruri_stamp') == stamp:
+            table[wanted_name] = got
+            continue
+        if got.library is None:
+            got.name = wanted_name + '.old'  # 上一代本地产物:让出名字,别与新的同名共存
+        # 链接进来的改不了名 —— 链接数据只读。让 Blender 给新的自动改名,
+        # 下面按**位次**配对,不按名字认(名字这时已经不可靠)。
+        missing.append(wanted_name)
+    if missing:
+        # 🔴 `dst.node_groups = <list>` 之后 Blender **就地把那个列表的内容换成数据块**。
+        # 把 missing 直接喂进去,出了 with 块它装的就不再是名字 —— 后面按它配对就成了
+        # 「拿数据块当字典键」,按名字永远查不到(症状:每个栈的第一个 part 炸,其余因为走
+        # 「本地已存在」分支反而正常)。所以名字先快照,并且给 Blender 一份独立的列表。
+        requested = list(missing)
+        how = 'link' if link else 'append'
+        # relative=link:link 模式让 Blender 自己把库路径存成 `//<产物名>`(旁边那份副本),
+        # 于是文件里没有任何一条只有本机解析得到的绝对路径。
+        with bpy.data.libraries.load(source, link=link, relative=link) as (src, dst):
+            absent = [n for n in requested if n not in src.node_groups]
+            if absent:
+                raise RuntimeError('[ruri-uber] 产物 {0} 缺模板组 {1}:请重新 codegen(无现场重建退路)'.format(
+                    source, absent))
+            dst.node_groups = list(requested)
+        loaded = list(dst.node_groups)
+        if len(loaded) != len(requested):
+            raise RuntimeError('[ruri-uber] 产物 {0} {1} 回来 {2} 组,请求 {3} 组:配对不上,拒绝接线'.format(
+                source, how, len(loaded), len(requested)))
+        for wanted_name, group in zip(requested, loaded):
+            if group is None:
+                raise RuntimeError('[ruri-uber] 产物 {0} 的模板组 {1} {2} 失败'.format(source, wanted_name, how))
+            if not link:
+                group.use_fake_user = True   # 零引用也随文件落盘:材质要用它(链接数据只读,设不了)
+            stamped = group.get('ruri_stamp')
+            if stamped != stamp:
+                raise RuntimeError(
+                    '[ruri-uber] {0}: 组 {1} 的 stamp {2} ≠ 运行时 {3},产物不同批,请重新 codegen'.format(
+                        source, wanted_name, stamped, stamp))
+            table[wanted_name] = group
+    _LINKED[key] = table
+    got = table.get(name)
+    if got is None:
+        raise RuntimeError('[ruri-uber] 模板组 {0} 不在产物 {1} 里'.format(name, source))
+    return got
+
+
+class Stack:
+    def __init__(self, folder, manifest):
+        # 本栈的 .blend 与本运行时同批出货、同目录:名字来自清单,不猜也不扫。
+        self.path = os.path.join(folder, manifest['blend'])
+        self.group_names = manifest['group_names']
+        self.m = manifest
+        self._stale_said = {}
+        names = manifest['names']
+        self.PANEL_KEY = names['panel_key']
+        self.PANEL_TITLE = names['panel_title']
+        self.INTERFACE = manifest.get('interface') or []
+        self.PART_META = manifest.get('part_meta') or {}
+        self.NON_SHADING = set(manifest.get('non_shading') or [])
+        self.HOST_SHADOW_CASTERS = manifest['host_shadow_casters']
+        # 游戏词汇 → 风格词汇。清单里记的是 风格名 → 游戏名(声明面朝着图的口),
+        # 这里翻过来存:材质自述时报的是游戏名,要按它查。
+        self.SOURCE_NAMES = {game: uniform for uniform, game
+                             in (manifest.get('source_names') or {}).items()}
+        self.GLOBALS = manifest.get('globals') or {}
+        self.KNOWN_PARTS = set(manifest.get('known_parts') or [])
+        self.DEFAULT_PART = manifest.get('default_part') or ''
+        cull = manifest.get('cull') or {}
+        self.CULL_PROPERTY = cull.get('property') or ''
+        self.CULL_FIXED = float(cull.get('fixed', 2.0))
+        self.STAMP = manifest['stamp']
+        self.MAT_TABLE = names['mat_table']
+        self.MAT_TABLE_W = manifest.get('mat_table_w', 1024)
+        self.MAT_TABLE_H = manifest.get('mat_table_h', 1)
+        self.TEMPLATE_MAT = names['template_mat']
+        self.VTX_MODIFIER = names['vtx_modifier']
+        self.VTX_TREE_PREFIX = names['vtx_tree_prefix']
+        self.OUTLINE_TEMPLATE = names['outline_template']
+        self.MATERIAL_NAME = names['material_name']
+        self.ST_SLOT = names.get('st_slot', '_BaseMap')
+        self.ST_NODE = names.get('st_node', 'RuriBaseMapST')
+        self.VERTEX_PARTS = manifest.get('vertex_parts') or {}
+        # 作者值住 sRGB 的属性名(见清单同名键)。快照恒是 .mat 里的原值,线性化只发生在
+        # 「值 → uniform」那一步,与 Unity 上传时做的那次是同一件事。
+        self.SRGB_PARAMS = set(manifest.get('srgb_params') or [])
+        self.RIG = manifest.get('rig') or {'bone': '', 'attr': '', 'parts': []}
+        self.host = manifest.get('host') or {}
+        declare_world_basis(self.host.get('world_basis'))
+        self.post = manifest.get('post')
+        self.engine_global_sources = manifest.get('engine_global_sources') or {}
+        self.level_images = manifest.get('level_images') or {}
+        if manifest.get('kernel') != RUNTIME_KERNEL:
+            raise RuntimeError('[ruri-uber] 栈 {0} 的内核 {1} ≠ 运行时 {2},请重新 codegen(禁兼容,无退路)'.format(
+                self.PANEL_KEY, manifest.get('kernel'), RUNTIME_KERNEL))
+        self._mirror = None
+        self._next_col = [1]
+        self._flush_queued = [False]
+        # 模板取法:False = append 成本地数据(默认,存盘带得走);True = link 旁边那份副本。
+        # 由导入选项 LINK_TEMPLATES_OPTION 每次导入时改写,见 provider。
+        self.link_templates = False
+
+    def part(self, part, signature=None):
+        """part 的接线面。signature = 目录里第 n 种开关签名(特化模板:段/跨段/终点/割点/循环都是
+        那一次特化降图的产物),None 或越界 = 未特化的完整模板;参数表布局恒取完整模板(超集)。"""
+        spec = self.m['parts'][part]
+        specialized = spec.get('signatures') or []
+        if signature is None or signature < 0 or signature >= len(specialized):
+            return spec
+        merged = dict(spec)
+        merged.update(specialized[signature])
+        return merged
+
+    def _signature_index(self, part, floats):
+        """材质开关值 → 目录签名序;没有匹配 = None(走完整模板,精确但没剥支)。
+        floats 为 None = 开关未知,同样走完整模板 —— 绝不许把「不知道」投影成「全关」。
+        快照里没记的开关取参数行的声明缺省(与写进表列的是同一个值)。"""
+        if floats is None:
+            return None
+        spec = self.m['parts'][part]
+        keys = spec.get('signature_keys') or []
+        if not keys:
+            return None
+        signature_defaults = {name: float(dvec[0]) for name, kind, _texel, _comp, dvec, _dw in spec['params']
+                              if kind == 'F'}
+        values = [float(floats[key]) if key in floats else signature_defaults.get(key, 0.0) for key in keys]
+        for index, entry in enumerate(spec.get('signatures') or []):
+            if all(abs(float(a) - b) < 1e-6 for a, b in zip(entry['values'], values)):
+                return index
+        return None
+
+    # ---- 取模板面(产物即库;缺组响亮拒绝,零现场重建退路) ----
+
+    def group(self, name):
+        return _linked_group(self.path, self.STAMP, self.group_names, name, self.link_templates)
+
+    # ==================== 参数表(材质 = 数据行) ====================
+
+    def _mat_table_image(self):
+        return _projection_table_image(self.MAT_TABLE, self.MAT_TABLE_W, self.MAT_TABLE_H)
+
+    def _mat_defaults(self, part):
+        import numpy as np
+        column = np.zeros((self.MAT_TABLE_H, 4), dtype=np.float32)
+        for name, kind, texel, comp, dvec, dw in self.part(part)['params']:
+            if kind == 'F':
+                column[texel, comp] = dvec[0]
+            else:
+                column[texel, 0:3] = dvec
+                column[texel, 3] = dw
+        return column
+
+    def _mat_compose(self, part, floats, st, colors):
+        column = self._mat_defaults(part)
+        merged = dict(floats or {})
+        for prop, value in (st or {}).items():
+            merged[prop + '_ST'] = value
+        merged.update(colors or {})
+        for name, kind, texel, comp, _dv, _dw in self.part(part)['params']:
+            value = merged.get(name)
+            if value is None:
+                continue
+            if kind == 'F':
+                try:
+                    column[texel, comp] = float(value)
+                except (TypeError, ValueError):
+                    pass
+            else:
+                vec = [float(x) for x in value] + [0.0] * 4 if hasattr(value, '__len__') \
+                    else [float(value)] * 3 + [0.0]
+                column[texel, 0:3] = vec[0:3]
+                column[texel, 3] = vec[3]
+        # 灌 uniform 前补 Unity 的那次 sRGB→linear。缺省与覆写走同一条(两者都是作者值),
+        # alpha 不参与(颜色的第四分量从来不是色度)。
+        for name, kind, texel, comp, _dv, _dw in self.part(part)['params']:
+            if name not in self.SRGB_PARAMS:
+                continue
+            if kind == 'F':
+                column[texel, comp] = _srgb_to_linear(column[texel, comp])
+            else:
+                for channel in range(3):
+                    column[texel, channel] = _srgb_to_linear(column[texel, channel])
+        return column
+
+    def _mat_mirror(self):
+        if self._mirror is not None:
+            return self._mirror
+        import numpy as np
+        self._mirror = np.zeros((self.MAT_TABLE_H, self.MAT_TABLE_W, 4), dtype=np.float32)
+        top = 0
+        for mat in bpy.data.materials:
+            if mat.get('ruri_uber_stack') != self.PANEL_KEY or mat.get('ruri_param_col') is None:
+                continue
+            col = int(mat['ruri_param_col'])
+            if not (0 < col < self.MAT_TABLE_W):
+                continue
+            top = max(top, col)
+            part = mat.get('ruri_uber_part', '')
+            if part not in self.m['parts']:
+                continue
+            self._mirror[:, col, :] = self._mat_compose(
+                part, dict(mat.get('ruri_uber_floats') or {}),
+                _mixed(mat.get('ruri_uber_st')), _mixed(mat.get('ruri_uber_colors')))
+        self._next_col[0] = max(self._next_col[0], top + 1)
+        for part in self.m['parts']:
+            self._mirror[:, 0, :] = self._mat_defaults(part)
+            break
+        return self._mirror
+
+    def _param_flush(self):
+        self._flush_queued[0] = False
+        image = self._mat_table_image()
+        image.pixels.foreach_set(self._mat_mirror().ravel())
+        _image_uploaded(image)
+        _image_stored(image)
+        return None
+
+    def _param_flush_soon(self):
+        if bpy.app.background:
+            self._param_flush()
+            return
+        if not self._flush_queued[0]:
+            self._flush_queued[0] = True
+            bpy.app.timers.register(self._param_flush, first_interval=0.1)
+
+    def _param_write(self, mat):
+        part = mat.get('ruri_uber_part', '')
+        mirror = self._mat_mirror()
+        col = mat.get('ruri_param_col')
+        if col is None:
+            col = self._next_col[0]
+            if col >= self.MAT_TABLE_W:
+                raise RuntimeError('[ruri-uber] 材质表 {0} 列耗尽'.format(self.MAT_TABLE_W))
+            self._next_col[0] = col + 1
+            mat['ruri_param_col'] = col
+        col = int(col)
+        mirror[:, col, :] = self._mat_compose(
+            part, dict(mat.get('ruri_uber_floats') or {}),
+            _mixed(mat.get('ruri_uber_st')), _mixed(mat.get('ruri_uber_colors')))
+        self._param_flush_soon()
+        return col
+
+    def _param_read(self, mat, name):
+        col = mat.get('ruri_param_col')
+        if col is None:
+            return None
+        mirror = self._mat_mirror()
+        part = mat.get('ruri_uber_part', '')
+        if part not in self.m['parts']:
+            return None
+        for row_name, kind, texel, comp, _dv, _dw in self.part(part)['params']:
+            if row_name != name:
+                continue
+            cell = mirror[texel, int(col)]
+            if kind == 'F':
+                return float(cell[comp])
+            return [float(cell[0]), float(cell[1]), float(cell[2]), float(cell[3])]
+        return None
+
+    def _mat_col_u(self, g):
+        # 列号住图里唯一的 RuriMatCol 值节点:实例化改它一处即整棵图改读自己的列。
+        hit = g._cse.get(('matcolu',))
+        if hit is not None:
+            return hit
+        colv = g._nd('ShaderNodeValue')
+        colv.label = 'RuriMatCol'
+        colv.outputs[0].default_value = 0.0
+        u = g.math('DIVIDE', g.math('ADD', colv.outputs[0], 0.5), float(self.MAT_TABLE_W))
+        g._cse[('matcolu',)] = u
+        return u
+
+    def _wire_params(self, g, insts, part):
+        """材质 uniform 从表列接进全部实例(顺序上最后跑:已链接 socket 天然跳过)。"""
+        rows = self.part(part)['params']
+        if not rows:
+            return
+        image = self._mat_table_image()
+        self._param_flush_soon()
+        u = self._mat_col_u(g)
+        texels = {}
+        seps = {}
+        for name, kind, texel, comp, _dv, _dw in rows:
+            nd = texels.get(texel)
+            if nd is None:
+                nd = g._nd('ShaderNodeTexImage')
+                nd.image = image
+                nd.interpolation = 'Closest'
+                nd.extension = 'EXTEND'
+                nd.label = 'RuriMatParam'
+                g._set(nd.inputs['Vector'], g.comb(u, (texel + 0.5) / self.MAT_TABLE_H, 0.0))
+                texels[texel] = nd
+            if kind == 'F' and comp < 3:
+                parts3 = seps.get(texel)
+                if parts3 is None:
+                    parts3 = seps[texel] = g.sep(nd.outputs['Color'])
+                value = parts3[comp]
+            elif kind == 'F':
+                value = nd.outputs['Alpha']
+            else:
+                value = nd.outputs['Color']
+            for inst in insts:
+                sock = inst.inputs.get(name)
+                if sock is not None and not sock.is_linked:
+                    g._set(sock, value)
+                if kind == 'V4':
+                    tail = inst.inputs.get(name + '_w')
+                    if tail is not None and not tail.is_linked:
+                        g._set(tail, nd.outputs['Alpha'])
+
+    # ==================== 割点兑现 ====================
+
+    @staticmethod
+    def _size_row(slot):
+        return '__size' + slot
+
+    def _image_rows(self, part, images):
+        """本 part 随绑定真图走的表列取值;没绑图的槽不给值(留在表列缺省)。"""
+        rows = {}
+        for row_name, _kind, _t, _c, _dv, _dw in self.part(part)['params']:
+            slot = _image_row_slot(row_name)
+            real = None if slot is None else (images or {}).get(slot)
+            if real is not None and real.size[0] and real.size[1]:
+                rows[row_name] = _image_row_value(row_name, real)
+        return rows
+
+    def _teximage(self, g, fetch, image, force_closest=False):
+        nd = g._nd('ShaderNodeTexImage')
+        nd.label = fetch['slot']
+        nd.width = 260
+        if fetch['extension'] == OWN_SAMPLER:
+            nd[OWN_SAMPLER_KEY] = 1
+            _apply_own_sampler(nd, image)
+        else:
+            nd.extension = fetch['extension']
+            if fetch['point']:
+                nd.interpolation = 'Closest'
+        if force_closest:
+            nd.interpolation = 'Closest'
+        nd.image = image
+        if image is not None:
+            _set_colorspace(image, 'Non-Color' if fetch['non_color'] else 'sRGB')
+            if fetch['non_color']:
+                _fix_two_channel_layout(image)
+        return nd
+
+    def _mat_size_socket(self, g, part, fetch, image):
+        # texel 索引逐 part 分配,必须按 part 查(撞名跨 part 读空行 = 除零 = 整脸纯黑,实锤)。
+        row = None
+        want = self._size_row(fetch['slot'])
+        for entry in self.part(part)['params']:
+            if entry[0] == want:
+                row = entry
+                break
+        if row is None:
+            return (float(image.size[0]), float(image.size[1]), 1.0)
+        nd = g._nd('ShaderNodeTexImage')
+        nd.image = self._mat_table_image()
+        nd.interpolation = 'Closest'
+        nd.extension = 'EXTEND'
+        nd.label = 'RuriMatParam'
+        g._set(nd.inputs['Vector'], g.comb(self._mat_col_u(g), (row[2] + 0.5) / self.MAT_TABLE_H, 0.0))
+        return nd.outputs['Color']
+
+    def _sample(self, g, part, fetch, image, uv):
+        """割点采样语义兑现:隐式形 = 单 TexImage(mip 交 EEVEE);显式 LOD 形 = 四角 Closest 手工双线性,
+        纹素域尺寸走表列(随材质绑的真图,禁建图期常量)。"""
+        if image is None:
+            return None, None, None
+        if fetch['derivative_mip'] or not image.size[0] or not image.size[1]:
+            nd = self._teximage(g, fetch, image)
+            g._set(nd.inputs['Vector'], uv)
+            return nd.outputs['Color'], nd.outputs['Alpha'], nd
+        size = self._mat_size_socket(g, part, fetch, image)
+        texel = g.vmath('SUBTRACT', g.vmath('MULTIPLY', uv, size), (0.5, 0.5, 0.0))
+        base = g.vmath('FLOOR', texel)
+        frac = g.vmath('SUBTRACT', texel, base)
+        fx, fy, _fz = g.sep(frac)
+        taps = []
+        for dy in (0.5, 1.5):
+            for dx in (0.5, 1.5):
+                nd = self._teximage(g, fetch, image, force_closest=True)
+                g._set(nd.inputs['Vector'],
+                       g.vmath('DIVIDE', g.vmath('ADD', base, (dx, dy, 0.0)), size))
+                taps.append(nd)
+        top = g.mixv(fx, taps[0].outputs['Color'], taps[1].outputs['Color'])
+        bot = g.mixv(fx, taps[2].outputs['Color'], taps[3].outputs['Color'])
+        top_a = g.mixf(fx, taps[0].outputs['Alpha'], taps[1].outputs['Alpha'])
+        bot_a = g.mixf(fx, taps[2].outputs['Alpha'], taps[3].outputs['Alpha'])
+        return g.mixv(fy, top, bot), g.mixf(fy, top_a, bot_a), taps[0]
+
+    @staticmethod
+    def _feed(g, heads, sock, color, alpha):
+        # 🔴 颜色与 alpha 是**两片独立的答案叶**,必须各自寻址。段化 + 死代码消除之后,
+        # 一个段完全可能只保留其中一片(只消费 alpha、颜色被裁),此时「颜色口不在就跳过」
+        # 会把 alpha 一并漏喂 —— 它静默停在声明缺省 1.0 上,baseAlpha 恒 1,整张材质发白。
+        for name, value in ((sock, color), (sock + '_alpha', alpha)):
+            if value is None:
+                continue
+            for c in heads:
+                # 容缺按名寻址:不是每段都有这片叶;但「接口在却取不到」必须炸,防名字错静默。
+                head = c.inputs.get(name)
+                if head is None:
+                    if any(i.identifier == name or i.name == name
+                           for i in c.node_tree.interface.items_tree):
+                        raise RuntimeError('[ruri] 接口有 %s 却取不到 socket:接线面与组树脱节' % name)
+                    continue
+                g._set(head, value)
+
+    @staticmethod
+    def _wire_crossings(g, insts, rows):
+        # 跨段活跃值:段 a 的 X 输出接段 b 的 X 输入。结构性存在,缺一头即拒绝。
+        for name, _vec, frm, to in rows:
+            src = insts[frm].outputs.get(name)
+            dst = insts[to].inputs.get(name)
+            if src is None or dst is None:
+                raise RuntimeError('[ruri] 跨段接口 %s 缺失(段 %d -> %d):产物与清单脱节' % (name, frm, to))
+            g._set(dst, src)
+
+    def _wire_fetch(self, g, part, insts, fetch, image):
+        src = insts[fetch['depth']]
+        heads = insts[fetch['depth'] + 1:]
+        if fetch['env']:
+            if image is None:
+                return None
+            mip = src.outputs[fetch['sock'] + '_mip'] if fetch['mip'] else None
+            color, alpha = g.env_image(image, src.outputs[fetch['sock'] + '_dir'], mip)
+            self._feed(g, heads, fetch['sock'], color, alpha)
+            return None
+        color, alpha, anchor = self._sample(g, part, fetch, image, src.outputs[fetch['sock'] + '_uv'])
+        self._feed(g, heads, fetch['sock'], color, alpha)
+        return anchor
+
+    def _wire_capability(self, g, insts, cap, ctx):
+        """环境询问兑现:按 (能力 × 引擎) 查 CAP_BUILDERS。答不出 = 什么都不接,
+        socket 停在能力自声明缺席值上,大声记一笔;半份询问/半份答案一律炸。"""
+        src = insts[cap['depth']]
+        heads = insts[cap['depth'] + 1:]
+        engine = getattr(bpy.context.scene.render, 'engine', '')
+        builder = CAP_BUILDERS.get(cap['cap'], {}).get(engine) or CAP_BUILDERS.get(cap['cap'], {}).get('*')
+        if builder is None:
+            print('[ruri-cap] {0}: {1} 无原生等价物 → 缺席值'.format(engine, cap['cap']), flush=True)
+            return
+        query = {}
+        for name in cap['query']:
+            out = src.outputs.get(cap['sock'] + '_' + name)
+            if out is None:
+                raise RuntimeError('[ruri-cap] {0}: 询问 socket {1}_{2} 不在组接口上'.format(
+                    cap['cap'], cap['sock'], name))
+            query[name] = out
+        before = set(n.as_pointer() for n in g.t.nodes)
+        answer = builder(g, query, ctx)
+        if answer is None:
+            print('[ruri-cap] {0}: {1} 本场景答不出 → 缺席值'.format(engine, cap['cap']), flush=True)
+            return
+        for nd in g.t.nodes:
+            if nd.as_pointer() not in before:
+                nd['ruri_cap'] = cap['cap']
+        missing = [leaf for leaf in cap['results'] if leaf not in answer]
+        if missing:
+            raise RuntimeError('[ruri-cap] {0}: 建图器少答了结果叶 {1}'.format(cap['cap'], missing))
+        for leaf, value in answer.items():
+            name = cap['sock'] + ('_' + leaf if leaf else '')
+            for c in heads:
+                s = c.inputs.get(name)
+                if s is not None:
+                    g._set(s, value)
+
+    def _wire_engine_globals(self, g, insts, ctx):
+        """引擎全局的动态宿主来源(必须先于 _wire_params:先接的赢)。查不到 = 保持配方缺省并记账。"""
+        if not self.engine_global_sources:
+            return
+        engine = getattr(bpy.context.scene.render, 'engine', '')
+        for name, spec in self.engine_global_sources.items():
+            table = ENGINE_GLOBAL_BUILDERS.get(spec['src'], {})
+            builder = table.get(engine) or table.get('*')
+            if builder is None:
+                print('[ruri-cap] {0}: 引擎全局 {1} 的来源 {2} 本引擎无实现 → 保持配方缺省'.format(
+                    engine, name, spec['src']), flush=True)
+                continue
+            before = set(n.as_pointer() for n in g.t.nodes)
+            answer = builder(g, ctx, tuple(spec['base']), name)
+            if answer is None:
+                print('[ruri-cap] {0}: 引擎全局 {1} 本场景答不出 → 保持配方缺省'.format(engine, name), flush=True)
+                continue
+            for nd in g.t.nodes:
+                if nd.as_pointer() not in before:
+                    nd['ruri_cap'] = 'global:' + name
+            for leaf, value in answer.items():
+                socket_name = name + ('_' + leaf if leaf else '')
+                for inst in insts:
+                    sock = inst.inputs.get(socket_name)
+                    if sock is not None:
+                        g._set(sock, value)
+
+    def level_global_bases(self):
+        """本栈取关卡值的引擎全局及各自缺省(宿主据此写「值 - 缺省」)。"""
+        return {name: [float(value) for value in spec['base']]
+                for name, spec in (self.engine_global_sources or {}).items()
+                if spec.get('src') == 'level_global'}
+
+    def _wire_zone(self, g, insts, zone, images, inst_sink, part, ctx):
+        feed = insts[zone['depth']]
+        heads = insts[zone['depth'] + 1:]
+        zin = g._nd('GeometryNodeRepeatInput')
+        zout = g._nd('GeometryNodeRepeatOutput')
+        zin.pair_with_output(zout)
+        zout.repeat_items.clear()
+        for item, is_vec in zone['states']:
+            zout.repeat_items.new('VECTOR' if is_vec else 'FLOAT', item)
+        g._set(zin.inputs['Iterations'], feed.outputs[zone['sock'] + '_it'])
+        for item, _is_vec in zone['states']:
+            out = feed.outputs.get(zone['sock'] + '_s_' + item)
+            if out is not None:
+                g._set(zin.inputs[item], out)
+        binsts = []
+        for i, body_name in enumerate(zone['bodies']):
+            b = g._nd('ShaderNodeGroup')
+            b.node_tree = self.group(body_name)
+            binsts.append(b)
+            inst_sink.append(b)
+            b['ruri_zone'] = zone['sock']
+            b['ruri_binst'] = i
+            for item, _is_vec in zone['states']:
+                sock = b.inputs.get('s_' + item)
+                if sock is not None:
+                    g._set(sock, zin.outputs[item])
+            for rname, _is_vec in zone['reads']:
+                sock = b.inputs.get('r_' + rname)
+                out = feed.outputs.get(zone['sock'] + '_r_' + rname)
+                if sock is not None and out is not None:
+                    g._set(sock, out)
+        self._wire_crossings(g, binsts, zone['body_crossings'])
+        for c in zone['capabilities']:
+            self._wire_capability(g, binsts, c, ctx)
+        for f in zone['fetches']:
+            src = binsts[f['depth']]
+            heads_b = binsts[f['depth'] + 1:]
+            image = images.get(f['slot']) if images else None
+            if f['env']:
+                if image is None:
+                    continue
+                mip = src.outputs[f['sock'] + '_mip'] if f['mip'] else None
+                color, alpha = g.env_image(image, src.outputs[f['sock'] + '_dir'], mip)
+                self._feed(g, heads_b, f['sock'], color, alpha)
+                continue
+            color, alpha, _anchor = self._sample(g, part, f, image, src.outputs[f['sock'] + '_uv'])
+            self._feed(g, heads_b, f['sock'], color, alpha)
+        for item, seat in zone['body_finals'].items():
+            out = binsts[seat[0]].outputs.get('o_' + item)
+            if out is not None:
+                g._set(zout.inputs[item], out)
+        for c in heads:
+            for item, _is_vec in zone['states']:
+                sock = c.inputs.get(zone['sock'] + '_o_' + item)
+                if sock is not None:
+                    g._set(sock, zout.outputs[item])
+
+    # ==================== 材质装配 ====================
+
+    ANCHOR_SLOTS = ('_BaseMap', '_BaseColorMap', '_MainTex')
+
+    def _cull_transparency(self, g, cull, outline_fac):
+        """剔除面的透明度(1 = 这一面整个不画)。它直接乘进 alpha,不再另起一级 MixShader:
+        少一个闭包混合与一个 Transparent BSDF,而且 alpha 口的直接生产者永远是一个 Math 节点 ——
+        宿主的灯链接校验按「先遇到谁」给节点打标志,MixShader 的因子口排在两个 Shader 口前面,
+        alpha 若直接来自吃灯答案的那段组,那段组会先经因子口被打成「只够到出口」,整条灯链随之
+        判非法(codegen 对非法入链的节点 need_exec=0,材质丢主光);隔一个 Math 节点,它就先经
+        Light Accumulation 那一支被遇到。"""
+        cgeo = g._nd('ShaderNodeNewGeometry')
+        bf = cgeo.outputs['Backfacing']
+        if cull == 1.0:
+            return g.math('SUBTRACT', 1.0, bf)
+        if cull == 2.0:
+            return g.math('ABSOLUTE', g.math('SUBTRACT', bf, outline_fac))
+        return g.math('MULTIPLY', outline_fac, g.math('SUBTRACT', 1.0, bf))
+
+    def build_material(self, mat, part=None, opaque=True, blend=None, cull=2.0, images=None,
+                       signature=None):
+        part = part or self.DEFAULT_PART
+        spec = self.part(part, signature)
+        mat['ruri_uber_signature'] = -1 if signature is None else int(signature)
+        nt = mat.node_tree
+        nt.nodes.clear()
+        g = G(nt, is_group=False)
+        # 原生灯节点与它们的换算链全部由兑现面(能力答案 / 闭包)在各自的标记区里建,不在这里预建:
+        # 预建的那份不带 ruri_cap,重接时留下来变成悬空的灯链,校验器按灯节点的标志把它连同活链
+        # 一起判非法,codegen 就把活链的下游节点整个禁掉 —— 实测重接后材质丢主光。
+        insts = []
+        for name in spec['segments']:
+            grp = g._nd('ShaderNodeGroup')
+            grp.node_tree = self.group(name)
+            grp.width = 320
+            insts.append(grp)
+        geo = g.geo()
+        tc = g.texco()
+        tan_ws, tan_w = g.tbn()
+        col = g.attr('Color')
+        uv1 = g._nd('ShaderNodeUVMap')
+        uv1.uv_map = 'UV1'
+        uv2 = g._nd('ShaderNodeUVMap')
+        uv2.uv_map = 'UV2'
+        stmap = g._nd('ShaderNodeMapping')
+        stmap.label = self.ST_NODE
+        g._set(stmap.inputs['Vector'], tc.outputs['UV'])
+        olattr = g._nd('ShaderNodeAttribute')
+        olattr.attribute_name = 'ruri_outline'
+        os_sep = g._nd('ShaderNodeSeparateXYZ')
+        g._set(os_sep.inputs['Vector'], tc.outputs['Object'])
+        os_comb = g._nd('ShaderNodeCombineXYZ')
+        g._set(os_comb.inputs['X'], os_sep.outputs['X'])
+        g._set(os_comb.inputs['Y'], os_sep.outputs['Z'])
+        g._set(os_comb.inputs['Z'], os_sep.outputs['Y'])
+        wires = {
+            '_RuriOutlineShellGate': olattr.outputs['Fac'],
+            'input_uv': stmap.outputs['Vector'],
+            'input_uv1': uv1.outputs['UV'],
+            'input_uv2': uv2.outputs['UV'],
+            'input_normalWS': geo.outputs['Normal'],
+            'input_positionWS': geo.outputs['Position'],
+            'input_positionOS': os_comb.outputs['Vector'],
+            'input_tangentWS': tan_ws,
+            'input_tangentWS_w': tan_w,
+            'input_color': col.outputs['Color'],
+            'input_color_w': col.outputs['Alpha'],
+            'facing': 1.0,
+        }
+        for grp in insts:
+            for s in grp.inputs:
+                if s.name in wires:
+                    g._set(s, wires[s.name])
+        self._wire_crossings(g, insts, spec['crossings'])
+        all_insts = list(insts)
+        # 建图序事后从节点表恢复不出来:实例序与 part 名建的时候就烙上(重接按 depth 取实例)。
+        for i, grp in enumerate(insts):
+            grp['ruri_inst'] = i
+        mat['ruri_uber_part'] = part
+        # 栈身份烙在**建图处**(唯一写点;实例化是模板拷贝,自带继承)。判据不能用 ruri_uber_part:
+        # 那个键每个生成栈都写,拿它认领就是一张材质被 N 个栈同时认领。模板材质同样要烙 ——
+        # 不烙则重接面(换灯/换世界)认不出自己刚建的模板。
+        mat['ruri_uber_stack'] = self.PANEL_KEY
+        anchor = None
+        for f in spec['fetches']:
+            image = images.get(f['slot']) if images else None
+            nd = self._wire_fetch(g, part, insts, f, image)
+            if nd is not None and nd.image is not None:
+                if anchor is None or (f['slot'] in self.ANCHOR_SLOTS and (anchor.label not in self.ANCHOR_SLOTS)):
+                    anchor = nd
+        for c in spec['capabilities']:
+            self._wire_capability(g, insts, c, {'material': mat})
+        for z in spec['zones']:
+            self._wire_zone(g, insts, z, images, all_insts, part, {'material': mat})
+        self._wire_engine_globals(g, all_insts, {'material': mat})
+        # 材质 uniform 最后接:varying/fetch/能力答案已占线,余下未链接 socket 恰是参数行。
+        self._wire_params(g, all_insts, part)
+        if anchor is not None:
+            nt.nodes.active = anchor
+            anchor.select = True
+        finals = spec['finals']
+        color_sock = self._final_color(insts, finals)
+        alpha_sock = self._final_socket(insts, finals, 'ret_gBuffer0_w')
+        clip_sock = self._final_socket(insts, finals, '__clip')
+        cull_fac = self._cull_transparency(g, cull, olattr.outputs['Fac'])
+        outp = g._nd('ShaderNodeOutputMaterial')
+        mat[self.BLEND_KEY] = list(blend) if blend is not None else []
+        if blend in MULTIPLY_BLENDS:
+            # 乘法帧(真源的 Blend Zero SrcColor):内核终色**就是乘数**,这一趟没有任何受光项
+            # (真源只写 baseColor,alpha 不参与那条混合方程)⇒ 出口只有一枚带颜色的 Transparent BSDF,
+            # 剔除面把颜色透成白(乘 1 = 不动背景)。
+            #
+            # 🔴 不许再串一级 MixShader:实测(真材质 + 白底)哪怕因子恒 0、只取 Transparent 那一支,
+            # 宿主也把整片算成**不透明黑**;把出口直接接到 Transparent BSDF 上,同一棵树立刻给出
+            # 正确的乘数(0.6558,0.2532,0.4231,与真源公式逐位一致)。乘法帧因此不建闭包也不需要灯节点,
+            # 但前提是终色真的无灯 —— 见生成期 UntaintLightFreeFinals(能力答案与灯循环两条都要换掉)。
+            tr = g._nd('ShaderNodeBsdfTransparent')
+            if color_sock is not None:
+                g._set(tr.inputs['Color'], g.mixv(cull_fac, color_sock, (1.0, 1.0, 1.0)))
+            mat[self.CLOSURE_ENGINE_KEY] = getattr(bpy.context.scene.render, 'engine', '')
+            g._set(outp.inputs[0], tr.outputs[0])
+            return all_insts
+        noloop_sock = self._final_socket(insts, finals, NO_LOOP_FINAL)
+        keep = g.math('SUBTRACT', 1.0, cull_fac)
+        if blend is None or blend in OVER_BLENDS:
+            tr = g._nd('ShaderNodeBsdfTransparent')
+            mixsh = g._nd('ShaderNodeMixShader')
+            mixsh.label = self.SURFACE_MIX_LABEL
+            mixsh[self.CLOSURE_SEAT_KEY] = 2
+            surface = self._wire_closure(g, mat, color_sock, noloop_sock, alpha_sock)
+            alpha = keep if (opaque or alpha_sock is None) else g.math('MULTIPLY', alpha_sock, keep)
+            if clip_sock is not None:
+                alpha = g.math('MULTIPLY', alpha, clip_sock)
+            g._set(mixsh.inputs[0], alpha)
+            g._set(mixsh.inputs[1], tr.outputs[0])
+            g._set(mixsh.inputs[2], surface)
+            g._set(outp.inputs[0], mixsh.outputs[0])
+            return all_insts
+        # 其余混合按「源 × A + 帧 × T」拆:A 乘进闭包的输入(见 _wire_closure),T 是透射色。
+        # 剔除面与 clip 掉的片元整个不改帧(= 纯透射),放在最外一级混合里。
+        if clip_sock is not None:
+            keep = g.math('MULTIPLY', keep, clip_sock)
+        through = g._nd('ShaderNodeBsdfTransparent')
+        g._set(through.inputs['Color'], self._blend_transmission(g, blend, color_sock, alpha_sock))
+        seat = g._nd('ShaderNodeAddShader')
+        seat.label = self.SURFACE_MIX_LABEL
+        seat[self.CLOSURE_SEAT_KEY] = 1
+        g._set(seat.inputs[0], through.outputs[0])
+        g._set(seat.inputs[1], self._wire_closure(g, mat, color_sock, noloop_sock, alpha_sock))
+        clear = g._nd('ShaderNodeBsdfTransparent')
+        mixsh = g._nd('ShaderNodeMixShader')
+        g._set(mixsh.inputs[0], keep)
+        g._set(mixsh.inputs[1], clear.outputs[0])
+        g._set(mixsh.inputs[2], seat.outputs[0])
+        g._set(outp.inputs[0], mixsh.outputs[0])
+        return all_insts
+
+    @staticmethod
+    def _blend_transmission(g, blend, color_sock, alpha_sock):
+        """T:帧留下多少(逐通道)。目标因子直接给一份;源因子里乘到帧上的那部分(DstColor /
+        OneMinusDstColor)挪过来,因为 源 × 帧 = 帧 × 源。帧的 alpha 宿主没有,读它的因子拒产。"""
+        src, dst = blend
+        if dst == BLEND_ZERO:
+            kept = (0.0, 0.0, 0.0)
+        elif dst == BLEND_ONE:
+            kept = (1.0, 1.0, 1.0)
+        elif dst == BLEND_SRC_ALPHA:
+            kept = g.vmath('SCALE', (1.0, 1.0, 1.0), s=alpha_sock)
+        elif dst == BLEND_ONE_MINUS_SRC_ALPHA:
+            kept = g.vmath('SCALE', (1.0, 1.0, 1.0), s=g.math('SUBTRACT', 1.0, alpha_sock))
+        elif dst == BLEND_SRC_COLOR:
+            kept = color_sock
+        elif dst == BLEND_ONE_MINUS_SRC_COLOR:
+            kept = g.vmath('SUBTRACT', (1.0, 1.0, 1.0), color_sock)
+        else:
+            raise RuntimeError('[ruri-uber] 目标因子 {0} 读帧自己的颜色/alpha,宿主的透射兑现不了'.format(dst))
+        if src == BLEND_DST_COLOR:
+            return g.vmath('ADD', kept, color_sock)
+        if src == BLEND_ONE_MINUS_DST_COLOR:
+            return g.vmath('SUBTRACT', kept, color_sock)
+        return kept
+
+    @staticmethod
+    def _blend_emission_scale(g, blend, color_sock, alpha_sock):
+        """A:源自己乘上的那一份,(是否向量, 值);None = 1。源因子读帧的部分已挪进 T。"""
+        if blend is None or blend in OVER_BLENDS:
+            return None
+        src = blend[0]
+        if src in (BLEND_ONE, BLEND_ONE_MINUS_DST_COLOR):
+            return None
+        if src in (BLEND_ZERO, BLEND_DST_COLOR):
+            return (False, 0.0)
+        if src == BLEND_SRC_ALPHA:
+            return (False, alpha_sock)
+        if src == BLEND_ONE_MINUS_SRC_ALPHA:
+            return (False, g.math('SUBTRACT', 1.0, alpha_sock))
+        if src == BLEND_SRC_COLOR:
+            return (True, color_sock)
+        if src == BLEND_ONE_MINUS_SRC_COLOR:
+            return (True, g.vmath('SUBTRACT', (1.0, 1.0, 1.0), color_sock))
+        raise RuntimeError('[ruri-uber] 源因子 {0} 读帧自己的 alpha,宿主的透射兑现不了'.format(src))
+
+    @staticmethod
+    def _final_socket(insts, finals, name):
+        seat = finals.get(name)
+        return None if seat is None else insts[seat[0]].outputs.get(name)
+
+    def _final_color(self, insts, finals):
+        color = self._final_socket(insts, finals, 'ret_gBuffer0')
+        if color is None:
+            color = next((s for s in insts[-1].outputs if s.type == 'VECTOR'), None)
+        return color
+
+    def _wire_closure(self, g, mat, color_sock, noloop_sock=None, alpha_sock=None):
+        """表面闭包是兑现面的一部分:它随引擎走(EEVEE = Light Accumulation,其余 = Emission),
+        与能力答案一样打 ruri_cap 标记、换引擎时整块回收重建;建它时用的引擎烙在材质上,
+        开文件时对不上就重接。不这样做,EEVEE 下建的 Light Accumulation 到 Cycles 是空闭包(全黑),
+        Cycles 下建的 Emission 回到 EEVEE 则灯链非法被编译器删掉(洋红/全黑)。
+
+        材质记着的混合若让源乘上一份 A(SrcAlpha One 之类),A 在这里乘进闭包的输入并随闭包一起
+        打标记:两个闭包都对输入线性(逐灯求和),先乘后求和与真源的「源 × A」逐位同值。"""
+        engine = getattr(bpy.context.scene.render, 'engine', '')
+        before = set(n.as_pointer() for n in g.t.nodes)
+        scale = self._blend_emission_scale(g, self._stored_blend(mat), color_sock, alpha_sock)
+        if scale is not None and color_sock is not None:
+            vector, value = scale
+            color_sock = g.vmath('MULTIPLY', color_sock, value) if vector else g.vmath('SCALE', color_sock, s=value)
+            if noloop_sock is not None:
+                noloop_sock = (g.vmath('MULTIPLY', noloop_sock, value) if vector
+                               else g.vmath('SCALE', noloop_sock, s=value))
+        surface = self._surface_closure(g, color_sock, noloop_sock, engine)
+        for nd in g.t.nodes:
+            if nd.as_pointer() not in before:
+                nd['ruri_cap'] = self.CLOSURE_CAP
+        mat[self.CLOSURE_ENGINE_KEY] = engine
+        return surface
+
+    def _per_light_share(self, g, color_sock, noloop_sock):
+        """这一圈灯该进多少账。宿主的光循环对**每一盏灯**把整棵树跑一遍,而内核的终色里只有附加光那一项
+        是逐灯的:环境、自发光、主光着色都只该进账一次。
+
+        主光那一圈交全量(附加光项在那一圈被身份门乘零,不会与主光重复);其余每一圈交
+        「终色 − 同一条终色但附加光循环没跑过」—— 正好是这盏灯自己的附加光贡献,同圈里那些与它无关的项
+        (按这盏灯算出来的主光着色、环境、自发光)在相减时逐位抵消,不必知道内核怎么把那一项合进去。
+
+        没有附加光循环的 part 发不出那份终色,整棵树只在主光那一圈进账(点光对它本来就没贡献)。"""
+        is_main = _native_light(g)['is_main']
+        if noloop_sock is None:
+            return g.vmath('SCALE', color_sock, s=is_main)
+        return g.mixv(is_main, g.vmath('SUBTRACT', color_sock, noloop_sock), color_sock)
+
+    def _surface_closure(self, g, color_sock, noloop_sock, engine):
+        """表面闭包。EEVEE:Light Accumulation —— 灯节点一进图整棵树就按灯逐圈求值,出口必须是它;
+        Diffuse Light = 这一圈灯自己那一份(见 _per_light_share)。Diffuse Color 恒 1:内核终色
+        已经是完整着色,不再乘任何反照率。
+        Light Accumulation 实测不钳值、逐灯精确求和,HDR 原样通过。其余引擎:Emission。"""
+        if engine == EEVEE_ENGINE:
+            accumulation = g._nd('ShaderNodeLightAccumulation')
+            accumulation.label = NATIVE_LIGHT_LABEL
+            accumulation.inputs['Diffuse Color'].default_value = (1.0, 1.0, 1.0, 1.0)
+            if color_sock is not None:
+                g._set(accumulation.inputs['Diffuse Light'],
+                       self._per_light_share(g, color_sock, noloop_sock))
+            return accumulation.outputs['Shader']
+        emission = g._nd('ShaderNodeEmission')
+        if color_sock is not None:
+            g._set(emission.inputs[0], color_sock)
+        return emission.outputs[0]
+
+    # ==================== 模板材质 + 实例化(唯一的逐材质路径) ====================
+
+    TEMPLATE_KEY = 'ruri_uber_template'
+    STAMP_KEY = 'ruri_uber_stamp'
+    SURFACE_MIX_LABEL = 'RuriSurfaceMix'
+    # 闭包落在表面混合节点的哪一个口(over 的 MixShader 是 2,拆开的混合是 AddShader 的 1)。
+    CLOSURE_SEAT_KEY = 'ruri_closure_input'
+    # 材质兑现时用的真源混合因子 [源, 目标](Unity BlendMode 值);空 = 家族缺省的 over / 不透明。
+    BLEND_KEY = 'ruri_uber_blend'
+    CLOSURE_CAP = 'closure'
+
+    def _stored_blend(self, mat):
+        stored = mat.get(self.BLEND_KEY)
+        if stored is None:
+            raise RuntimeError('[ruri-uber] 材质 {0} 没记混合因子(旧产物),请重新导入'.format(mat.name))
+        stored = [int(x) for x in stored]
+        return tuple(stored) if stored else None
+    CLOSURE_ENGINE_KEY = 'ruri_closure_engine'
+
+    # ==================== 跨应用参数共享的自述 ====================
+    # 参数行分三个桶存,而着色器只有一套平的 uniform 名字 —— 差异只有 ST 的 `_ST` 后缀
+    # (桶键是槽名 `_BaseMap`,uniform 是 `_BaseMap_ST`)。这条规则的真源在这里,所以
+    # 由材质**自述**带走:任何跨应用的搬运者读这一条就能把行摊平成着色器词汇,不必认识
+    # ruri_uber_* 一个字。搬运者自己抄一张桶表 = 第二处真源,加一个桶就静默丢一整类值。
+    # ruri_uber_images 不在行里:图不是 uniform,是通道,走各宿主自己的贴图路由。
+    SHADING_KEY = 'ruri_shading'
+    SHADING_ROW = {
+        'ruri_uber_floats': '{0}',
+        'ruri_uber_colors': '{0}',
+        'ruri_uber_st': '{0}_ST',
+    }
+
+    def _declare_shading(self, mat):
+        """本材质说清楚:它讲谁的着色器词汇、是哪个变体、行与图各在哪、图的通道里装着什么。
+
+        贴图那半是给别的应用看的:本腿按槽名逐通道原样采,不需要语义;而"这张图该进
+        Painter 的哪个通道"只能由 [TexturePacking] 自述回答 —— 槽名是游戏词汇
+        (_BumpMap 与 _NormalMap 同义不同名),按名猜必错且静默。只带本材质真绑了图的槽。"""
+        packing = self.m.get('packing') or {}
+        bound = dict(mat.get('ruri_uber_images') or {})
+        part = str(mat.get('ruri_uber_part', ''))
+        # 本腿把 part 编译成各自的树,所以这个值在这边是编译期常量、不是参数行里的一项。
+        # 别的宿主把整族编译成一个着色器,靠一个 uniform 选分支;它取缺省 0 = 整张脸按
+        # Standard 渲,而且零报错。所以照实报出来,让它随行一起走。
+        constants = {}
+        variant_uniform = self.m.get('variant_uniform') or ''
+        variant_value = (self.m.get('variant_values') or {}).get(part)
+        if variant_uniform and variant_value is not None:
+            constants[variant_uniform] = variant_value
+        # 行里存的是**作者值**(游戏 Properties 的 [Gamma] 那一族),而着色器读的是线性值 ——
+        # 本腿在 _mat_compose 里补那一次 srgb→linear。别的应用拿到的是同一份作者值,不补就
+        # 整条颜色链差一条 gamma 曲线,而且两边名字全对得上、一个字都不报。
+        # 只列本材质行里真有的那些,不整份 SRGB_PARAMS 抄过去。
+        gamma = sorted(
+            name for name in self.SRGB_PARAMS
+            if name in (mat.get('ruri_uber_floats') or {})
+            or name in (mat.get('ruri_uber_colors') or {}))
+        # 材质关键字的取值就是它在本材质上的那个 0/1 uniform(建图时按材质自己的关键字表写入)。
+        floats = mat.get('ruri_uber_floats') or {}
+        for keyword in self.m.get('material_keywords') or ():
+            constants[keyword] = float(floats.get(keyword, 0.0))
+        mat[self.SHADING_KEY] = {
+            'shader': self.PANEL_KEY,
+            'constants': constants,
+            'gamma': gamma,
+            # 本栈的着色器叫什么。别的应用拿它去自己的货架上找同名着色器 —— 各腿的产物同名
+            # 是配方 MaterialName 决定的(Substance 腿产出 <MaterialName>.glsl),不是巧合;
+            # 找不到就响亮地说,不静默把参数喂给一个别的着色器。
+            'name': self.MATERIAL_NAME,
+            'variant': str(mat.get('ruri_uber_part', '')),
+            'values': dict(self.SHADING_ROW),
+            'images': {
+                'group': 'ruri_uber_images',
+                'packing': {slot: packing[slot] for slot in bound if slot in packing},
+            },
+        }
+
+    def level_image_layouts(self):
+        """本栈读的关卡图(3D 纹理、带 mip 的纹理数组、uniform 数据表)及其铺法,宿主据此建图、铺格、填边。"""
+        return dict(self.level_images)
+
+    def _level_image(self, slot):
+        """关卡图:全场共享一张图(引擎全局,不随材质变)。图只有宿主一个建造者 —— 它也是写像素的那个,
+        两处各建一份,尺寸/格式/色彩空间迟早分叉。"""
+        return getattr(self._host_module(), self.host['volume_image_fn'])(self.level_images[slot])
+
+    def _template_images(self, part):
+        """模板建满全部采样槽;没绑真图的槽 = 颜色 == 该割点 neutral 的 1x1 图
+        (与直建路缺图语义逐位等价;占位图的槽语义中性不是一回事,拿错整脸黑,实锤)。"""
+        rows = []
+        spec = self.part(part)
+        for fetch in spec['fetches']:
+            if not fetch['env']:
+                rows.append(fetch)
+        for zone in spec['zones']:
+            for fetch in zone['fetches']:
+                if not fetch['env']:
+                    rows.append(fetch)
+        out = {}
+        for fetch in rows:
+            if fetch['slot'] in out:
+                continue
+            if fetch['slot'] in self.level_images:
+                out[fetch['slot']] = self._level_image(fetch['slot'])
+                continue
+            out[fetch['slot']] = _neutral_image(
+                fetch['neutral'], fetch['neutral_alpha'], fetch['non_color'])
+        return out
+
+    def _template(self, part, opaque, blend, cull, signature=None):
+        name = '{0}{1} {2}b{3} c{4:g}'.format(self.TEMPLATE_MAT, part, int(bool(opaque)),
+                                              '-' if blend is None else '{0}.{1}'.format(*blend), float(cull))
+        if signature is not None:
+            name += ' g{0}'.format(int(signature))
+        tpl = bpy.data.materials.get(name)
+        if tpl is not None and tpl.get(self.STAMP_KEY) == self.STAMP and tpl.node_tree is not None:
+            return tpl
+        stale = tpl
+        if stale is not None:
+            stale.name = name + '.old'
+        tpl = bpy.data.materials.new(name)
+        if tpl.node_tree is None:
+            tpl.use_nodes = True
+        self.build_material(tpl, part=part, opaque=opaque, blend=blend,
+                            cull=cull, images=self._template_images(part), signature=signature)
+        tpl[self.STAMP_KEY] = self.STAMP
+        tpl[self.TEMPLATE_KEY] = 1
+        tpl.use_fake_user = True
+        if stale is not None:
+            stale.user_remap(tpl)
+            bpy.data.materials.remove(stale)
+            tpl.name = name
+        return tpl
+
+    def _render_method(self, part, opaque, blend):
+        """EEVEE 的透明解法必须跟着 build_material 的 alpha 判据走(同一个 opaque)。
+
+        opaque ⇒ alpha 恒 1(或 clip 出来的 0/1 二值),'DITHERED' 保住真深度、景深与光追,
+        二值 alpha 下不产生任何抖动噪点。非 opaque ⇒ alpha 是连续值,'DITHERED' 会把它按
+        蓝噪声随机取舍,收敛前满屏噪点(视口里尤其难看)—— 真源那趟就是 Blend 混合,
+        'BLENDED' 才是等价物。乘法帧(Blend Zero SrcColor)是带颜色的 Transparent BSDF,
+        拆开的混合(加色、预乘……)是透射加闭包,同理只能走 BLENDED。**判据只许在这里算一次**:早先渲染方式读 part 的 Transparent 声明、
+        alpha 读材质的 _SurfaceType,两套判据一分岔,_SurfaceType=1 却落在非透明 part 的件
+        (如 CharacterNPR 的半透明裙摆)就是连续 alpha 配抖动解法 = 噪点透明。
+
+        壳堆是这条规则的例外,而且是宿主能力差异不是参数选择:BLENDED 不写深度、不做逐片元
+        排序,几十层自我重叠的壳一旦绘制序翻转,合成就地变不透明 —— 渲染出来是一圈硬边亮楔子,
+        且对任何 fur 参数都不响应(实测 24 层壳逐一消融 _FurCutoffEnd/_FurEdgeFade/_UseBumpMap/
+        _FurNoise 全无变化,换成 DITHERED 当场干净)。壳堆按 part 自己的 ShellStack 声明认。"""
+        if self.PART_META.get(part, {}).get('shell_stack'):
+            return 'DITHERED'
+        return 'DITHERED' if (opaque and (blend is None or blend in OVER_BLENDS)) else 'BLENDED'
+
+    def instantiate(self, name, part, images=None, opaque=True, blend=None, cull=2.0, floats=None):
+        """一张材质 = 模板拷贝 + 贴图指针 + 一列像素。零建图、零逐 socket 灌参。
+        模板按 (part, 透明形态, 剔除, 开关签名) 选:签名在目录里就用剥过支的特化模板。
+        主光身份在这里就烙上:原生光循环按灯上的身份进账,第一帧之前没人烙就是整条乘零。"""
+        refresh_main_light_role()
+        tpl = self._template(part, opaque, blend, cull, self._signature_index(part, floats))
+        mat = tpl.copy()
+        mat.name = name
+        mat.use_fake_user = False
+        # 渲染方式在**每张实例**上落一次:它与 alpha 判据同源(同一个 opaque),实例自述自己的解法,
+        # 不靠模板名反推。
+        mat.surface_render_method = self._render_method(part, opaque, blend)
+        if mat.get(self.TEMPLATE_KEY) is not None:
+            del mat[self.TEMPLATE_KEY]
+        swapped = 0
+        if images and mat.node_tree is not None:
+            for nd in mat.node_tree.nodes:
+                if nd.type != 'TEX_IMAGE':
+                    continue
+                real = images.get(_slot_of(nd.label or ''))
+                if real is not None:
+                    _swap_image(nd, real)
+                    swapped += 1
+        # 随绑定真图走的表列(模板按占位图建);漏了 ramp/LUT 的 UV 整体错位。
+        sizes = self._image_rows(part, images)
+        if sizes:
+            merged = _mixed(mat.get('ruri_uber_colors'))
+            merged.update(sizes)
+            mat['ruri_uber_colors'] = merged
+        # 基座骨播种。落在这里而不是 build_material:模板按 part 共享,基座骨是逐材质的自定义属性,
+        # 不是模板的一部分。
+        rig_prop = self.RIG.get('prop') or ''
+        if rig_prop and part in set(self.RIG.get('parts') or []):
+            mat[rig_prop] = self.RIG.get('bone') or ''
+        return mat, swapped
+
+    # ==================== provider ====================
+
+    @staticmethod
+    def _pass_word(word, props, what):
+        """真源 pass 的一个状态词:定值原样,[属性] 取材质自己的值(读的是原样的 props,不是图的词汇)。"""
+        kind, value = word
+        if kind == 'fixed':
+            return int(value)
+        stated = props.floats.get(value)
+        if stated is None:
+            raise RuntimeError('[ruri-uber] 材质 {0} 没有 {1}:真源 pass 的 {2} 取它的值'.format(
+                props.name, value, what))
+        return int(round(float(stated)))
+
+    def _pass_blend(self, meta, props):
+        """(源因子, 目标因子);part 没照抄真源的 Blend 行 = None(家族缺省)。"""
+        words = meta.get('blend')
+        if not words:
+            return None
+        return tuple(self._pass_word(word, props, 'Blend') for word in words)
+
+    def _cull_mode(self, props, meta):
+        declared = meta.get('cull')
+        if declared:
+            return float(self._pass_word(declared, props, 'Cull'))
+        if not self.CULL_PROPERTY:
+            return self.CULL_FIXED
+        value = props.floats.get(self.CULL_PROPERTY)
+        if value is None:
+            print('[ruri-uber] !! {0} 未声明 {1},按双面渲染'.format(
+                props.name, self.CULL_PROPERTY), flush=True)
+            return 0.0
+        return float(value)
+
+    @staticmethod
+    def _shader_name(builder, props):
+        return builder.shader_display_name(props)
+
+    def _variant(self, builder, props):
+        """(part 名, part id);非本风格返回 None。认领判据 = m_Shader 身份,属性指纹判变体已废除禁回退。"""
+        name = self._shader_name(builder, props)
+        if name is None:
+            ref = props.shader_ref if isinstance(props.shader_ref, dict) else {}
+            print('[ruri-uber] !! 0DAY: material {0} 的 m_Shader {1}/{2} 解析不出自称名 —— 拒绝按指纹猜,交宿主兜底'
+                  .format(props.name, ref.get('guid'), ref.get('fileID')), flush=True)
+            return None
+        if name in self.NON_SHADING:
+            return NON_SHADING
+        fallback = None
+        for part, meta in self.PART_META.items():
+            if meta['shader'] != name and name not in meta['aliases']:
+                continue
+            disc = meta['discriminator']
+            if disc is None:
+                fallback = (part, meta['id'])
+            elif props.floats.get(disc):
+                return (part, meta['id'])
+        return fallback
+
+    def _load_images(self, builder, props):
+        images = {}
+        load = getattr(builder, self.host.get('load_image_fn', '_load_image'))
+        for name, guid in props.textures.items():
+            img = load(guid)
+            if img is None:
+                print('[ruri-uber] !! {0}: texture {1} guid={2} LOAD FAILED'.format(
+                    props.name, name, guid), flush=True)
+                continue
+            try:
+                if img.alpha_mode != 'CHANNEL_PACKED':
+                    img.alpha_mode = 'CHANNEL_PACKED'
+            except Exception:
+                pass
+            images[name] = img
+        return images
+
+    def _projected(self, table):
+        """把材质自述的一张表从游戏的词汇翻成本图的词汇。
+
+        两边天然同名的游戏没有对照表,这里是恒等、原样交回,一次拷贝都不做。有对照的只改名字、
+        值一个不动;没列进对照的名字原样留着 —— 图上没有它的口,本来就读不到,丢掉反而让面板上
+        「这张材质到底带了什么」少一截。同名相撞时声明过的那条赢:游戏拿同一个拼法装了别的东西
+        (鸣潮的材质里真有一条叫 _BumpMap 的槽,指的是特效流动图),让它压掉译过来的才是错的。"""
+        if not self.SOURCE_NAMES:
+            return table
+        renamed = {name: value for name, value in table.items() if name not in self.SOURCE_NAMES}
+        renamed.update({self.SOURCE_NAMES[name]: value for name, value in table.items()
+                        if name in self.SOURCE_NAMES})
+        return renamed
+
+    def _invisible(self, builder, props):
+        """真源里**不着色**的那几张 —— 反壳描边的壳、只写模板的代理、把面部阴影投到脖子上的
+        那张面片 —— 认领下来,交出一张完全透明的材质。
+
+        它们在游戏里靠一整套渲染状态存在,本身没有表面可画。以前这里返回 None(「不认领」),
+        于是它们掉回宿主的 Principled，变成一块**不透明的灰**；而这些代理面片就贴在角色身上，
+        脸前面那张把整张脸盖没了（实测莫宁的 Face_FS 就是这样）。「认得出」和「画成灰块」
+        是两回事：认得出就得负责说它不可见。"""
+        name = props.name or self.MATERIAL_NAME
+        mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+        mat.use_nodes = True
+        tree = mat.node_tree
+        tree.nodes.clear()
+        output = tree.nodes.new('ShaderNodeOutputMaterial')
+        clear = tree.nodes.new('ShaderNodeBsdfTransparent')
+        tree.links.new(clear.outputs[0], output.inputs['Surface'])
+        try:
+            mat.surface_render_method = 'BLENDED'
+        except (AttributeError, TypeError):
+            pass
+        mat.use_backface_culling = False
+        mat['ruri_uber_stack'] = self.PANEL_KEY
+        mat['ruri_uber_part'] = ''
+        mat['ruri_uber_shader'] = self._shader_name(builder, props) or ''
+        print('[ruri-uber] {0} 用 {1}(非着色代理),按不可见认领'.format(
+            name, mat['ruri_uber_shader']), flush=True)
+        return mat
+
+    def provider(self, builder, props):
+        # 模板取法跟随本次导入的选项;缺选项 = 默认 append,不猜不回退。
+        opts = getattr(builder, 'options', None) or {}
+        self.link_templates = bool(opts.get(LINK_TEMPLATES_OPTION, False))
+        resolved = self._variant(builder, props)
+        if resolved is NON_SHADING:
+            return self._invisible(builder, props)
+        if resolved is None:
+            return None
+        part_name, _part_id = resolved
+        meta = self.PART_META[part_name]
+        name = props.name or self.MATERIAL_NAME
+        # 认领(_variant)与剔除面(_cull_mode)读的是材质**自己**的事实,所以吃原样的 props;
+        # 从这里往下都是喂图的,一律先翻成图的词汇。
+        images = self._projected(self._load_images(builder, props))
+        floats = dict(self._projected(props.floats))
+        # 材质关键字只认材质自己的关键字表:引擎按它选变体,检视面开关与它可以不一致。
+        stated_keywords = set(getattr(props, 'keywords', ()) or ())
+        for keyword in self.m.get('material_keywords') or ():
+            floats[keyword] = 1.0 if keyword in stated_keywords else 0.0
+        colors = self._projected(props.colors)
+        texture_st = self._projected(props.texture_st)
+        # 真源 pass 声明了混合就按它的因子兑现(不透明 = One Zero);没声明走家族缺省:
+        # _SurfaceType==1 才吃 alpha(gBuffer0.w 是 materialFlags 不是不透明度,接错皮肤隐形)。
+        blend = self._pass_blend(meta, props)
+        if blend is None:
+            opaque = floats.get('_SurfaceType', 0.0) < 0.5 and not meta['transparent']
+        else:
+            opaque = blend == (BLEND_ONE, BLEND_ZERO)
+        mat, swapped = self.instantiate(name, part_name, images=images, opaque=opaque, blend=blend,
+                                        cull=self._cull_mode(props, meta), floats=floats)
+        # 同名旧材质只改名让位,不删:宿主缓存攥着数据块,删了 = 悬垂指针 ReferenceError。
+        stale = bpy.data.materials.get(name)
+        if stale is not None and stale is not mat:
+            stale.name = name + '.old'
+            mat.name = name
+        bst = texture_st.get(self.ST_SLOT) or [1.0, 1.0, 0.0, 0.0]
+        for node in mat.node_tree.nodes:
+            if node.label == self.ST_NODE:
+                node.inputs['Scale'].default_value = (float(bst[0]), float(bst[1]), 1.0)
+                node.inputs['Location'].default_value = (float(bst[2]), float(bst[3]), 0.0)
+        mat['ruri_uber_part'] = part_name
+        snapshot_floats = {k: float(v) for k, v in floats.items()}
+        if meta['transparent']:
+            snapshot_floats['_SurfaceType'] = 1.0
+        mat['ruri_uber_images'] = {k: v.name for k, v in images.items()}
+        mat['ruri_uber_floats'] = snapshot_floats
+        mat['ruri_uber_st'] = {k: [float(x) for x in v] for k, v in texture_st.items()}
+        snapshot_colors = {k: list(v) for k, v in _mixed(mat.get('ruri_uber_colors')).items()
+                           if _image_row_slot(k) is not None}
+        snapshot_colors.update({k: [float(x) for x in v] for k, v in colors.items()})
+        mat['ruri_uber_colors'] = snapshot_colors
+        mat['ruri_uber_disabled_passes'] = list(getattr(props, 'disabled_passes', ()))
+        ref = props.shader_ref
+        mat['ruri_uber_shader_guid'] = str(ref.get('guid', '')) if isinstance(ref, dict) else ''
+        mat['ruri_uber_shader'] = self._shader_name(builder, props) or ''
+        self._declare_shading(mat)
+        col = self._param_write(mat)
+        for node in mat.node_tree.nodes:
+            if node.label == 'RuriMatCol':
+                node.outputs[0].default_value = float(col)
+                break
+        print('[ruri-uber] {0}: shader={1} part={2} images={3} col={4}'.format(
+            name, mat['ruri_uber_shader'], part_name, swapped, col), flush=True)
+        return mat
+
+    def rewire_capabilities(self, mat):
+        """重接兑现面(换灯/换世界后):只回收 ruri_cap 标记的节点,图本体与参数一概不碰。"""
+        part = mat.get('ruri_uber_part')
+        if part is None or part not in self.m['parts'] or mat.node_tree is None:
+            return False
+        if mat.get('ruri_uber_stack') != self.PANEL_KEY:
+            return False
+        if mat.get(self.STAMP_KEY) != self.STAMP:
+            # 旧产物的图与当前兑现面不是同一代:把灯节点接进 Emission 出口的树,链接非法会被
+            # 编译器整条删掉,材质静默全黑。旧图保持原样(它自带的兑现面仍然自洽),响亮喊一次。
+            if not self._stale_said.get(mat.name):
+                self._stale_said[mat.name] = True
+                print('[ruri-cap] 材质 {0} 是旧产物(stamp {1} ≠ {2}),不重接兑现面;'
+                      '刷新材质后才会用上当前光照'.format(mat.name, mat.get(self.STAMP_KEY), self.STAMP),
+                      flush=True)
+            return False
+        spec = self.part(part, mat.get('ruri_uber_signature'))
+        nt = mat.node_tree
+        # 重接期间把出口摘下来,收尾再接回:宿主的灯链接校验在每次改链时跑,并且用上一次的判定
+        # 决定这次遍历走哪些链接;闭包还没重建时灯节点经 alpha 够得到出口却够不到 Light Accumulation,
+        # 那一拍判非法后会一直留在树里(codegen 对非法入链的节点 need_exec=0,材质丢主光)。
+        # 出口不接,途中没有任何东西够得到出口,收尾那一次校验与建图时完全一样。
+        output = next((n for n in nt.nodes if n.bl_idname == 'ShaderNodeOutputMaterial'), None)
+        surface_from = None
+        if output is not None and output.inputs['Surface'].is_linked:
+            surface_from = output.inputs['Surface'].links[0].from_socket
+            nt.links.remove(output.inputs['Surface'].links[0])
+        for stale in [n for n in nt.nodes if n.get('ruri_cap') is not None]:
+            nt.nodes.remove(stale)
+        ordered = sorted((n for n in nt.nodes if n.get('ruri_inst') is not None),
+                         key=lambda n: int(n['ruri_inst']))
+        if not ordered:
+            raise RuntimeError('[ruri-cap] 材质 {0} 无实例序标记(旧产物),请重新导入'.format(mat.name))
+        g = G(nt, is_group=False)
+        ctx = {'material': mat}
+        for row in spec['capabilities']:
+            self._wire_capability(g, ordered, row, ctx)
+        # 体内割点(灯住这儿):按 (zone, 序) 找回体实例链再接,漏掉 = 循环里的兑现面永不回来。
+        for zone in spec['zones']:
+            if not zone['capabilities']:
+                continue
+            binsts = sorted((n for n in nt.nodes if n.get('ruri_zone') == zone['sock']),
+                            key=lambda n: int(n['ruri_binst']))
+            if not binsts:
+                raise RuntimeError('[ruri-cap] 材质 {0} 的循环 {1} 无体实例标记,请重新导入'.format(
+                    mat.name, zone['sock']))
+            for row in zone['capabilities']:
+                self._wire_capability(g, binsts, row, ctx)
+        self._wire_engine_globals(g, ordered, ctx)
+        # 乘法帧没有闭包(出口就是一枚带颜色的 Transparent BSDF,见 build_material),没什么可重接的。
+        if self._stored_blend(mat) not in MULTIPLY_BLENDS:
+            seat = next((n for n in nt.nodes if n.label == self.SURFACE_MIX_LABEL), None)
+            if seat is None or seat.get(self.CLOSURE_SEAT_KEY) is None:
+                raise RuntimeError('[ruri-cap] 材质 {0} 无表面混合标记(旧产物),请重新导入'.format(mat.name))
+            g._set(seat.inputs[int(seat[self.CLOSURE_SEAT_KEY])], self._wire_closure(
+                g, mat, self._final_color(ordered, spec['finals']),
+                self._final_socket(ordered, spec['finals'], NO_LOOP_FINAL),
+                self._final_socket(ordered, spec['finals'], 'ret_gBuffer0_w')))
+        if surface_from is not None:
+            nt.links.new(surface_from, output.inputs['Surface'])
+        # 纯数据写不触发依赖图,必须自己打脏标记,否则 EEVEE 继续用旧编译结果。
+        nt.update_tag()
+        mat.update_tag()
+        return True
+
+    def restore(self):
+        """开文件后按真源重放全部投影(generated 图像素不进 .blend,不重放 = 静默全黑/全零)。"""
+        _NEUTRAL_IMAGES.clear()
+        for part in self.m['parts']:
+            self._template_images(part)
+        # 自述随产物走,不随文件走:老文件里的材质是上一代产物写的,行的拼法可能已经变了。
+        # 每次开文件按当前产物重写一遍 ⇒ 存量文件不必重导也讲得清自己的词汇。
+        for mat in bpy.data.materials:
+            if mat.get('ruri_uber_stack') == self.PANEL_KEY:
+                self._declare_shading(mat)
+        self._mirror = None
+        self._mat_mirror()
+        self._param_flush()
+        refresh_main_light_role()
+        # 闭包按建它时的引擎立的;文件可能是在另一个引擎下存的 —— 对不上的整块重接兑现面。
+        engine = getattr(bpy.context.scene.render, 'engine', '')
+        for mat in bpy.data.materials:
+            if (mat.get('ruri_uber_stack') == self.PANEL_KEY and mat.get(self.STAMP_KEY) == self.STAMP
+                    and mat.get(self.CLOSURE_ENGINE_KEY) != engine):
+                self.rewire_capabilities(mat)
+    # ==================== 顶点腿(几何节点) ====================
+
+    def _material_images(self, mat):
+        """顶点树换图真源:①快照全量图名映射(含只有顶点腿消费的槽);②材质树兜底。"""
+        images = {}
+        for slot, img_name in dict(mat.get('ruri_uber_images') or {}).items():
+            img = bpy.data.images.get(img_name)
+            if img is not None:
+                images[slot] = img
+
+        def walk(tree, depth=0):
+            if depth > 4 or tree is None:
+                return
+            for nd in tree.nodes:
+                if nd.type == 'TEX_IMAGE' and nd.image is not None:
+                    images.setdefault(_slot_of(nd.label or nd.name or nd.image.name), nd.image)
+                elif nd.type == 'GROUP':
+                    walk(nd.node_tree, depth + 1)
+        if mat.node_tree is not None:
+            walk(mat.node_tree)
+        return images
+
+    @staticmethod
+    def _mat_meta(mat):
+        floats = dict(mat.get('ruri_uber_floats') or {})
+        st = _mixed(mat.get('ruri_uber_st'))
+        colors = _mixed(mat.get('ruri_uber_colors'))
+        return floats, st, colors
+
+    def _fill_uniform_sockets(self, node, floats, st, colors):
+        """raw 直灌顶点组实例:socket 名 = 游戏属性名(V4 = vec+_w 对)。
+        sRGB 属性在这里也补线性化 —— 顶点腿与片元腿读的是同一个 uniform,两条腿不许各说各话。"""
+
+        def cvt(name, value):
+            return _srgb_to_linear(value) if name in self.SRGB_PARAMS else float(value)
+
+        for sock in node.inputs:
+            name = sock.name
+            if name.endswith('_w'):
+                base = name[:-2]
+                if base.endswith('_ST') and base[:-3] in st:
+                    sock.default_value = float(st[base[:-3]][3])
+                elif base in colors:
+                    sock.default_value = float(colors[base][3])
+                continue
+            if name.endswith('_ST') and name[:-3] in st:
+                v = st[name[:-3]]
+                sock.default_value = (float(v[0]), float(v[1]), float(v[2]))
+            elif name in colors:
+                v = colors[name]
+                sock.default_value = (cvt(name, v[0]), cvt(name, v[1]), cvt(name, v[2]))
+            elif name in floats:
+                try:
+                    sock.default_value = cvt(name, floats[name])
+                except (TypeError, ValueError):
+                    pass
+
+    def _rig_basis_armature(self, obj):
+        if not self.RIG.get('bone'):
+            return None
+        arm = next((m.object for m in obj.modifiers
+                    if m.type == 'ARMATURE' and m.object is not None), None)
+        if arm is None and obj.parent is not None and obj.parent.type == 'ARMATURE':
+            arm = obj.parent
+        return arm
+
+    def rig_bone_of(self, mat):
+        """这张材质的基座骨,说的是 **Unity 骨名**。运行期唯一真源 = 材质自己的键
+        (instantiate 按清单播种,面板改的也是它);清单值只是种子,不在这里当兜底读。"""
+        return str(mat.get(self.RIG.get('prop') or '') or '')
+
+    def _rig_identity_api(self, key):
+        """宿主那份骨骼身份 API(None = 配方没声明)。身份编码只有宿主一个读者,
+        生成物经这一个口子问它,不自己再解一遍那份编码。"""
+        import importlib
+        module = self.host.get('rig_identity_module') or ''
+        fn = self.host.get(key) or ''
+        if not module or not fn:
+            return None
+        return getattr(importlib.import_module(module), fn)
+
+    def rig_resolve_bone(self, arm, unity_name):
+        """Unity 骨名 → 本 rig 当下的 Blender 骨名('' = 这副骨架没有这根)。
+        身份烙在骨上、改名碰不到,所以这条翻译在改过名的 rig 上照样成立。"""
+        api = self._rig_identity_api('rig_bone_fn')
+        if api is None or arm is None or not unity_name:
+            return ''
+        return api(arm, unity_name) or ''
+
+    def rig_apply(self, mat, arm, obj):
+        """基座接到材质:三列读**对象自定义属性**,由 push_rig_basis 每帧写。
+
+        为什么不是驱动器:驱动器写 shader socket = 每帧弄脏整棵材质树,实测视口
+        **468.7ms/帧(2.1fps) vs 52.7ms(19fps),8.89 倍**。对象自定义属性走逐对象 UBO,
+        不碰材质树,实测与静态基线同档(0.80x)。这与「handler 推 socket 不行」是同一条纪律。
+        为什么不是几何点属性:那会把 uniform 塞进几何管线,描边一关基座就跟着没(本次根因)。
+        接不上就说出来,socket 留在组缺省 = 单位阵。"""
+        tree = mat.node_tree
+        if tree is None:
+            return False
+        instances = [grp for grp in self._panel_insts(mat)
+                     if grp.inputs.get(RIG_BASIS_SOCKETS[0]) is not None]
+        if not instances:
+            return False
+        unity_bone = self.rig_bone_of(mat)
+        bone_name = self.rig_resolve_bone(arm, unity_bone)
+        if arm is None or not bone_name:
+            print('[ruri-rig] !! {0}: 基座接不上(骨架={1} 记的骨={2} 解析={3})—— 留在绑定姿势'
+                  .format(mat.name, getattr(arm, 'name', None), unity_bone or '(空)',
+                          bone_name or '(这副骨架没有)'), flush=True)
+            return False
+        self._rig_clear(mat)
+        g = G(tree, is_group=False)
+        for index in range(3):
+            node = g._nd('ShaderNodeAttribute')
+            node.attribute_type = 'OBJECT'
+            node.attribute_name = '["{0}{1}"]'.format(RIG_OBJECT_PROP, index)
+            node.label = RIG_ATTR_LABEL + str(index)
+            for grp in instances:
+                sock = grp.inputs.get(RIG_BASIS_SOCKETS[index])
+                if sock is not None:
+                    tree.links.new(node.outputs['Vector'], sock)
+        RIG_DRIVEN[obj.name] = (arm.name, bone_name)
+        return True
+
+    def _rig_clear(self, mat):
+        """幂等:本桥在这张材质上留下的一切先撤干净再接。
+
+        判据放宽到 `RuriRig` 前缀(不只当前那批标签):这座桥换过送值通道,旧通道留下的
+        节点与**挂在它们 socket 上的驱动器**必须一起走 —— 驱动器是每帧弄脏材质树的那个
+        8.89 倍,漏掉一张材质就等于漏掉整帧。删节点会连带删掉它 socket 上的驱动器。"""
+        tree = mat.node_tree
+        for node in [n for n in tree.nodes if (n.label or '').startswith('RuriRig')]:
+            tree.nodes.remove(node)
+        animation = tree.animation_data
+        if animation is not None and not len(animation.drivers):
+            tree.animation_data_clear()
+
+    def rig_rescan(self):
+        """重建 push 工作单。**重开文件后它是空的** —— 工作单是进程态,而 .blend 里
+        只存着上次写下的属性值;没人重建就等于基座冻结在存盘那一刻(静默)。
+        所以 load_post 必须叫一次,判据从场上的材质真值现算,不依赖任何记忆。"""
+        rig_parts = set(self.RIG.get('parts') or [])
+        if not rig_parts:
+            return 0
+        found = 0
+        for obj in bpy.context.scene.objects:
+            if obj.type != 'MESH' or obj.data is None:
+                continue
+            mats = [m for m in obj.data.materials
+                    if m is not None and m.get('ruri_uber_stack') == self.PANEL_KEY
+                    and m.get('ruri_uber_part') in rig_parts]
+            if not mats:
+                continue
+            arm = self._rig_basis_armature(obj)
+            bone_name = self.rig_resolve_bone(arm, self.rig_bone_of(mats[0]))
+            if arm is not None and bone_name:
+                RIG_DRIVEN[obj.name] = (arm.name, bone_name)
+                RIG_SCANNED[0] = True
+                found += 1
+        return found
+
+    @staticmethod
+    @bpy.app.handlers.persistent
+    def push_rig_basis(*_args):
+        """把 Δ = Pose·Rest⁻¹ 的三列写到对象上。**逐对象 UBO,不碰材质树**。
+
+        值没变就不写 —— 写属性会给对象打脏标记,在 depsgraph handler 里无条件写会自激。
+        列按 Unity 轴序(X / 上 / 前),与 UNITY_MATRIX_M 的列语义同源。"""
+        import mathutils
+        if not RIG_SCANNED[0]:
+            RIG_SCANNED[0] = True
+            for stack in STACKS:
+                if stack.post is None and (stack.RIG.get('parts') or []):
+                    stack.rig_rescan()
+        # 🔴 姿势解算的结果住在**求值副本**上;原始数据块的 pose_bone.matrix 只有在有人
+        # 调过 view_layer.update() 之后才被刷回。在 depsgraph handler 里读原始副本 =
+        # 读到上一次的姿势 ⇒ 载入时看着对(那一拍刚好是文件里的姿势),交互拖骨之后
+        # 基座就再也不动 —— 表现成"坐标系不实时更新"。所以这里必须走 depsgraph。
+        depsgraph = next((a for a in _args if isinstance(a, bpy.types.Depsgraph)), None)
+        if depsgraph is None:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+        axes = ((1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (0.0, 1.0, 0.0))
+        for obj_name, (arm_name, bone_name) in list(RIG_DRIVEN.items()):
+            obj = bpy.data.objects.get(obj_name)
+            arm = bpy.data.objects.get(arm_name)
+            if obj is None or arm is None:
+                RIG_DRIVEN.pop(obj_name, None)
+                continue
+            pose = arm.evaluated_get(depsgraph).pose.bones.get(bone_name)
+            if pose is None:
+                continue
+            delta = pose.matrix.to_3x3() @ pose.bone.matrix_local.to_3x3().inverted()
+            # 🔴 着色器读的是**求值副本**上的属性。本 handler 跑在 depsgraph_update_post,
+            # 那一拍的求值副本已经建好了 —— 只写原始副本 = 画面永远慢一拍;而"值没变就不写"
+            # 的守卫又让它不再重新打脏标记,于是**永远追不上**(实测求值副本差到 1.99)。
+            # 所以本帧绘制读哪份就写哪份:求值副本每次都写,原始副本只在变了时写(它是
+            # 存盘种子,也是下一次求值的来源;无条件写会打脏标记自激)。
+            evaluated_object = obj.evaluated_get(depsgraph)
+            for index, axis in enumerate(axes):
+                vector = (delta @ mathutils.Vector(axis)).normalized()
+                value = (vector.x, vector.z, vector.y)
+                key = RIG_OBJECT_PROP + str(index)
+                try:
+                    evaluated_object[key] = value
+                except Exception:
+                    pass
+                previous = obj.get(key)
+                if previous is None or max(abs(previous[k] - value[k]) for k in range(3)) > 1e-6:
+                    obj[key] = value
+
+    # socket 数据类型 → 组接口 socket 类型(Blender 的类型对照,不是内容词汇)
+    VTX_INTERFACE_SOCKET = {'VALUE': 'NodeSocketFloat', 'INT': 'NodeSocketInt',
+                            'BOOLEAN': 'NodeSocketBool', 'VECTOR': 'NodeSocketVector',
+                            'RGBA': 'NodeSocketColor', 'IMAGE': 'NodeSocketImage'}
+
+    @staticmethod
+    def _vtx_same(a, b):
+        """两个 socket 值等不等。数据块比身份,数比值 —— 只有它说「不等」才算用户动过。"""
+        if isinstance(a, bpy.types.ID) or isinstance(b, bpy.types.ID) or a is None or b is None:
+            return a is b
+        if hasattr(a, '__len__') != hasattr(b, '__len__'):
+            return False
+        if hasattr(a, '__len__'):
+            va, vb = list(a), list(b)
+            return len(va) == len(vb) and all(abs(float(x) - float(y)) <= 1e-6
+                                              for x, y in zip(va, vb))
+        return abs(float(a) - float(b)) <= 1e-6
+
+    def _vtx_knob_rows(self):
+        """顶点腿上哪些 socket 是旋钮:问参数面。它是「能拧什么」的唯一声明(生成自
+        [ShaderProperty]),顶点腿不过是同一批 uniform 的另一条消费腿,不在宿主侧另立名单。
+        贴图行按它的 _ST 认;余下的(varying / 视图基轴 / 屏幕尺寸 / 管线常量)不是旋钮。"""
+        rows = {}
+        for row in self._panel_rows():
+            rows[row['name']] = row
+            if row['kind'] == 'TEXTURE':
+                rows[row['name'] + '_ST'] = row
+        return rows
+
+    def _vtx_expected(self, mat, template_name, name, images=None):
+        """这一格「材质当下说的值」。**材质快照是唯一真源**:片元腿、顶点腿、修改器面板
+        三个消费面都从它派生,所以播种与「用户动过没有」的判据共用这一个函数,不可能各说各话。
+        快照没声明的落模板接口缺省(codegen 定的那个;贴图槽即中性占位图)。"""
+        floats, st, colors = self._mat_meta(mat)
+        if name.endswith('_ST') or name.endswith('_ST_w'):
+            tail = name.endswith('_ST_w')
+            value = st.get(name[:-5] if tail else name[:-3])
+            if value is not None:
+                return float(value[3]) if tail else (float(value[0]), float(value[1]), float(value[2]))
+        elif name.endswith('_w'):
+            value = colors.get(name[:-2])
+            if value is not None:
+                return float(value[3])
+        elif name in colors:
+            srgb = name in self.SRGB_PARAMS
+            return tuple(_srgb_to_linear(v) if srgb else float(v) for v in list(colors[name])[0:3])
+        elif name in floats:
+            value = float(floats[name])
+            return _srgb_to_linear(value) if name in self.SRGB_PARAMS else value
+        else:
+            image = (self._material_images(mat) if images is None else images).get(name)
+            if image is not None:
+                return image
+        return self._vtx_template_default(template_name, name)
+
+    def _vtx_template_default(self, template_name, name):
+        """模板接口上那一格的缺省 —— codegen 说了算的那个值。"""
+        if not template_name:
+            return None
+        for item in self.group(template_name).interface.items_tree:
+            if item.item_type != 'PANEL' and item.in_out == 'INPUT' and item.name == name:
+                value = getattr(item, 'default_value', None)
+                return tuple(value) if hasattr(value, '__len__') and not isinstance(value, str) else value
+        return None
+
+    @staticmethod
+    def _vtx_own_samplers(node, images):
+        """顶点模板里「贴图自带采样器」那几个槽的逐实例口:按这一格绑定的图自己陈述的寻址与过滤灌
+        (模板共享,状态随图走,见物化脚本 own_sampler_fetch)。images 没提到的槽不动;提到而为 None
+        (清空回落中性占位)= 占位图自己的状态。"""
+        for sock in node.inputs:
+            for axis, suffix in enumerate(OWN_SAMPLER_SOCKETS):
+                if not sock.name.endswith(suffix) or sock.name[:-len(suffix)] not in images:
+                    continue
+                wrap_u, wrap_v, point = _own_sampler_state(images[sock.name[:-len(suffix)]])
+                value = (OWN_SAMPLER_WRAPS.index(wrap_u), OWN_SAMPLER_WRAPS.index(wrap_v), int(point))[axis]
+                if sock.default_value != value:
+                    sock.default_value = value
+
+    def _vtx_expose(self, tree, group_input, node, mat, knobs, panels, template_name, state,
+                    images):
+        """把这个组实例上的材质旋钮抬到**修改器接口**,一材质一段。
+
+        为什么不能就留在组实例的 socket 缺省上:这棵树是幂等换血重建的(相机一动、对象一进场
+        都会重建,见 derived_state 的 vertex 级),在节点编辑器里拧的值下一拍就没。
+        抬到接口后值住在修改器实例上;而**值本身仍然只有材质一处真源** —— 播种从材质来,
+        在面板上拧动由 sync_vertex_knobs 写回材质,两个方向都过 panel_write*。"""
+        for sock in node.inputs:
+            if sock.is_linked:
+                continue
+            socket_type = self.VTX_INTERFACE_SOCKET.get(sock.type)
+            row = knobs.get(sock.name[:-2] if sock.name.endswith('_w') else sock.name)
+            if socket_type is None or row is None:
+                continue
+            panel = panels.get(mat.name)
+            if panel is None:
+                panel = tree.interface.new_panel(mat.name)
+                panels[mat.name] = panel
+            item = tree.interface.new_socket(name=sock.name, in_out='INPUT',
+                                             socket_type=socket_type, parent=panel)
+            item.description = row['label']
+            if row['kind'] == 'SLIDER' and sock.type == 'VALUE' and not sock.name.endswith('_w'):
+                item.min_value = float(row['min'])
+                item.max_value = float(row['max'])
+            value = self._vtx_expected(mat, template_name, sock.name, images)
+            try:
+                item.default_value = value
+            except (TypeError, ValueError):
+                pass
+            key = mat.name + '|' + sock.name
+            state['keys'][item.identifier] = key
+            state['templates'][key] = template_name
+            state['values'][item.identifier] = value
+            wire = next((o for o in group_input.outputs if o.identifier == item.identifier), None)
+            if wire is not None:
+                tree.links.new(wire, sock)
+
+    def _vtx_panel_write(self, mat, name, value):
+        """材质改了一个 uniform → 推到全部修改器上那一格。旋钮抬到接口之后,写组实例的 socket
+        缺省是**无效**的(那一格被组输入占线),值住在修改器实例上。
+        推给**所有**对象:同一张材质挂在几个对象上时,它们说的必须是同一件事。
+        值没变就不写 —— 脚本写端口要 update_tag,无条件写会在 depsgraph handler 里自激。"""
+        key = mat.name + '|' + name
+        for obj in bpy.data.objects:
+            mod = obj.modifiers.get(self.VTX_MODIFIER)
+            tree = getattr(mod, 'node_group', None) if mod is not None else None
+            if tree is None:
+                continue
+            written = False
+            for identifier, mapped in dict(tree.get('ruri_vtx_keys') or {}).items():
+                if str(mapped) != key:
+                    continue
+                port = getattr(mod.properties.inputs, str(identifier), None)
+                if port is None or self._vtx_same(port.value, value):
+                    continue
+                try:
+                    port.value = value
+                except (TypeError, ValueError):
+                    continue
+                written = True
+            if written:
+                obj.update_tag()
+
+    @staticmethod
+    @bpy.app.handlers.persistent
+    def sync_vertex_knobs(*_args):
+        """修改器面板上拧动的值 → 写回材质。
+
+        为什么必须写回而不是就地留着:顶点腿与片元腿读的是**同一批 uniform**。值只留在修改器上,
+        同一张 `_FurDirMap` 就会「壳长变了而毛发遮罩没变」,同一材质挂两个对象也永远对不上 ——
+        两条都是画面上看得见、日志里一声不响的错。Blender 不给修改器输入改动回调,所以只能在
+        依赖图落定后按材质真值比对;相等就什么都不做(无条件写会自激)。"""
+        for stack in STACKS:
+            if stack.post is None:
+                stack.vtx_writeback()
+
+    def vtx_writeback(self):
+        # 这条挂在 depsgraph_update_post 上,场上没有本栈的对象时必须一行都不多付:
+        # 参数面 600 行的字典与材质图走查都推迟到真找到一棵顶点树之后。
+        rows = None
+        for obj in bpy.data.objects:
+            mod = obj.modifiers.get(self.VTX_MODIFIER)
+            tree = getattr(mod, 'node_group', None) if mod is not None else None
+            if tree is None:
+                continue
+            keys = {str(k): str(v) for k, v in dict(tree.get('ruri_vtx_keys') or {}).items()}
+            if not keys:
+                continue
+            if rows is None:
+                rows = {row['name']: row for row in self._panel_rows()}
+            templates = {str(k): str(v) for k, v in dict(tree.get('ruri_vtx_templates') or {}).items()}
+            images_of = {}
+            inputs = mod.properties.inputs
+            port_of = {}
+            for identifier, key in keys.items():
+                port = getattr(inputs, identifier, None)
+                if port is not None:
+                    port_of[key] = port
+            for key, port in port_of.items():
+                mat_name, _sep, prop = key.partition('|')
+                mat = bpy.data.materials.get(mat_name)
+                if mat is None or not self.panel_claims(mat):
+                    continue
+                if mat_name not in images_of:
+                    images_of[mat_name] = self._material_images(mat)
+                if self._vtx_same(port.value, self._vtx_expected(
+                        mat, templates.get(key), prop, images_of[mat_name])):
+                    continue
+                self._vtx_commit(mat, rows, prop, port_of)
+
+    def _vtx_commit(self, mat, rows, prop, port_of):
+        """一格被拧动 → 经材质面板那三条写路落回材质。走 panel_write* 而不是自己写快照:
+        sRGB 还原、_ST 的三个消费面、换图时的中性图回落与两通道布局都住在那三个函数里,
+        绕过它们就是在宿主侧造第二处真源。"""
+        def value_of(name):
+            port = port_of.get(mat.name + '|' + name)
+            return None if port is None else port.value
+
+        if prop.endswith('_ST') or prop.endswith('_ST_w'):
+            slot = prop[:-5] if prop.endswith('_ST_w') else prop[:-3]
+            row = rows.get(slot)
+            vector = value_of(slot + '_ST')
+            if row is None or vector is None:
+                return
+            tail = value_of(slot + '_ST_w')
+            self.panel_write_st(mat, row, (float(vector[0]), float(vector[1])),
+                                (float(vector[2]), 0.0 if tail is None else float(tail)))
+            return
+        row = rows.get(prop)
+        if row is not None and row['kind'] == 'TEXTURE':
+            self.panel_write_image(mat, row, value_of(prop))
+            return
+        base = prop[:-2] if prop.endswith('_w') and prop[:-2] in rows else prop
+        row = rows.get(base)
+        if row is None:
+            return
+        srgb = base in self.SRGB_PARAMS
+
+        def authored(v):
+            return _linear_to_srgb(float(v)) if srgb else float(v)
+
+        if row['kind'] in ('SWITCH', 'VALUE', 'SLIDER', 'INT'):
+            scalar = value_of(base)
+            if scalar is not None:
+                self.panel_write(mat, row, authored(scalar))
+            return
+        vector = value_of(base)
+        if vector is None:
+            return
+        tail = value_of(base + '_w')
+        self.panel_write(mat, row, [authored(vector[0]), authored(vector[1]), authored(vector[2]),
+                                    1.0 if tail is None else float(tail)])
+
+    def _stack_slots(self, obj):
+        """这个对象上属于本栈的材质槽 (槽号, 材质)。描边克隆不算 —— 它是产物不是输入。"""
+        return [(i, m) for i, m in enumerate(obj.data.materials)
+                if m is not None and m.get('ruri_uber_part') in self.KNOWN_PARTS
+                and m.get('ruri_uber_stack') == self.PANEL_KEY
+                and not m.get('ruri_outline_clone')]
+
+    # 相机基轴是 **uniform,不是拓扑**:描边宽度按投影矩阵与真实像素解,相机一动这几格就过期
+    # —— 过期的是值,不是这棵树。socket 名字只在这张表上点一次,建树与重灌同吃它;分两处写
+    # 就是两处真源,改一处另一处会悄悄停在旧值上。
+    CAMERA_VECTOR_SOCKETS = {'cam_right': 'right', 'cam_up': 'up', 'cam_look': 'look',
+                             'cam_pos': 'pos', 'input_camPos': 'pos'}
+    CAMERA_SCALAR_SOCKETS = ('half_fov', 'screen_x', 'screen_y')
+
+    @staticmethod
+    def _camera_screen(scene, cam):
+        """halfFov/屏幕尺寸与真源同源(投影矩阵反求垂直半 FOV + 真实像素);angle_y 只在宽高比
+        一致时才对,它同时喂 width/distAtten/minPixel 三处,错一次三处一起错。"""
+        if cam is None:
+            return {'half_fov': 0.2, 'screen_x': 1920.0, 'screen_y': 1080.0}
+        rp = scene.render.resolution_percentage / 100.0
+        proj = cam.calc_matrix_camera(
+            bpy.context.evaluated_depsgraph_get(),
+            x=scene.render.resolution_x, y=scene.render.resolution_y,
+            scale_x=scene.render.pixel_aspect_x, scale_y=scene.render.pixel_aspect_y)
+        return {'half_fov': math.atan(1.0 / abs(proj[1][1])),
+                'screen_x': float(scene.render.resolution_x) * rp,
+                'screen_y': float(scene.render.resolution_y) * rp}
+
+    @staticmethod
+    def _camera_basis(obj, cam):
+        """相机基轴换算进**这个对象**的物体空间 —— 树读的位置就是物体空间。"""
+        if cam is None:
+            return {}
+        import mathutils
+        inv = obj.matrix_world.inverted()
+        inv3 = inv.to_3x3()
+        cam3 = cam.matrix_world.to_3x3()
+        return {'right': inv3 @ cam3.col[0], 'up': inv3 @ cam3.col[1],
+                'look': inv3 @ (cam3 @ mathutils.Vector((0.0, 0.0, -1.0))),
+                'pos': inv @ cam.matrix_world.translation}
+
+    def _write_camera_sockets(self, node, basis, screen):
+        """把相机 uniform 灌进一个组实例,返回有没有真写。**按 socket 在不在决定写不写** ——
+        模板接口是图自己决定的,按名硬索引会在没有那一格的模板上 KeyError。值没变不写:
+        这条也跑在重灌路径上,无条件写会打依赖图脏标记然后自激。"""
+        written = False
+        for sock in node.inputs:
+            if sock.name in self.CAMERA_VECTOR_SOCKETS:
+                vector = basis.get(self.CAMERA_VECTOR_SOCKETS[sock.name])
+                if vector is None:
+                    continue
+                value = (float(vector[0]), float(vector[1]), float(vector[2]))
+            elif sock.name in self.CAMERA_SCALAR_SOCKETS:
+                value = float(screen[sock.name])
+            else:
+                continue
+            if self._vtx_same(sock.default_value, value):
+                continue
+            sock.default_value = value
+            written = True
+        return written
+
+    def push_camera_basis(self, objects=None, camera=None):
+        """相机动了 → 只把相机 uniform 重灌进**已经存在**的顶点树。
+
+        它不建树、不建修改器,更不按材质现值重判一次描边 —— 那个判断只属于从游戏导入的那一刻。
+        按现值实时重判的代价是用户删掉的修改器会在下一次推镜头时自己长回来,而画面上没有
+        任何东西说明是谁加的。"""
+        scene = bpy.context.scene
+        cam = camera or scene.camera
+        screen = self._camera_screen(scene, cam)
+        done = 0
+        for obj in (objects if objects is not None else bpy.data.objects):
+            mod = obj.modifiers.get(self.VTX_MODIFIER)
+            tree = getattr(mod, 'node_group', None) if mod is not None else None
+            if tree is None:
+                continue
+            basis = self._camera_basis(obj, cam)
+            touched = False
+            for node in tree.nodes:
+                if node.get('ruri_vtx_mat') is None:
+                    continue
+                if self._write_camera_sockets(node, basis, screen):
+                    touched = True
+            if touched:
+                obj.update_tag()
+                done += 1
+        return done
+
+    def apply_rig_basis(self, objects=None):
+        """脸部基座:把**当下骨名**接进材质,再把值推一次。只碰材质节点与对象自定义属性,
+        一个几何节点都不碰(rig_apply 的 docstring 写着为什么基座不是几何点属性)—— 所以
+        骨改个名不该让谁凭空长出一个修改器。"""
+        rig_parts = set(self.RIG.get('parts') or [])
+        if not rig_parts:
+            return 0
+        done = 0
+        for obj in (objects if objects is not None else bpy.context.scene.objects):
+            if obj.type != 'MESH' or obj.data is None:
+                continue
+            mats = [m for _slot, m in self._stack_slots(obj) if m['ruri_uber_part'] in rig_parts]
+            if not mats:
+                continue
+            arm = self._rig_basis_armature(obj)
+            for mat in mats:
+                self.rig_apply(mat, arm, obj)
+            done += 1
+        # 基座的**值**推一次。接线刚在上面做完,但值一直只由依赖图 / 帧变化两个 handler 推
+        # —— 那两个在 --background 里一次都不响,于是脸上的 UNITY_MATRIX_M 列全读到
+        # 「属性不存在」= 0,头部朝向塌成零向量,SDF 取样整个错位,脸就是黑的。
+        self.push_rig_basis()
+        return done
+
+    def apply_vertex_stage(self, objects=None, camera=None):
+        """壳层位移 + 反壳描边(同树虚拟几何)。**只由「刚从游戏导入的这批对象」触发**:这里建的
+        是拓扑,而拓扑的判据(这张材质有没有描边 pass、宽度是不是 0)说的是导入那一刻的游戏真值。
+
+        相机动了只重灌 uniform(push_camera_basis),骨改名了只重接基座(apply_rig_basis),
+        两条都不再进这里。它们曾经全走这一条,代价是推一下镜头就全场重建,用户手删掉的修改器
+        自己长回来 —— 而画面上没有任何东西说明是谁加的。"""
+        scene = bpy.context.scene
+        cam = camera or scene.camera
+        if cam is None:
+            print('[ruri-vertex] 场景无活动相机:描边壳照建,视图基留组默认;设好 scene.camera 后会自己重灌。', flush=True)
+        screen = self._camera_screen(scene, cam)
+        done = 0
+        for obj in [o for o in (objects if objects is not None else scene.objects)
+                    if not o.name.startswith('RuriOL ')]:
+            if obj.type != 'MESH' or obj.data is None:
+                continue
+            slots = self._stack_slots(obj)
+            vert_slots = [(i, m) for i, m in slots if m['ruri_uber_part'] in self.VERTEX_PARTS]
+            # 家族声明本栈的对象不进宿主阴影图(卡通着色经 ShadowAttenuation 自己求遮蔽)才关;
+            # 其余家族投不投影由导入时的游戏数据定(shader 有没有启用的 ShadowCaster 趟),这里不碰。
+            if slots and not self.HOST_SHADOW_CASTERS and obj.visible_shadow:
+                obj.visible_shadow = False
+
+            def _outline_on(mat):
+                # 真判据四连:①该 part 的游戏 shader 有描边 pass;②材质没自禁它;③宽度>0;④_BaseColor.a>0。
+                # 相机在否不参与判据。①不能省:disabledShaderPasses 只记材质**主动关掉**的 pass,
+                # shader 本就没有描边 pass 的部件(CharacterNPR_VFX)不在里面,而它的 _OutlineWidth
+                # 是换 shader 时留下的历史键 —— 只看②③④就会给它凭空长一圈壳。
+                if not self.PART_META[mat['ruri_uber_part']].get('outline'):
+                    return False
+                disabled = {str(p).lower() for p in (mat.get('ruri_uber_disabled_passes') or [])}
+                if any('outline' in p for p in disabled):
+                    return False
+                floats, _s, colors = self._mat_meta(mat)
+                base_a = colors.get('_BaseColor', [1, 1, 1, 1])[3]
+                return float(floats.get('_OutlineWidth', 0.0)) > 0.0 and float(base_a) > 0.0
+
+            outline_slots = [(i, m) for i, m in slots if _outline_on(m)]
+            # 顶点腿**只为几何而存在**。没有壳位移也没有描边 ⇒ 这个对象根本不该有修改器;
+            # 留着旧树 = 关掉描边之后渲染里还画着旧壳(show_render 默认开)。
+            if not vert_slots and not outline_slots:
+                stale_mod = obj.modifiers.get(self.VTX_MODIFIER)
+                if stale_mod is not None:
+                    stale_tree = stale_mod.node_group
+                    obj.modifiers.remove(stale_mod)
+                    if stale_tree is not None and stale_tree.users == 0:
+                        bpy.data.node_groups.remove(stale_tree)
+                continue
+            tree_name = self.VTX_TREE_PREFIX + obj.name
+            old = bpy.data.node_groups.get(tree_name)
+            mod = obj.modifiers.get(self.VTX_MODIFIER)
+            knobs = self._vtx_knob_rows()
+            state = {'keys': {}, 'templates': {}, 'values': {}}
+            panels = {}
+            if old is not None:
+                bpy.data.node_groups.remove(old)
+            mt = bpy.data.node_groups.new(tree_name, 'GeometryNodeTree')
+            mt.interface.new_socket(name='Geometry', in_out='INPUT', socket_type='NodeSocketGeometry')
+            mt.interface.new_socket(name='Geometry', in_out='OUTPUT', socket_type='NodeSocketGeometry')
+            gin = mt.nodes.new('NodeGroupInput')
+            gout = mt.nodes.new('NodeGroupOutput')
+
+            def nd(t_):
+                return mt.nodes.new(t_)
+
+            def nattr(name, dtype):
+                a = nd('GeometryNodeInputNamedAttribute')
+                a.data_type = dtype
+                a.inputs['Name'].default_value = name
+                return a.outputs['Attribute']
+
+            mat_idx = nattr('material_index', 'INT')
+
+            def slot_sel(slot):
+                eq = nd('ShaderNodeMath')
+                eq.operation = 'COMPARE'
+                mt.links.new(mat_idx, eq.inputs[0])
+                eq.inputs[1].default_value = float(slot)
+                eq.inputs[2].default_value = 0.5
+                return eq.outputs[0]
+
+            def swap_yz(sock):
+                sep = nd('ShaderNodeSeparateXYZ')
+                mt.links.new(sock, sep.inputs[0])
+                comb = nd('ShaderNodeCombineXYZ')
+                mt.links.new(sep.outputs[0], comb.inputs[0])
+                mt.links.new(sep.outputs[2], comb.inputs[1])
+                mt.links.new(sep.outputs[1], comb.inputs[2])
+                return comb.outputs[0]
+
+            tbn_cache = []
+
+            def uv_tangent(swap):
+                uv = nattr('UVMap', 'FLOAT_VECTOR')
+                if swap:
+                    sep = nd('ShaderNodeSeparateXYZ')
+                    mt.links.new(uv, sep.inputs[0])
+                    comb = nd('ShaderNodeCombineXYZ')
+                    mt.links.new(sep.outputs[1], comb.inputs[0])
+                    mt.links.new(sep.outputs[0], comb.inputs[1])
+                    uv = comb.outputs[0]
+                node = nd('GeometryNodeUVTangent')
+                node.inputs['Method'].default_value = 'Exact'
+                mt.links.new(uv, node.inputs['UV'])
+                return node.outputs['Tangent']
+
+            def tangent_basis():
+                """(tangentOS, w) —— 宿主按 UV 现算的切线基,零烘焙属性。
+
+                喂对调过的 UV 得到 v 方向的切线,符号由此反解。取的是 **Unity 口径**的 w:
+                顶点段图把 tangentOS 先 Y/Z 对调换到 Unity 空间再用,那次换轴是反射
+                (det = -1),叉积随之反号 ⇒ w_unity = -w_blender,所以写 cross(T,N) 而不是
+                cross(N,T)。读属性那条老路要求每张网格
+                事先烘好 ruri_tangent/ruri_tangent_sign,而 Named Attribute **缺属性与读到
+                零向量无法区分**,改过拓扑的网格会保留属性名把新增 corner 填零 —— 切线基
+                静默塌掉而一个字不报。"""
+                if not tbn_cache:
+                    tangent = uv_tangent(False)
+                    tangent_v = uv_tangent(True)
+                    normal = nd('GeometryNodeInputNormal').outputs['Normal']
+                    cross = nd('ShaderNodeVectorMath')
+                    cross.operation = 'CROSS_PRODUCT'
+                    mt.links.new(tangent, cross.inputs[0])
+                    mt.links.new(normal, cross.inputs[1])
+                    dot = nd('ShaderNodeVectorMath')
+                    dot.operation = 'DOT_PRODUCT'
+                    mt.links.new(cross.outputs['Vector'], dot.inputs[0])
+                    mt.links.new(tangent_v, dot.inputs[1])
+                    sign = nd('ShaderNodeMath')
+                    sign.operation = 'SIGN'
+                    mt.links.new(dot.outputs['Value'], sign.inputs[0])
+                    tbn_cache.append((tangent, sign.outputs['Value']))
+                return tbn_cache[0]
+
+            geo = gin.outputs[0]
+            basis = self._camera_basis(obj, cam)
+            # ① 壳层位移(共享模板 + 逐实例灌值,选区 = 材质槽;贴图与旋钮抬到修改器接口)。
+            for slot, mat in vert_slots:
+                part = mat['ruri_uber_part']
+                template_name = self.VERTEX_PARTS[part]
+                gn = nd('GeometryNodeGroup')
+                gn.node_tree = self.group(template_name)
+                gn['ruri_vtx_mat'] = mat.name
+                floats, st, colors = self._mat_meta(mat)
+                self._fill_uniform_sockets(gn, floats, st, colors)
+                wires = {'input_positionOS': nd('GeometryNodeInputPosition').outputs['Position'],
+                         'input_normalOS': nd('GeometryNodeInputNormal').outputs['Normal'],
+                         'input_tangentOS': tangent_basis()[0],
+                         'input_tangentOS_w': tangent_basis()[1],
+                         'input_texcoord': nattr('UVMap', 'FLOAT_VECTOR'),
+                         'input_texcoord1': nattr('UV1', 'FLOAT_VECTOR'),
+                         'input_texcoord2': nattr('UV2', 'FLOAT_VECTOR')}
+                for sock in gn.inputs:
+                    src = wires.get(sock.name)
+                    if src is not None:
+                        mt.links.new(src, sock)
+                    elif sock.name == 'input_color':
+                        sock.default_value = (1.0, 1.0, 1.0)
+                    elif sock.name == 'input_color_w':
+                        sock.default_value = 1.0
+                self._write_camera_sockets(gn, basis, screen)
+                self._vtx_expose(mt, gin, gn, mat, knobs, panels, template_name, state,
+                                 self._material_images(mat))
+                self._vtx_own_samplers(gn, self._material_images(mat))
+                out_sock = gn.outputs.get('ret_positionWS')
+                if out_sock is None:
+                    continue
+                sp = nd('GeometryNodeSetPosition')
+                mt.links.new(geo, sp.inputs['Geometry'])
+                mt.links.new(slot_sel(slot), sp.inputs['Selection'])
+                mt.links.new(swap_yz(out_sock), sp.inputs['Position'])
+                geo = sp.outputs['Geometry']
+            # ② 反壳描边 = 同树虚拟几何:分叉、逐槽外扩、删无描边面、写 ruri_outline 面属性、Join 回本体。
+            stale_ol = bpy.data.objects.get('RuriOL ' + obj.name)
+            if stale_ol is not None:
+                bpy.data.objects.remove(stale_ol, do_unlink=True)
+            if outline_slots:
+                branch = gin.outputs[0]
+                for slot, mat in outline_slots:
+                    floats, st, colors = self._mat_meta(mat)
+                    og = nd('GeometryNodeGroup')
+                    og.node_tree = self.group(self.OUTLINE_TEMPLATE)
+                    og['ruri_vtx_mat'] = mat.name
+                    self._write_camera_sockets(og, basis, screen)
+                    # 材质属性走与壳位移同一条 raw 直灌(socket 名 = 游戏属性名),不在这里点名任何一个:
+                    # 描边模板的接口是**图自己决定**的 —— 真源那个 Z 偏置是光栅深度偏置,本宿主不发射
+                    # (见账目),于是它在图上是死值、根本没有 socket。按名硬索引就会 KeyError。
+                    self._fill_uniform_sockets(og, floats, st, colors)
+                    # mask 采样 UV = uv0×_BaseMap_ST+zw(与片元 varying 同源,不是 _OutlineMask 自己的 ST)。
+                    bst = st.get(self.ST_SLOT, [1.0, 1.0, 0.0, 0.0])
+                    og.inputs['mask_st_scale'].default_value = (float(bst[0]), float(bst[1]), 0.0)
+                    og.inputs['mask_st_offset'].default_value = (float(bst[2]), float(bst[3]), 0.0)
+                    self._vtx_expose(mt, gin, og, mat, knobs, panels, self.OUTLINE_TEMPLATE, state,
+                                     self._material_images(mat))
+                    self._vtx_own_samplers(og, self._material_images(mat))
+                    sp = nd('GeometryNodeSetPosition')
+                    mt.links.new(branch, sp.inputs['Geometry'])
+                    mt.links.new(slot_sel(slot), sp.inputs['Selection'])
+                    mt.links.new(og.outputs['offset'], sp.inputs['Offset'])
+                    branch = sp.outputs['Geometry']
+                keep = None
+                for slot, _mat in outline_slots:
+                    sel = slot_sel(slot)
+                    if keep is None:
+                        keep = sel
+                    else:
+                        mx = nd('ShaderNodeMath')
+                        mx.operation = 'MAXIMUM'
+                        mt.links.new(keep, mx.inputs[0])
+                        mt.links.new(sel, mx.inputs[1])
+                        keep = mx.outputs[0]
+                drop = nd('ShaderNodeMath')
+                drop.operation = 'SUBTRACT'
+                drop.inputs[0].default_value = 1.0
+                mt.links.new(keep, drop.inputs[1])
+                dg = nd('GeometryNodeDeleteGeometry')
+                dg.domain = 'FACE'
+                mt.links.new(branch, dg.inputs['Geometry'])
+                mt.links.new(drop.outputs[0], dg.inputs['Selection'])
+                sa = nd('GeometryNodeStoreNamedAttribute')
+                sa.data_type = 'FLOAT'
+                sa.domain = 'FACE'
+                sa.inputs['Name'].default_value = 'ruri_outline'
+                sa.inputs['Value'].default_value = 1.0
+                mt.links.new(dg.outputs['Geometry'], sa.inputs['Geometry'])
+                jn = nd('GeometryNodeJoinGeometry')
+                mt.links.new(geo, jn.inputs[0])
+                mt.links.new(sa.outputs['Geometry'], jn.inputs[0])
+                geo = jn.outputs['Geometry']
+            mt.links.new(geo, gout.inputs[0])
+            mt['ruri_vtx_keys'] = state['keys']
+            mt['ruri_vtx_templates'] = state['templates']
+            if mod is None:
+                mod = obj.modifiers.new(self.VTX_MODIFIER, 'NODES')
+            mod.node_group = mt
+            # 换树时 Blender 按 identifier 顺延旧值,而 identifier 与「哪个材质的哪个属性」
+            # 没有关系 —— 逐格显式写回,别让上一棵树的序号决定这一棵树的值。
+            for identifier, value in state['values'].items():
+                port = getattr(mod.properties.inputs, identifier, None)
+                if port is None:
+                    continue
+                try:
+                    port.value = value
+                except (TypeError, ValueError):
+                    pass
+            # 脚本写修改器输入**不打依赖图标记**(实测 5.2.1:连 view_layer.update() 都刷不出来,
+            # 只有 update_tag 才让求值副本跟上)。UI 拖滑块走的是另一条,不受影响。
+            obj.update_tag()
+            # 关掉显示开关的修改器整条不求值 ⇒ 基座属性一个点都不写 ⇒ 材质端退回单位阵,
+            # 视口里 SDF 停在绑定姿势而渲染是对的。这是用户自己的开关,不擅自改;但必须说出来。
+            if vert_slots:
+                # 20 层透明壳叠深 > Cycles 默认 transparent_max_bounces,穿透壳堆的光线提前截断发黑。
+                try:
+                    if scene.cycles.transparent_max_bounces < 32:
+                        scene.cycles.transparent_max_bounces = 32
+                except AttributeError:
+                    pass
+            done += 1
+            print('[ruri-vertex] {0}: shell x{1} outline x{2} knob x{3}'.format(
+                obj.name, len(vert_slots), len(outline_slots), len(state['keys'])), flush=True)
+        return done
+
+    # ==================== 材质参数面板(读写路径;面板本体由宿主统一画) ====================
+
+    def _panel_rows(self):
+        for group in self.INTERFACE:
+            for row in group['rows']:
+                yield row
+
+    def _panel_insts(self, mat):
+        nt = mat.node_tree
+        if nt is None:
+            return []
+        return sorted((n for n in nt.nodes if n.get('ruri_inst') is not None),
+                      key=lambda n: int(n['ruri_inst']))
+
+    def _panel_vertex_nodes(self, mat):
+        """这张材质在顶点腿上的组实例。身份烙在实例上(建的时候写的),不靠「克隆组按材质命名」
+        这种把身份编进名字的老办法 —— 模板现在是**共享**的,名字里没有材质。"""
+        nodes = []
+        for obj in bpy.data.objects:
+            mod = obj.modifiers.get(self.VTX_MODIFIER)
+            tree = getattr(mod, 'node_group', None) if mod is not None else None
+            if tree is None:
+                continue
+            for node in tree.nodes:
+                if node.get('ruri_vtx_mat') == mat.name:
+                    nodes.append(node)
+        return nodes
+
+    @staticmethod
+    def _panel_touch(mat):
+        if mat.node_tree is not None:
+            mat.node_tree.update_tag()
+        mat.update_tag()
+
+    def panel_claims(self, mat):
+        # 判据 = 栈身份烙印(ruri_uber_part 每个栈都写,拿它当判据 = 一张材质被 N 个栈同时认领)。
+        return mat is not None and mat.get('ruri_uber_stack') == self.PANEL_KEY
+
+    def panel_rig(self, mat, armature=None):
+        """基座骨这一行(None = 这张材质的 part 不用这座桥)。宿主交活骨架,生成物答
+        「这张材质记的是哪根骨(Unity 身份)、在这副骨架上现在叫什么」。"""
+        prop = self.RIG.get('prop') or ''
+        if not prop or mat.get('ruri_uber_part') not in set(self.RIG.get('parts') or []):
+            return None
+        unity = self.rig_bone_of(mat)
+        return {
+            'prop': prop,
+            'label': self.RIG.get('label') or prop,
+            'unity': unity,
+            'bone': self.rig_resolve_bone(armature, unity),
+            'declared': self.RIG.get('bone') or '',
+        }
+
+    def panel_write_rig(self, mat, armature, bone_name):
+        """选了一根活骨 → 记它的 **Unity 身份**,再给用这张材质的对象重接基座。
+
+        存 Blender 骨名等于把这条绑定做成「改一次名就断且毫无痕迹」的东西,所以没有身份
+        印记的骨直接拒收并说明白 —— 返回 (成功?, 说给用户听的话)。"""
+        prop = self.RIG.get('prop') or ''
+        if not prop:
+            return False, '本栈没有骨骼基座桥。'
+        if not bone_name:
+            mat[prop] = ''
+            return True, '已清空基座骨:这张材质回到绑定姿势基。'
+        api = self._rig_identity_api('rig_unity_name_fn')
+        unity = api(armature, bone_name) or '' if (api is not None and armature is not None) else ''
+        if not unity:
+            return False, "骨 '{0}' 没有导入器的身份印记,记下来改一次名就断 —— 换一根导入器建的骨。".format(bone_name)
+        mat[prop] = unity
+        users = [o for o in bpy.context.scene.objects
+                 if o.type == 'MESH' and o.data is not None
+                 and any(slot is mat for slot in o.data.materials)]
+        self.apply_rig_basis(objects=users)
+        return True, "基座骨 = {0}(Unity 身份 {1}),已给 {2} 个对象重接基座。".format(
+            bone_name, unity, len(users))
+
+    def panel_write(self, mat, row, value):
+        """面板值 → 快照(真源)→ 表列像素 + 顶点腿克隆输入。改参 = 改像素,零树更新。"""
+        name = row['name']
+        kind = row['kind']
+        insts = self._panel_insts(mat)
+        # 面板里拧的是作者值(与 Unity 检视面同一个数);直写 socket 的那几条是「值→uniform」,
+        # 与 _mat_compose 同一步,必须同样线性化。
+        srgb = name in self.SRGB_PARAMS
+        if kind in ('SWITCH', 'VALUE', 'SLIDER', 'INT'):
+            scalar = (1.0 if value else 0.0) if kind == 'SWITCH' else float(value)
+            wired = _srgb_to_linear(scalar) if srgb else scalar
+            for grp in insts:
+                sock = grp.inputs.get(name)
+                if sock is not None and not sock.is_linked:
+                    sock.default_value = wired
+            self._vtx_panel_write(mat, name, wired)
+            floats = dict(mat.get('ruri_uber_floats') or {})
+            floats[name] = scalar
+            mat['ruri_uber_floats'] = floats
+            self._param_write(mat)
+        else:
+            vec4 = [float(v) for v in value] + [0.0] * 4
+            vec4 = vec4[:4]
+            xyz = ((_srgb_to_linear(vec4[0]), _srgb_to_linear(vec4[1]), _srgb_to_linear(vec4[2]))
+                   if srgb else (vec4[0], vec4[1], vec4[2]))
+            for grp in insts:
+                sock = grp.inputs.get(name)
+                if sock is not None and not sock.is_linked:
+                    sock.default_value = xyz
+                tail = grp.inputs.get(name + '_w')
+                if tail is not None and not tail.is_linked and row['size'] >= 4:
+                    tail.default_value = vec4[3]
+            self._vtx_panel_write(mat, name, xyz)
+            if row['size'] >= 4:
+                self._vtx_panel_write(mat, name + '_w', vec4[3])
+            colors = _mixed(mat.get('ruri_uber_colors'))
+            colors[name] = vec4
+            mat['ruri_uber_colors'] = colors
+            self._param_write(mat)
+        self._panel_touch(mat)
+
+    def panel_write_image(self, mat, row, image):
+        """贴图槽换图;清空 = 回落中性占位。没绑图的槽走导入期同一条 _wire_fetch/_sample 建线链。"""
+        name = row['name']
+        part = mat.get('ruri_uber_part', '')
+        target = image
+        imgs = dict(mat.get('ruri_uber_images') or {})
+        if image is None:
+            imgs.pop(name, None)
+        else:
+            imgs[name] = image.name
+        mat['ruri_uber_images'] = imgs
+        slot_rows = ([r[0] for r in self.part(part)['params'] if _image_row_slot(r[0]) == name]
+                     if part in self.m['parts'] else [])
+        if slot_rows:
+            cols = _mixed(mat.get('ruri_uber_colors'))
+            fresh = self._image_rows(part, {name: target} if target is not None else {})
+            for row_name in slot_rows:
+                if row_name in fresh:
+                    cols[row_name] = fresh[row_name]
+                else:
+                    cols.pop(row_name, None)
+            mat['ruri_uber_colors'] = cols
+            self._param_write(mat)
+
+        def swap(tree, depth=0):
+            if tree is None or depth > 4 or tree.library is not None:
+                return
+            for node in tree.nodes:
+                if node.type == 'TEX_IMAGE' and _slot_of(node.label or '') == name:
+                    if target is not None:
+                        _swap_image(node, target)
+                elif node.type == 'GROUP':
+                    swap(node.node_tree, depth + 1)
+
+        swapped = [0]
+        if mat.node_tree is not None:
+            for node in mat.node_tree.nodes:
+                if node.type == 'TEX_IMAGE' and _slot_of(node.label or '') == name:
+                    if target is not None:
+                        _swap_image(node, target)
+                        swapped[0] += 1
+                elif node.type == 'GROUP':
+                    swap(node.node_tree, 1)
+        if not swapped[0] and target is not None and image is not None and mat.node_tree is not None \
+                and part in self.m['parts']:
+            g = G(mat.node_tree, is_group=False)
+            ordered = self._panel_insts(mat)
+            spec = self.part(part)
+            for fetch in spec['fetches']:
+                if fetch['slot'] == name and not fetch['env']:
+                    self._wire_fetch(g, part, ordered, fetch, target)
+            for zone in spec['zones']:
+                zone_rows = [f for f in zone['fetches'] if f['slot'] == name and not f['env']]
+                if not zone_rows:
+                    continue
+                binsts = sorted((n for n in mat.node_tree.nodes if n.get('ruri_zone') == zone['sock']),
+                                key=lambda n: int(n['ruri_binst']))
+                if not binsts:
+                    continue
+                for fetch in zone_rows:
+                    src = binsts[fetch['depth']]
+                    heads = binsts[fetch['depth'] + 1:]
+                    color, alpha, _anchor = self._sample(g, part, fetch, target,
+                                                         src.outputs[fetch['sock'] + '_uv'])
+                    self._feed(g, heads, fetch['sock'], color, alpha)
+        # 顶点腿的槽:模板是共享的,**不许**往它的图节点上写(那是所有材质共用的一份)。
+        # 这里只借模板接口那格的中性占位图判色彩空间,值本身经修改器端口落到本材质那一格。
+        for group_node in self._panel_vertex_nodes(mat):
+            self._vtx_own_samplers(group_node, {name: target})
+            sub = group_node.node_tree
+            if sub is None or target is None:
+                continue
+            for item in sub.interface.items_tree:
+                if item.item_type == 'PANEL' or item.in_out != 'INPUT' or item.name != name:
+                    continue
+                holder = getattr(item, 'default_value', None)
+                non_color = (holder is not None and hasattr(holder, 'colorspace_settings')
+                             and holder.colorspace_settings.name == 'Non-Color')
+                _set_colorspace(target, 'Non-Color' if non_color else 'sRGB')
+                if non_color:
+                    _fix_two_channel_layout(target)
+        self._vtx_panel_write(mat, name, target)
+        self._panel_touch(mat)
+
+    def panel_write_st(self, mat, row, tiling, offset):
+        """平铺/偏移 → _ST socket 对 + 顶点期 uv 变换节点 + 描边 mask ST(同一真值三消费面)。"""
+        name = row['name']
+        st_value = [float(tiling[0]), float(tiling[1]), float(offset[0]), float(offset[1])]
+        st = _mixed(mat.get('ruri_uber_st'))
+        st[name] = st_value
+        mat['ruri_uber_st'] = st
+        self._param_write(mat)
+        for grp in self._panel_insts(mat):
+            sock = grp.inputs.get(name + '_ST')
+            if sock is not None and not sock.is_linked:
+                sock.default_value = (st_value[0], st_value[1], st_value[2])
+            tail = grp.inputs.get(name + '_ST_w')
+            if tail is not None and not tail.is_linked:
+                tail.default_value = st_value[3]
+        self._vtx_panel_write(mat, name + '_ST', (st_value[0], st_value[1], st_value[2]))
+        self._vtx_panel_write(mat, name + '_ST_w', st_value[3])
+        if row.get('st_node') and mat.node_tree is not None:
+            for node in mat.node_tree.nodes:
+                if node.label == row['st_node']:
+                    node.inputs['Scale'].default_value = (st_value[0], st_value[1], 1.0)
+                    node.inputs['Location'].default_value = (st_value[2], st_value[3], 0.0)
+            for group_node in self._panel_vertex_nodes(mat):
+                scale_sock = group_node.inputs.get('mask_st_scale')
+                offset_sock = group_node.inputs.get('mask_st_offset')
+                if scale_sock is not None:
+                    scale_sock.default_value = (st_value[0], st_value[1], 0.0)
+                if offset_sock is not None:
+                    offset_sock.default_value = (st_value[2], st_value[3], 0.0)
+        self._panel_touch(mat)
+
+    @staticmethod
+    def _panel_bound_image(mat, slot):
+        def walk(tree, depth=0):
+            if tree is None or depth > 4:
+                return None
+            for node in tree.nodes:
+                if node.type == 'TEX_IMAGE' and _slot_of(node.label or '') == slot:
+                    img = node.image
+                    if img is not None and not img.get('ruri_placeholder'):
+                        return img
+                elif node.type == 'GROUP':
+                    hit = walk(node.node_tree, depth + 1)
+                    if hit is not None:
+                        return hit
+            return None
+        return walk(mat.node_tree)
+
+    def panel_read(self, mat):
+        values, images, st_out = {}, {}, {}
+        insts = self._panel_insts(mat)
+        if not insts:
+            return {'values': values, 'images': images, 'st': st_out}
+        first = insts[0]
+        floats = dict(mat.get('ruri_uber_floats') or {})
+        st = _mixed(mat.get('ruri_uber_st'))
+        colors = _mixed(mat.get('ruri_uber_colors'))
+        bound = dict(mat.get('ruri_uber_images') or {})
+        for row in self._panel_rows():
+            name = row['name']
+            kind = row['kind']
+            if kind == 'TEXTURE':
+                img = bpy.data.images.get(bound.get(name, ''))
+                if img is None:
+                    img = self._panel_bound_image(mat, name)
+                images[name] = img
+                value = st.get(name)
+                if value is None:
+                    value = self._param_read(mat, name + '_ST')
+                if value is None:
+                    sock = first.inputs.get(name + '_ST')
+                    if sock is not None and not sock.is_linked:
+                        tail = first.inputs.get(name + '_ST_w')
+                        raw = sock.default_value
+                        value = [raw[0], raw[1], raw[2],
+                                 tail.default_value if tail is not None else 0.0]
+                if value is not None:
+                    st_out[name] = (value[0], value[1], value[2], value[3])
+                continue
+            sock = first.inputs.get(name)
+            if kind in ('SWITCH', 'VALUE', 'SLIDER', 'INT'):
+                value = floats.get(name)
+                if value is None:
+                    value = self._param_read(mat, name)
+                    if isinstance(value, list):
+                        value = value[0]
+                if value is None and sock is not None and not sock.is_linked and sock.type == 'VALUE':
+                    value = sock.default_value
+                if value is None:
+                    continue
+                values[name] = (bool(value > 0.5) if kind == 'SWITCH'
+                                else int(value) if kind == 'INT' else float(value))
+            else:
+                value = colors.get(name)
+                if value is None:
+                    value = self._param_read(mat, name)
+                    if isinstance(value, float):
+                        value = None
+                if value is None and sock is not None and not sock.is_linked and sock.type == 'VECTOR':
+                    tail = first.inputs.get(name + '_w')
+                    raw = sock.default_value
+                    value = [raw[0], raw[1], raw[2],
+                             tail.default_value if tail is not None and not tail.is_linked else 1.0]
+                if value is None:
+                    continue
+                spread = (list(value) + [0.0] * 4)[:row['size']]
+                values[name] = tuple(float(x) for x in spread)
+        return {'values': values, 'images': images, 'st': st_out}
+
+    def _panel_slots(self, mat):
+        part = mat.get('ruri_uber_part', '')
+        slots = set(dict(mat.get('ruri_uber_images') or {}).keys())
+        if part in self.m['parts']:
+            spec = self.part(part)
+            for fetch in spec['fetches']:
+                slots.add(fetch['slot'])
+            for zone in spec['zones']:
+                for fetch in zone['fetches']:
+                    slots.add(fetch['slot'])
+        for group_node in self._panel_vertex_nodes(mat):
+            sub = group_node.node_tree
+            if sub is None:
+                continue
+            for node in sub.nodes:
+                if node.bl_idname == 'GeometryNodeImageTexture' and node.label:
+                    slots.add(_slot_of(node.label))
+        return slots
+
+    def panel_rows(self, mat):
+        """这张材质真正有的行(判据 = 图自己:变体折叠的死支参数没有 socket)。"""
+        insts = self._panel_insts(mat)
+        slots = self._panel_slots(mat)
+        out = []
+        for group in self.INTERFACE:
+            rows = []
+            for row in group['rows']:
+                if row['kind'] == 'TEXTURE':
+                    if row['name'] not in slots:
+                        continue
+                    has_st = bool(row.get('st_node')) or any(
+                        grp.inputs.get(row['name'] + '_ST') is not None for grp in insts)
+                    row = dict(row, has_st=has_st)
+                elif not any(grp.inputs.get(row['name']) is not None for grp in insts):
+                    continue
+                rows.append(row)
+            if rows:
+                out.append({'name': group['name'], 'gate': group['gate'], 'rows': rows})
+        return out
+    # ==================== 合成器后处理级(kind = post 的栈) ====================
+    # Blender 5.2 契约(真渲染实测,写错是静默全黑):渲染结果只能由组内 CompositorNodeRLayers 取,
+    # 出口走 NodeGroupOutput;喂组输入 socket 拿到的是全 0。
+
+    POST_SAVED_KEY = 'ruri_post_saved_state'
+
+    def _post_remember(self, scene):
+        if self.POST_SAVED_KEY in scene:
+            return
+        previous = scene.compositing_node_group
+        scene[self.POST_SAVED_KEY] = {
+            'group': previous.name if previous is not None else '',
+            'use_compositing': scene.render.use_compositing,
+            'view_transform': scene.view_settings.view_transform,
+            'look': scene.view_settings.look,
+        }
+
+    def installed(self, scene):
+        tree = bpy.data.node_groups.get(self.post['scene_tree'])
+        return tree is not None and scene.compositing_node_group is tree
+
+    def stage_node(self, scene):
+        tree = scene.compositing_node_group
+        if tree is None:
+            return None
+        for node in tree.nodes:
+            if node.bl_idname == 'CompositorNodeGroup' and node.node_tree is not None \
+                    and node.node_tree.name == self.post['group']:
+                return node
+        return None
+
+    def extra_inputs(self):
+        """颜色之外、由宿主驱动的输入口名(内核形参顺序)。"""
+        return list(self.post.get('extra_in') or [])
+
+    def set_extra(self, scene, values):
+        """按 extra_inputs() 的顺序往本级组写输入口。缺一口就拒绝 —— 半份参数比不接更坏
+        (0 是恒等,漏掉的那一口会悄悄回到恒等,画面差一点点而没人知道)。"""
+        names = self.extra_inputs()
+        if len(values) != len(names):
+            raise ValueError('[ruri-post] 本级要 {0} 个宿主输入 {1},收到 {2} 个'.format(
+                len(names), names, len(values)))
+        node = self.stage_node(scene)
+        if node is None:
+            raise RuntimeError('[ruri-post] 场景的合成树里没有本级 {0}:先装本级再写输入,写进空处 = 这份调色静默丢失'.format(
+                self.post['group']))
+        for name, value in zip(names, values):
+            socket = node.inputs.get(name)
+            if socket is None:
+                raise KeyError('[ruri-post] 组上没有输入口 {0};有的是 {1}'.format(
+                    name, [s.name for s in node.inputs]))
+            socket.default_value = value
+        return len(names)
+
+    def install(self, scene):
+        self._post_remember(scene)
+        group = self.group(self.post['group'])
+        stale = bpy.data.node_groups.get(self.post['scene_tree'])
+        if stale is not None:
+            bpy.data.node_groups.remove(stale)
+        tree = bpy.data.node_groups.new(self.post['scene_tree'], 'CompositorNodeTree')
+        tree.interface.new_socket(name='Image', in_out='OUTPUT', socket_type='NodeSocketColor')
+        render = tree.nodes.new('CompositorNodeRLayers')
+        split = tree.nodes.new('CompositorNodeSeparateColor')
+        pack = tree.nodes.new('ShaderNodeCombineXYZ')
+        stage = tree.nodes.new('CompositorNodeGroup')
+        stage.node_tree = group
+        unpack = tree.nodes.new('ShaderNodeSeparateXYZ')
+        join = tree.nodes.new('CompositorNodeCombineColor')
+        output = tree.nodes.new('NodeGroupOutput')
+        tree.links.new(render.outputs['Image'], split.inputs['Image'])
+        for channel, axis in (('Red', 'X'), ('Green', 'Y'), ('Blue', 'Z')):
+            tree.links.new(split.outputs[channel], pack.inputs[axis])
+        tree.links.new(pack.outputs['Vector'], stage.inputs[self.post['color_in']])
+        tree.links.new(stage.outputs[self.post['color_out']], unpack.inputs['Vector'])
+        for channel, axis in (('Red', 'X'), ('Green', 'Y'), ('Blue', 'Z')):
+            tree.links.new(unpack.outputs[axis], join.inputs[channel])
+        tree.links.new(render.outputs['Alpha'], join.inputs['Alpha'])
+        tree.links.new(join.outputs['Image'], output.inputs['Image'])
+        scene.compositing_node_group = tree
+        scene.render.use_compositing = True
+        scene.view_settings.view_transform = 'Standard'
+        scene.view_settings.look = 'None'
+        for screen in bpy.data.screens:
+            for area in screen.areas:
+                if area.type != 'VIEW_3D':
+                    continue
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.shading.use_compositor = 'ALWAYS'
+                        # 生成栈的材质全部光照来自原生光循环,一盏灯都没有就一片黑;Material Preview
+                        # 出厂关着 Scene Lights(只用工作室 HDRI),所以装后处理链时一并打开,
+                        # 否则默认视口里游戏内容黑一片、只有 Rendered 才亮(实测视口 34% 纯黑)。
+                        space.shading.use_scene_lights = True
+        return tree
+
+    def uninstall(self, scene):
+        saved = scene.get(self.POST_SAVED_KEY)
+        scene_tree = bpy.data.node_groups.get(self.post['scene_tree'])
+        if scene.compositing_node_group is scene_tree:
+            scene.compositing_node_group = None
+        if scene_tree is not None:
+            bpy.data.node_groups.remove(scene_tree)
+        if saved is None:
+            return False
+        restored = bpy.data.node_groups.get(saved.get('group') or '')
+        if restored is not None:
+            scene.compositing_node_group = restored
+        scene.render.use_compositing = bool(saved.get('use_compositing', True))
+        scene.view_settings.view_transform = saved.get('view_transform', 'Standard')
+        scene.view_settings.look = saved.get('look', 'None')
+        del scene[self.POST_SAVED_KEY]
+        return True
+
+    # ==================== 宿主注册 ====================
+
+    def _host_module(self):
+        import importlib
+        return importlib.import_module(self.host['registry_module'])
+
+    def register_host(self):
+        host = self._host_module()
+        stated = self.host.get('world_basis')
+        if stated:
+            answer = [[float(value) for value in row]
+                      for row in getattr(host, self.host.get('world_basis_fn') or 'world_basis')()]
+            if any(abs(answer[i][j] - float(stated[i][j])) > 1e-6 for i in range(3) for j in range(3)):
+                raise RuntimeError('[Ruri] 宿主世界基与生成期声明的不一致:宿主 {0},清单 {1}。'
+                                   '模板组按清单那份物化,照这样挂上去世界量全按错轴算 -- 拒绝加载,'
+                                   '改配方的 Host.WorldBasis 后重新生成。'.format(answer, stated))
+        if self.post is not None:
+            fn = self.host.get('register_post_stage_fn')
+            if fn:
+                getattr(host, fn)(self)
+            return
+        getattr(host, self.host['register_fn'])(self.provider)
+        getattr(host, self.host['register_vertex_stage_fn'])(self.apply_vertex_stage)
+        # 顶点腿拆成三段落在三个事实上:建树只认导入,相机只重灌 uniform,骨名只重接基座。
+        # 合在一条上的代价是推一下镜头就按材质现值重判一次描边 —— 用户删掉的修改器会自己回来。
+        host.register_camera_stage(self.push_camera_basis)
+        host.register_rig_stage(self.apply_rig_basis)
+        host.register_capability_rewire(self.rewire_capabilities)
+        host.register_light_role_refresh(refresh_main_light_role)
+        getattr(host, self.host['register_level_globals_fn'])(self.level_global_bases)
+        getattr(host, self.host['register_volume_textures_fn'])(self.level_image_layouts)
+        host.register_material_panel(self)
+        # 基座每帧要跟着骨骼走。帧变化与交互摆姿两条都要挂:前者放动画,后者拖骨头。
+        # 写的是**对象自定义属性**(逐对象 UBO),不碰材质树;值没变就不写,所以挂在
+        # depsgraph 后面也不会自激。
+        for handlers in (bpy.app.handlers.frame_change_post,
+                         bpy.app.handlers.depsgraph_update_post):
+            if self.push_rig_basis not in handlers:
+                handlers.append(self.push_rig_basis)
+        # 修改器面板是这批 uniform 的第二个编辑面;Blender 不给它改动回调,只能依赖图落定后比对。
+        if self.sync_vertex_knobs not in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.append(self.sync_vertex_knobs)
+
+    def unregister_host(self):
+        host = self._host_module()
+        if self.post is not None:
+            fn = self.host.get('unregister_post_stage_fn')
+            if fn:
+                getattr(host, fn)(self)
+            return
+        if self.sync_vertex_knobs in bpy.app.handlers.depsgraph_update_post:
+            bpy.app.handlers.depsgraph_update_post.remove(self.sync_vertex_knobs)
+        host.unregister_material_panel(self)
+        getattr(host, self.host['unregister_fn'])(self.provider)
+        getattr(host, self.host['unregister_vertex_stage_fn'])(self.apply_vertex_stage)
+        host.unregister_camera_stage(self.push_camera_basis)
+        host.unregister_rig_stage(self.apply_rig_basis)
+        host.unregister_capability_rewire(self.rewire_capabilities)
+        host.unregister_light_role_refresh(refresh_main_light_role)
+        getattr(host, self.host['unregister_level_globals_fn'])(self.level_global_bases)
+        getattr(host, self.host['unregister_volume_textures_fn'])(self.level_image_layouts)
+
+
+# ==================== 栈发现(同目录 .blend 即产物;清单不符响亮拒绝) ====================
+
+STACKS = []
+
+
+def _build_stacks():
+    """清单**内联在本模块里**,所以建栈是纯 python —— 插件 register() 跑在 Blender 的受限上下文
+    (`bpy.data` 此刻是 _RestrictData),那时读不了 .blend 里的任何东西,而宿主又要在注册期
+    拿 INTERFACE 建 PropertyGroup。模板 link 因此推迟到第一次真用,见 _linked_group。"""
+    folder = os.path.dirname(os.path.abspath(__file__))
+    stacks = []
+    for manifest in MANIFESTS:
+        path = os.path.join(folder, manifest['blend'])
+        if not os.path.isfile(path):
+            raise RuntimeError('[ruri-uber] 缺配套产物 {0}:全部产物必须同批出货,请重新 codegen'.format(path))
+        stacks.append(Stack(folder, manifest))
+    return stacks
+
+
+@bpy.app.handlers.persistent
+def _restore_projections(_path=None):
+    # 基座 push 的工作单是**进程态**:重开文件就该重建,否则基座冻结在存盘那一刻(静默)。
+    # 这里只打回标记、不当场扫 —— load_post 这一拍场景还没就绪,当场扫会扫出空,
+    # 而"扫过了"这个标记一旦被空场景置上就再也不会重扫(本次真踩)。
+    RIG_DRIVEN.clear()
+    RIG_SCANNED[0] = False
+    # 光清标记不够:**打开文件之后不一定有任何依赖图变更**,于是推送器一次都不跑,
+    # 基座停在存盘那一刻的属性值 —— 而存盘时的姿势未必是打开时显示的那一帧(实测开完
+    # 10 秒 RIG_DRIVEN 仍是 0)。所以补一次性计时器,加载完就推一次;它只在 GUI 会跑,
+    # headless 由 depsgraph 那条覆盖。
+    bpy.app.timers.register(_replay_after_load, first_interval=0.0)
+
+
+def _replay_after_load():
+    # 顺序是有意的:先按真源重算投影(生成图的像素不进 .blend,不重放就是一片
+    # generated_color 的黑),再推基座。timers 契约:返回 None = 只跑这一拍。
+    for stack in STACKS:
+        if stack.post is None:
+            try:
+                stack.restore()
+            except Exception as exc:
+                print('[ruri-uber] {0} 投影重放失败: {1}'.format(stack.PANEL_KEY, exc), flush=True)
+    for stack in STACKS:
+        if stack.post is None and (stack.RIG.get('parts') or []):
+            try:
+                stack.push_rig_basis()
+            except Exception as exc:
+                print('[ruri-uber] 基座首推失败: {0}'.format(exc), flush=True)
+    return None
+
+
+def dump_feature_catalog(path):
+    """把场上已导入材质的开关取值按 part 采集成签名目录(生成器配方 FeatureCatalog 的输入)。
+    只记清单声明过的开关;一张材质一行,去重由生成器按「本 part 真读到的开关」投影后做。"""
+    import json
+    parts = {}
+    for stack in STACKS:
+        toggles = stack.m.get('feature_toggles') or []
+        if not toggles:
+            continue
+        for material in bpy.data.materials:
+            if material.get('ruri_uber_stack') != stack.PANEL_KEY:
+                continue
+            if material.get('ruri_uber_template') is not None:
+                continue
+            floats = material.get('ruri_uber_floats') or {}
+            row = {name: float(floats[name]) for name in toggles if name in floats}
+            parts.setdefault(material.get('ruri_uber_part'), []).append(row)
+    with open(path, 'w', encoding='utf-8') as handle:
+        json.dump({'parts': parts}, handle, ensure_ascii=False, indent=1, sort_keys=True)
+    return sum(len(rows) for rows in parts.values())
+
+
+def register():
+    STACKS.clear()
+    STACKS.extend(_build_stacks())
+    for stack in STACKS:
+        stack.register_host()
+    if _restore_projections not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_restore_projections)
+
+
+def unregister():
+    if _restore_projections in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_restore_projections)
+    for stack in reversed(STACKS):
+        try:
+            stack.unregister_host()
+        except Exception as exc:
+            print('[ruri-uber] 注销失败: {0}'.format(exc), flush=True)
+    STACKS.clear()
