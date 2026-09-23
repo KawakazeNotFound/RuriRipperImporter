@@ -34,12 +34,17 @@ LIGHT_ANGLE = "light.angle"
 #: The colour the light emits per unit of its energy, linear -- any colour
 #: temperature already folded in by the game's own rule.
 LIGHT_COLOR = "light.color"
+#: Whether the light casts shadows.
+LIGHT_SHADOWS = "light.shadows"
+#: How much of the light scatters into a participating medium; zero keeps it out of
+#: one the game lights with a copy of its own.
+LIGHT_VOLUME = "light.volume"
 #: The backdrop level: the constant term of the stage's own baked sky.
 WORLD_COLOR = "world.color"
 #: A per-material parameter of the game's own shading stack.
 CHARACTER_PARAMS = "material.characterParams"
 
-LIGHT_TARGETS = (LIGHT_DIRECTION, LIGHT_ENERGY, LIGHT_ANGLE, LIGHT_COLOR)
+LIGHT_TARGETS = (LIGHT_DIRECTION, LIGHT_ENERGY, LIGHT_ANGLE, LIGHT_COLOR, LIGHT_SHADOWS, LIGHT_VOLUME)
 
 #: The targets an exposure change scales. A radiance moves with the stops; a
 #: direction and an angle do not.

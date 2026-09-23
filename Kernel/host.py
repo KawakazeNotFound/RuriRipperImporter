@@ -171,11 +171,14 @@ class SceneGraph(abc.ABC):
         the browser's "Reset Scene" means."""
 
     @abc.abstractmethod
-    def apply_environment(self, context, ambient):
-        """Stand a level's own sky up as the document's world. ``ambient`` is
-        ``{"label", "coefficients"}``: the sky irradiance as the source's shading
-        stack samples it, nine spherical-harmonic coefficients per channel. Returns
-        how many already-built materials were re-answered against it.
+    def apply_environment(self, context, environment):
+        """Stand the environment a level puts its viewer under up in the document,
+        replacing any stood up before. ``environment`` is ``{"label", "ambient",
+        "light"}``: ``ambient`` is ``{"label", "coefficients"}``, the sky irradiance as
+        the source's shading stack samples it, nine spherical-harmonic coefficients per
+        channel, stood up as the document's world; ``light`` is the level's main light
+        as ``[(target, value)]`` over the :mod:`Kernel.app.staging` LIGHT_* targets.
+        Returns how many already-built materials were re-answered against the world.
 
         Called BEFORE the level's content is built: a material samples the world
         that exists when it is built, and one built against a default world keeps

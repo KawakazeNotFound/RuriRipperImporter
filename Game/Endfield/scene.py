@@ -323,34 +323,35 @@ def _import(context, arguments):
     host = host_port.current()
     if state.reset_scene and host_port.SceneGraph in host.capabilities:
         host.clear_scene(context)
-    # The level's own sky goes up before anything that samples it is built.
-    ambient = datasets.scene_ambient(map_name)
-    if ambient is not None and host_port.SceneGraph in host.capabilities:
-        host.apply_environment(context, ambient)
+    # Everything a level lights with is the environment its volumes put the viewer under, the
+    # way the game resolves it around its camera: wherever the document is looked at from.
+    states = [state_id]
+    anchor = host.source_view_position(context) if host_port.SceneGraph in host.capabilities else None
+    notes = []
+    if host_port.SceneGraph in host.capabilities and anchor is None:
+        notes.append("nothing to look at the level from, so none of its lighting is stood up")
+    # The level's own sky and main light go up before anything that samples them is built.
+    if anchor is not None:
+        host.apply_environment(context, datasets.scene_environment(map_name, anchor, states))
     yield command.Mark(0.15)
     built = loading.load(context, [seed], options)
-    notes = list(built.warnings[:2])
+    notes.extend(built.warnings[:2])
     # Everything the level states for every material, as one state the stacks read live: its
-    # static globals (fog, the default sky SH), its baked irradiance rebuilt as the game's camera
-    # clipmaps and the reflection probes the game's camera would use, both around wherever the
-    # document is looked at from.
-    if host_port.SceneGraph in host.capabilities:
-        anchor = host.source_view_position(context)
-        if anchor is None:
-            notes.append("nothing in the scene to centre the level's lighting on")
-        else:
-            _written, unread = host.apply_level_resources(
-                context, datasets.scene_globals(map_name),
-                [datasets.scene_irradiance(map_name, anchor),
-                 datasets.scene_reflection(map_name, anchor, [state_id])])
-            if unread:
-                notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
+    # globals (fog, the default sky SH), its baked irradiance rebuilt as the game's camera
+    # clipmaps and the reflection probes the game's camera would use.
+    if anchor is not None:
+        _written, unread = host.apply_level_resources(
+            context, datasets.scene_globals(map_name, anchor, states),
+            [datasets.scene_irradiance(map_name, anchor),
+             datasets.scene_reflection(map_name, anchor, states)])
+        if unread:
+            notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
         # The level's volumetric fog, integrated by the host the way the game integrates it.
-        medium = datasets.scene_medium(map_name)
+        medium = datasets.scene_medium(map_name, anchor, states)
         if medium is not None:
             notes.extend(host.apply_medium(context, medium))
     # The level states its own colour grading; a host with a display chain takes it.
-    grading = datasets.scene_grading(map_name)
+    grading = datasets.scene_grading(map_name, anchor, states) if anchor is not None else None
     if grading is not None and host_port.Compositor in host.capabilities:
         host.apply_post_inputs(context, grading["inputs"])
         if grading["white_balance"] > 0.5:

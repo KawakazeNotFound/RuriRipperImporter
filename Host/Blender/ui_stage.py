@@ -26,7 +26,7 @@ import bpy
 import numpy
 from mathutils import Vector
 
-from . import coordinate, material_panel, materialise
+from . import coordinate, derived_state, material_panel, materialise
 from ...Kernel.app import loading, staging
 
 MAIN_CAMERA_TAG = "MainCamera"
@@ -38,6 +38,8 @@ LIGHT_DIRECTION = staging.LIGHT_DIRECTION
 LIGHT_ENERGY = staging.LIGHT_ENERGY
 LIGHT_ANGLE = staging.LIGHT_ANGLE
 LIGHT_COLOR = staging.LIGHT_COLOR
+LIGHT_SHADOWS = staging.LIGHT_SHADOWS
+LIGHT_VOLUME = staging.LIGHT_VOLUME
 WORLD_COLOR = staging.WORLD_COLOR
 
 _XYZ = {"x": 0, "y": 1, "z": 2}
@@ -79,6 +81,8 @@ def apply_environment(context, pairs, name="Endfield Sun", exposure_ev=0.0):
             continue
         sun = sun or _sun(context, name)
         _write_light(sun, target, value, scale)
+    if sun is not None:
+        derived_state.announce(sun)
     return sun
 
 
@@ -137,6 +141,10 @@ def _write_light(obj, target, value, scale):
         components = _vector(value, "rgb")
         if len(components) >= 3:
             data.color = (components[0], components[1], components[2])
+    elif target == LIGHT_SHADOWS:
+        data.use_shadow = _scalar(value) > 0.5
+    elif target == LIGHT_VOLUME:
+        data.volume_factor = _scalar(value)
 
 
 def _world(context, ambient, scale):

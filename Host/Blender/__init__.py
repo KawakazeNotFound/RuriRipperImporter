@@ -25,6 +25,10 @@ from ...Kernel import host as host_port
 #: going stale.
 ADDON = __package__.split(".")[0]
 
+#: The main light a level's environment states, one per document: standing a new
+#: environment up rewrites this light rather than adding a second sun.
+LEVEL_SUN = "Ruri Level Sun"
+
 _BIN_DIR_HINT = ('Set it in Edit > Preferences > Add-ons > RuriRipperImporter > '
                  '"Ruri-RipperHook Bin Dir" (the checkout\'s Source/0Bins/<config>), '
                  'or set the RURI_RIPPERHOOK_BIN environment variable.')
@@ -153,9 +157,12 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         view_layer = (context or bpy.context).view_layer
         view_layer.active_layer_collection = view_layer.layer_collection
 
-    def apply_environment(self, context, ambient):
-        from . import world_builder
-        return world_builder.build(context, ambient["coefficients"], ambient["label"])
+    def apply_environment(self, context, environment):
+        from . import ui_stage, world_builder
+        ambient = environment["ambient"]
+        answered = world_builder.build(context, ambient["coefficients"], ambient["label"])
+        ui_stage.apply_environment(context, environment["light"], LEVEL_SUN)
+        return answered
 
     def apply_post_inputs(self, context, values):
         from . import material_builder

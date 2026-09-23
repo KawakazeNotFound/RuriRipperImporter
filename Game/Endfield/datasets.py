@@ -18,6 +18,7 @@ under its own handle and already cached by (id, args).
 
 from __future__ import annotations
 
+from ...Kernel.app import staging
 from ...Kernel.bridge import cabmap_state
 
 MAPS = "endfield.scene.maps"
@@ -253,34 +254,48 @@ def landmarks(language):
             for row in _rows(LANDMARKS, language=language)]
 
 
-def scene_ambient(map_name):
-    """The sky irradiance this map bakes, off the volume that applies everywhere --
-    nine coefficients per channel, red then green then blue, as the source's own
-    shading stack samples them. The decoder already resolved which of a volume's two
-    blocks is the live one."""
-    rows = _rows(SCENE_AMBIENT, map=map_name)
-    if not rows:
-        return None
-    marked = [row for row in rows if float(row.get("global") or 0) > 0.5]
-    volume = (marked or rows)[0]["volume"]
-    picked = sorted((row for row in rows if row["volume"] == volume),
-                    key=lambda row: int(float(row["index"])))
-    return {"label": volume,
-            "coefficients": [[float(row[channel]) for row in picked]
-                             for channel in ("r", "g", "b")]}
+def _viewer(map_name, anchor, states):
+    """The arguments every camera-centred reading of one map goes by: the viewer, a
+    point in the game's own world, and the scene states whose content streams."""
+    x, y, z = anchor
+    return {"map": map_name, "x": x, "y": y, "z": z, "states": [str(state) for state in states]}
 
 
-def scene_globals(map_name):
-    """The engine globals this map sets for every material, off the volume that applies
-    everywhere, keyed by the engine's own global names -- already packed the way the
-    build packs them, so they go to the shading stacks as they are."""
-    rows = _rows(SCENE_GLOBALS, map=map_name)
-    if not rows:
-        return {}
-    marked = [row for row in rows if float(row.get("global") or 0) > 0.5]
-    volume = (marked or rows)[0]["volume"]
+def scene_environment(map_name, anchor, states):
+    """The environment a viewer at ``anchor`` stands under, off the phase the map's own
+    environment volumes put it under, in the shape
+    :meth:`Kernel.host.SceneGraph.apply_environment` takes: the sky irradiance the phase
+    bakes -- nine coefficients per channel, red then green then blue, as the source's own
+    shading stack samples them -- and its main light as staging targets."""
+    viewer = _viewer(map_name, anchor, states)
+    sky = sorted(_rows(SCENE_AMBIENT, **viewer), key=lambda row: int(float(row["index"])))
+    row = _rows(SCENE_ENVIRONMENT, **viewer)[0]
+
+    def number(name):
+        return float(row[name])
+
+    return {
+        "label": row["volume"],
+        "ambient": {"label": sky[0]["volume"],
+                    "coefficients": [[float(entry[channel]) for entry in sky]
+                                     for channel in ("r", "g", "b")]},
+        "light": [
+            (staging.LIGHT_DIRECTION, {"x": number("lightX"), "y": number("lightY"), "z": number("lightZ")}),
+            (staging.LIGHT_COLOR, {"r": number("lightR"), "g": number("lightG"), "b": number("lightB")}),
+            (staging.LIGHT_ENERGY, number("lightIntensity")),
+            (staging.LIGHT_ANGLE, number("lightRadius")),
+            (staging.LIGHT_SHADOWS, number("lightShadows")),
+            (staging.LIGHT_VOLUME, number("lightVolume")),
+        ],
+    }
+
+
+def scene_globals(map_name, anchor, states):
+    """The engine globals the map sets for every material where a viewer at ``anchor``
+    stands, keyed by the engine's own global names -- already packed the way the build
+    packs them, so they go to the shading stacks as they are."""
     return {row["name"]: tuple(float(row[axis]) for axis in ("x", "y", "z", "w"))
-            for row in rows if row["volume"] == volume}
+            for row in _rows(SCENE_GLOBALS, **_viewer(map_name, anchor, states))}
 
 
 def scene_irradiance(map_name, anchor):
@@ -300,14 +315,14 @@ def scene_reflection(map_name, anchor, states):
         SCENE_REFLECTION, map=map_name, x=x, y=y, z=z, states=[str(state) for state in states])
 
 
-def scene_medium(map_name):
-    """The participating medium one level integrates -- its volumetric fog, off the volume that
-    applies everywhere -- in the shape :meth:`Kernel.host.SceneGraph.apply_medium` takes, or
-    None when the level runs none."""
-    rows = _rows(SCENE_FOG, map=map_name)
+def scene_medium(map_name, anchor, states):
+    """The participating medium the map integrates where a viewer at ``anchor`` stands -- its
+    volumetric fog, off the phase the viewer is under -- in the shape
+    :meth:`Kernel.host.SceneGraph.apply_medium` takes, or None when that phase runs none."""
+    rows = _rows(SCENE_FOG, **_viewer(map_name, anchor, states))
     if not rows:
         return None
-    row = next((r for r in rows if float(r.get("global") or 0) > 0.5), rows[0])
+    row = rows[0]
 
     def number(name):
         return float(row[name])
@@ -338,12 +353,9 @@ def scene_medium(map_name):
     }
 
 
-def scene_grading(map_name):
-    """This map's colour grading, ready for the post stage's own inputs.
-
-    The volume that applies everywhere is the one the level marks global; the rest are
-    local overrides a host would have to blend by camera position, which is a runtime
-    question and not a statement.
+def scene_grading(map_name, anchor, states):
+    """The colour grading the map applies where a viewer at ``anchor`` stands, ready for
+    the post stage's own inputs.
 
     ``inputs`` is keyed by the post stage's own input names and holds the DIFFERENCE from
     identity, which is what those sockets take: an entry parameter's socket default in
@@ -353,20 +365,17 @@ def scene_grading(map_name):
     spelled out rather than applied in bulk: hue is an offset (identity 0) while
     saturation, contrast and the colour filter are multipliers (identity 1).
 
-    ``exposureStops`` is the volume's own exposure compensation, in stops -- zero is
-    identity as it stands, since the multiplier is two to that power. A volume on automatic
+    ``exposureStops`` is the phase's own exposure compensation, in stops -- zero is
+    identity as it stands, since the multiplier is two to that power. A phase on automatic
     exposure adapts to its frame's histogram first, which is not read here, so that comes
     back as its own flag too.
 
     White balance comes back as its own flag: turning a temperature and a tint into LMS
     coefficients happens inside the build's post pass, which is not read here, so a
-    volume that enables it has to be reported rather than graded by an identity that is
-    not the volume's answer.
+    phase that enables it has to be reported rather than graded by an identity that is
+    not the phase's answer.
     """
-    rows = _rows(SCENE_ENVIRONMENT, map=map_name)
-    if not rows:
-        return None
-    row = next((r for r in rows if float(r.get("global") or 0) > 0.5), rows[0])
+    row = _rows(SCENE_ENVIRONMENT, **_viewer(map_name, anchor, states))[0]
     return {
         "white_balance": float(row.get("gradeWhiteBalance") or 0),
         "tonemap": float(row.get("tonemap") or 0),
