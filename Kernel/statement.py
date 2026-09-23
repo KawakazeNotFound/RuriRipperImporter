@@ -509,12 +509,11 @@ class Channel:
 
 
 class Clip:
-    __slots__ = ("key", "name", "skeleton", "archive", "meta", "curves", "_channels")
+    __slots__ = ("key", "name", "archive", "meta", "curves", "_channels")
 
     def __init__(self, row):
         self.key = row["clip"]
         self.name = row["name"]
-        self.skeleton = row["skeleton"]
         #: The archive the clip came out of, as the reader states it.
         self.archive = row["cab"]
         self.meta = json.loads(row["meta"]) if row["meta"] else {}
@@ -690,15 +689,23 @@ class Statement:
         return self._rows(REPORT, lambda table: [
             Report(table.row(index)) for index in range(table.row_count)])
 
-    def clips(self, skeleton="", paths=(), avatar=""):
-        """The clips these seeds carry, re-anchored onto a target skeleton.
+    def clips(self, *, paths, avatar):
+        """The clips these seeds carry, as the target they play on reads them. THERE IS NO
+        READING A CLIP ON ITS OWN: READ THE TARGET'S SKELETON FIRST, THEN ITS CLIPS.
 
-        ``paths`` are that skeleton's own bone paths, onto which every curve is
-        re-anchored; ``avatar`` is its avatar statement, against which a
-        muscle-encoded clip is solved into bone curves. A clip request is not
-        cached with the rest: the same seeds are asked for different targets."""
+        A clip stores every binding as the CRC32 of a bone path, and names a bone only against
+        a skeleton: without the target's ``paths`` every bone curve would be a
+        ``path_0x<crc>_`` placeholder, which matches no bone anywhere and reads exactly like a
+        clip that animates nothing -- a face measured as absent, a body that does not move. So
+        both arguments are required here, and the reader refuses a clip request without them.
+
+        ``paths`` are the target's object hierarchy -- the reversible strings Unity itself
+        hashes once to bind a clip -- onto which every curve is re-anchored. ``avatar`` is the
+        avatar that hierarchy was built with, against which a muscle-encoded clip is solved into
+        bone curves. A clip request is not cached with the rest: the same seeds are asked for
+        different targets."""
         arguments = dict(self._arguments)
-        arguments.update({"skeleton": skeleton, "paths": list(paths), "avatar": avatar})
+        arguments.update({"paths": list(paths), "avatar": avatar})
         table = session.table(CLIPS, **arguments)
         try:
             return [Clip(table.row(index)) for index in range(table.row_count)]

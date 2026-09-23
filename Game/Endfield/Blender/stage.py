@@ -44,7 +44,7 @@ import re
 
 import bpy
 
-from ....Host.Blender import step_loader
+from ....Host.Blender import rig_identity, step_loader
 from ....Kernel import statement as kernel_statement
 from ....Kernel.app import loading
 from ....Kernel.bridge import cabmap_state
@@ -1108,11 +1108,18 @@ class _ObjectCurves:
 def _hold_curves(cabs, options):
     """Keep the curves of every clip the unit reads DIRECTLY -- the shots, and whatever
     motion lands on a stand-in rather than a rig -- as ONE statement of their archives, in
-    the engine's own basis, which is what a stand-in's transform is converted from."""
+    the engine's own basis, which is what a stand-in's transform is converted from.
+
+    TEMPORARY, root cause pending: each is read against the stand-in's own hierarchy --
+    itself -- which is not the object the game binds. Only the curves on the animated object
+    itself and its float curves are kept, which are the ones a stand-in can carry; the real
+    target is the set's bound object, read with its own hierarchy and the avatar its Animator
+    was built with, which the stage does not build yet."""
     if not cabs:
         return 0
     held = 0
-    for clip in loading.statement(cabs, options).in_basis(kernel_statement.UNITY).clips():
+    stated = loading.statement(cabs, options).in_basis(kernel_statement.UNITY)
+    for clip in stated.clips(paths=(rig_identity.ANIMATOR_ROOT_PATH,), avatar=""):
         curves = _ObjectCurves(clip)
         _CURVES[(clip.archive, None)] = True
         _CURVES.setdefault((clip.archive, clip.name), curves)
