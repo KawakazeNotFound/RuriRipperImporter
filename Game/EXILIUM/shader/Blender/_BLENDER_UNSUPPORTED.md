@@ -6,16 +6,6 @@
 
 ## 栈 ruri_character_uber_girlsfrontline
 
-### 环境询问(能力身份)
-
-| 能力 | 处置 | 答案来源 | 缺席契约 | 结果语义 | 编译器为什么认不出 |
-|---|---|---|---|---|---|
-| AdditionalLight | 割点(宿主兑现) | Scene | Identity | punctual light record (direction toward light, linear radiance) | 附加光的存储是管线私有的(聚簇灯表 / 瓦片索引 / Forward+ 的 z-bin),下标的含义每家都不同;编译器看见的只是几次带下标的 buffer 读 |
-| AdditionalLightCount | 割点(宿主兑现) | Scene | Identity | light count | 可见灯数是**逐帧剔除的结果**:聚簇/瓦片/Forward+ 各家的剔除与排序都不一样,编译器只看得见一次 cbuffer 读 |
-| AmbientIrradiance | 割点(宿主兑现) | Scene | Identity | linear irradiance | SH 的阶数/编码/打包各家不同,HG 干脆换成辐照度体 clipmap(_IrradianceVolumeClipmapTexture*)——编译器只看得见几次 3D 图读加一串点积,推不回「这是环境辐照度」 |
-| MainLight | 割点(宿主兑现) | Scene | Identity | directional light record (direction toward light, linear radiance) | 主光从哪来是**管线的组织方式**:有的走 cbuffer 单槽(HG 的 type_LightDataBuffer c0/c1),有的走聚簇灯列表首项,有的按可见性每帧重排;编译器看见的只是几次 cbuffer 读 |
-| ShadowAttenuation | 割点(宿主兑现) | Scene | Identity | [0,1] attenuation | CSM / ASM / 接触阴影 / 屏幕空间阴影四条链各家自选,级联划分与滤波核全是私有实现;编译器看见的是一堆 shadowmap 比较采样 |
-
 ### 不可发射函数
 
 | 函数 | 原因 |

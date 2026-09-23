@@ -169,13 +169,18 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         """Where the document is being looked at from, in the source's world: the scene
         camera, else the first 3D view's own viewpoint, else the middle of what is in
         the scene. A level's camera-centred state (its irradiance clipmaps) is built
-        around this point, the way the source builds it around its camera."""
+        around this point, the way the source builds it around its camera.
+
+        Placements are read from the evaluated dependency graph: an object moved since
+        the last evaluation still carries its old world matrix on the original, and a
+        camera placed in the same script as the import reads as sitting at the origin."""
         from mathutils import Vector
         from . import material_builder
         scene = context.scene
+        depsgraph = context.evaluated_depsgraph_get()
         position = None
         if scene.camera is not None:
-            position = scene.camera.matrix_world.translation.copy()
+            position = scene.camera.evaluated_get(depsgraph).matrix_world.translation.copy()
         else:
             manager = context.window_manager
             for window in (manager.windows if manager is not None else ()):
@@ -187,8 +192,8 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
                 if position is not None:
                     break
         if position is None:
-            corners = [obj.matrix_world @ Vector(corner) for obj in scene.objects
-                       if obj.type == "MESH" for corner in obj.bound_box]
+            evaluated = [obj.evaluated_get(depsgraph) for obj in scene.objects if obj.type == "MESH"]
+            corners = [obj.matrix_world @ Vector(corner) for obj in evaluated for corner in obj.bound_box]
             if not corners:
                 return None
             low = Vector([min(c[i] for c in corners) for i in range(3)])

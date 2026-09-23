@@ -432,7 +432,12 @@ def volume_image(layout):
     says (a generated product's volume-texture row). The only place such an image is
     made: a stack asks for it when it builds a template, the level writes into it.
     A size that no longer matches is rebuilt -- the stack's coordinates are the
-    layout's constants, and sampling another size would shift every slice."""
+    layout's constants, and sampling another size would shift every slice.
+
+    Every channel is data, the fourth included (the irradiance clipmaps keep sky
+    visibility there), so the alpha is channel-packed: read as straight alpha, the
+    colour channels are premultiplied on upload and come back zero wherever the
+    fourth channel is."""
     width, height = (int(value) for value in layout["atlas"])
     image = bpy.data.images.get(layout["image"])
     if image is not None and (int(image.size[0]), int(image.size[1])) != (width, height):
@@ -443,6 +448,8 @@ def volume_image(layout):
         image = bpy.data.images.new(layout["image"], width, height, alpha=True, float_buffer=float_buffer)
         image.colorspace_settings.name = "Non-Color"
         image.file_format = "OPEN_EXR" if float_buffer else "PNG"
+    if image.alpha_mode != "CHANNEL_PACKED":
+        image.alpha_mode = "CHANNEL_PACKED"
     return image
 
 
