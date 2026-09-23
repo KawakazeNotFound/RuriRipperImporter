@@ -448,7 +448,7 @@ class Texture:
     Nothing is remembered here -- an image lands in the document and the bytes
     are done -- so a scene costs one image resident rather than all of them."""
 
-    __slots__ = ("key", "name", "srgb", "container", "bytes", "_statement")
+    __slots__ = ("key", "name", "srgb", "container", "bytes", "wrap_u", "wrap_v", "filter", "_statement")
 
     def __init__(self, row, statement):
         self.key = row["texture"]
@@ -456,6 +456,13 @@ class Texture:
         #: Whether the ASSET ITSELF declares sRGB encoding -- a fact about the
         #: texture, never about the slot it happens to be bound in.
         self.srgb = bool(row["srgb"])
+        #: The texture's OWN sampler state -- wrap along u and v (repeat / clamp /
+        #: mirror / mirroronce) and filter (point / bilinear / trilinear, or default
+        #: where the engine leaves it to a group setting): what a shader that samples
+        #: it through its own sampler gets.
+        self.wrap_u = row["wrap_u"]
+        self.wrap_v = row["wrap_v"]
+        self.filter = row["filter"]
         self.container = row["container"]
         #: How many bytes its pixels are, stated without fetching them.
         self.bytes = int(row["bytes"])

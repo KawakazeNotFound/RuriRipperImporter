@@ -111,6 +111,10 @@ SOURCE_KEY_PROPERTY = "ruri_source_key"
 #: Marker on an image datablock: its colour space is already what the ASSET
 #: declares, and nothing that infers one from a slot may overwrite it.
 COLORSPACE_STATED_PROPERTY = "ruri_colorspace_stated"
+#: The texture's own sampler state (wrap_u / wrap_v / filter), stamped on the image
+#: it loads into; the generated stacks read it for slots sampled through the
+#: texture's own sampler.
+SAMPLING_STATED_PROPERTY = "ruri_sampling"
 #: Channel 3 of an RGBA map. Blender never colour-manages alpha, so a role that
 #: reads only this channel puts no requirement on the image's colour space.
 _ALPHA_CHANNEL = 3
@@ -771,6 +775,11 @@ class MaterialBuilder:
         if texture is not None:
             want = "sRGB" if texture.srgb else "Non-Color"
             cached[COLORSPACE_STATED_PROPERTY] = True
+            # The texture's own sampler state is, like its colour space, the ASSET's
+            # fact: a slot that samples it through the texture's own sampler reads it
+            # back from here rather than assuming one.
+            cached[SAMPLING_STATED_PROPERTY] = {
+                "wrap_u": texture.wrap_u, "wrap_v": texture.wrap_v, "filter": texture.filter}
         elif non_color:
             want = "Non-Color"
         if want is not None and cached.colorspace_settings.name != want:
