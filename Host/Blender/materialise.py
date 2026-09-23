@@ -245,6 +245,10 @@ class _Materialisation:
         rig_identity.stamp(rig, rests)
         rig_identity.stamp_avatar(rig, skeleton.avatar)
         rig_identity.stamp_source(rig, self.options.get("source_game", ""))
+        # The FIRST seed: a selection that built one rig out of several seeds put the
+        # character first and what it wears after it.
+        seeds = list(self.statement.seeds)
+        rig_identity.stamp_seed(rig, seeds[0] if seeds else "")
 
     def _group_humanoid(self, rig, skeleton, names):
         """Sort a humanoid rig's bones into bone collections, as the avatar states

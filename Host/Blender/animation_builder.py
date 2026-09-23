@@ -685,23 +685,19 @@ def play(context, rig, clips, options, activate=False):
         # Built nothing is not the same as asked for nothing, and a person who
         # picked a row and saw the document unchanged is owed which of the two
         # happened.
-        return 0, ["The picked row(s) state no performance."]
+        return {}, ["The picked row(s) state no performance."]
     identity = rig_identity.of(rig)
     maps = identity.maps() if identity is not None else None
     if maps is None:
-        return 0, ["{0} carries no rig identity -- it was not built by this add-on, "
-                   "so a performance has nothing to bind to.".format(rig.name)]
-    built = 0
+        return {}, ["{0} carries no rig identity -- it was not built by this add-on, "
+                    "so a performance has nothing to bind to.".format(rig.name)]
+    landed = {}
     lines = []
-    first = None
     for clip in clips:
         action, slot, frames = build_action(clip, rig, maps, options=options,
                                             display_name=clip.name)
-        built += 1
+        if activate and not landed:
+            adopt_action(rig, action, slot, scene=context.scene)
+        landed[clip.key] = (action, slot)
         lines.append("{0}: {1} frame(s)".format(action.name, frames))
-        if first is None:
-            first = (action, slot, frames)
-    if activate and first is not None:
-        action, slot, _frames = first
-        adopt_action(rig, action, slot, scene=context.scene)
-    return built, lines
+    return landed, lines

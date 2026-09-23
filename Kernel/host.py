@@ -250,6 +250,11 @@ class Rig(abc.ABC):
         called in this document today."""
 
     @abc.abstractmethod
+    def rig_seed(self, rig):
+        """The seed this rig was built from, or "" -- what a later question about this character
+        (the face it wears) is asked with. Carried verbatim from the reader back to the reader."""
+
+    @abc.abstractmethod
     def rig_avatar(self, rig):
         """The avatar this rig was built with, as the reader stated it, or "" --
         what a muscle-encoded performance is solved against. Carried verbatim from
@@ -296,7 +301,9 @@ class Timeline(abc.ABC):
         """Key performances onto ``rig``. ``clips`` are what a statement carries, already
         re-anchored on this rig's own bones and solved against its avatar
         (:func:`Kernel.app.loading.perform`). ``activate`` puts the first one on the rig rather
-        than only building it. Returns (built, lines)."""
+        than only building it. Returns (landed, lines): by clip key, where that clip's
+        performance landed -- a handle this host is handed back when more is written into the
+        same performance -- and the lines to word."""
 
     @abc.abstractmethod
     def bake_bone_poses(self, context, rig, source_names, frame_count, payload,

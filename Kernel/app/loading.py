@@ -84,14 +84,30 @@ def load(context, seeds, options=None, report=None):
 def perform(context, seeds, rig=None, options=None, activate=False):
     """Put the performances these seeds carry onto a rig -- the one the caller names, else the one
     in front of the user. The curves arrive re-anchored on that rig's own bones and solved against
-    the avatar it carries, so what the host does is key them. Returns (built, lines)."""
+    the avatar it carries, so what the host does is key them.
+
+    A face baked into a clip's bone tracks means nothing on another character's rig, so when the
+    options ask for it and the game that owns the clips restates faces
+    (``Game.GameModule.face_retarget``), each clip that landed is handed to that game with where
+    it landed, and the face is written into that same performance. Returns (built, lines)."""
+    from ... import Game
+
     host = host_port.current()
+    values = dict(options or {})
     seeds = [seed for seed in seeds if seed]
     target = host_port.selected_rig(context) if rig is None else rig
     if not seeds:
         return 0, ["Nothing to play: the selection states no seed."]
     if target is None:
         return 0, ["Select the rig to play onto first."]
-    clips = statement(seeds, options).clips(paths=host.rig_paths(target),
-                                            avatar=host.rig_avatar(target))
-    return host.play(context, target, clips, dict(options or {}), activate)
+    clips = statement(seeds, values).clips(paths=host.rig_paths(target),
+                                           avatar=host.rig_avatar(target))
+    landed, lines = host.play(context, target, clips, values, activate)
+    restate = Game.face_retarget_of(values.get("source_game", "")) if values.get("retarget_face") else None
+    if restate is not None:
+        for clip in clips:
+            if clip.key in landed:
+                said = restate(context, target, clip, values, landed[clip.key])
+                if said:
+                    lines.append(said)
+    return len(landed), lines

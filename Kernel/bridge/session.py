@@ -55,9 +55,3 @@ def search(table_or_handle, query, rules=None):
 
     return np.frombuffer(bytes(_reader().search_data_table(table_or_handle, query, rules)),
                          dtype="<i4")
-
-
-def loaded():
-    from . import cabmap_state
-
-    return cabmap_state.BRIDGE is not None and cabmap_state.BRIDGE.has_map()

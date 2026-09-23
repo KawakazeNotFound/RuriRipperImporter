@@ -877,13 +877,6 @@ class RipperBridge:
             self._map, str(dataset_id), _named_args(args),
             bytes(payload or b""), token))
 
-    def solve_face_retarget(self, request_json, performance_bytes):
-        """A performance restated in another character's own face vocabulary."""
-        import struct
-        request = request_json if isinstance(request_json, bytes) else str(request_json).encode("utf-8")
-        payload = struct.pack("<I", len(request)) + request + bytes(performance_bytes or b"")
-        return self.game_data_blob("endfield.face.retarget", payload=payload)
-
     def release_last_import(self):
         """Drop what the LAST closure crossing left on this side, and hand the
         memory back to the operating system.

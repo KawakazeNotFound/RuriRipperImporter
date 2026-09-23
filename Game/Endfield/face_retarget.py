@@ -22,12 +22,18 @@ What lives here is only what Blender alone knows and only Blender can do:
 from __future__ import annotations
 
 import json
+import struct
 import time as _time
 
 import numpy as np
 
 from ...Kernel import host as host_port
-from ...Kernel.bridge import cabmap_state
+from ...Kernel.bridge import session
+from . import datasets
+
+
+#: The curve kinds that move a transform, as the statement names them.
+_TRANSFORM_KINDS = ("rot", "pos", "scale", "euler")
 
 
 class FaceRetargetError(RuntimeError):
@@ -39,9 +45,8 @@ def _sample_performance(clip, bone_order, path_to_bone, times):
     A bone the clip never keys rides its own rest, which is what the game does with it
     too."""
     channels = {}
-    for kind, channel_list in (("rot", clip.rotations), ("pos", clip.positions),
-                               ("scale", clip.scales)):
-        for channel in channel_list:
+    for kind in ("rot", "pos", "scale"):
+        for channel in clip.of_kind(kind):
             bone = path_to_bone.get(channel.path)
             if bone:
                 channels.setdefault(bone, {})[kind] = channel
@@ -68,31 +73,37 @@ def _sample_performance(clip, bone_order, path_to_bone, times):
 def _clip_bones(clip, path_to_bone):
     """The bones this clip animates, in a stable order."""
     bones = set()
-    for channels in clip.transform_channel_lists():
-        for channel in channels:
-            bone = path_to_bone.get(channel.path)
-            if bone:
-                bones.add(bone)
+    for channel in clip.channels:
+        bone = path_to_bone.get(channel.path) if channel.kind in _TRANSFORM_KINDS else None
+        if bone:
+            bones.add(bone)
     return sorted(bones)
 
 
-# ── what the host's clip loader calls ─────────────────────────────────────────
+def _framed(statement, poses):
+    """``<4-byte length><json><float32 poses>`` -- the one framing both halves of the call use,
+    since both carry a statement and a block of poses."""
+    text = json.dumps(statement).encode("utf-8")
+    return struct.pack("<i", len(text)) + text + poses
+
+
+def _unframed(framed):
+    (length,) = struct.unpack_from("<i", framed)
+    return json.loads(framed[4:4 + length].decode("utf-8")), framed[4 + length:]
+
+
+# ── what the one clip path calls ──────────────────────────────────────────────
 
 def provide(context, armature, clip, options, into=None):
-    """Play this clip's face on ``armature``, as the host's clip-loading path asks for it
-    (see ``Game.GameModule.face_retarget``). Returns a one-line report, or None when there
-    is nothing facial in the clip.
+    """Play this clip's face on ``armature``, as the one clip path asks for it
+    (``Kernel.app.loading.perform``). Returns a one-line report -- what the face became, or why
+    it is not restated on this rig -- or None when the clip carries no face.
 
-    ``clip`` is anchored to the rig it was AUTHORED on, so its curve paths name that rig's
-    own bones; the hook measures which character that is. ``into`` is that clip's own
-    (action, slot) to write the face INTO -- an object plays one action, so a face given
-    its own would replace the body it came with."""
-    from . import face, identity
-
-    bridge = cabmap_state.BRIDGE
-    if bridge is None or not bridge.has_map:
-        raise FaceRetargetError("No cabmap session -- load a cabmap first.")
-
+    ``clip`` is the clip as it landed on ``armature``: its curve paths re-anchored on this rig's
+    bones, its values as they were authored -- the hook measures from those which character the
+    performance was made on. ``into`` is where that performance landed -- the face is written
+    INTO it, because an object plays one performance and a face given its own would replace the
+    body."""
     host = host_port.current()
     bones = host.rig_rest(context, armature)
     if not bones:
@@ -102,25 +113,22 @@ def provide(context, armature, clip, options, into=None):
             "through this add-on, which is what puts it there.".format(armature.name))
 
     path_to_bone = {channel.path: channel.path.rsplit("/", 1)[-1]
-                    for channels in clip.transform_channel_lists()
-                    for channel in channels if channel.path}
+                    for channel in clip.channels
+                    if channel.kind in _TRANSFORM_KINDS and channel.path}
     clip_bones = _clip_bones(clip, path_to_bone)
     if not clip_bones:
         return None
 
     rate = float(clip.sample_rate or host.frame_rate(context) or 60.0)
-    duration = float(clip.max_time())
+    duration = float(clip.duration)
     frame_count = max(2, int(round(duration * rate)) + 1)
     times = np.arange(frame_count, dtype=np.float64) / rate
     samples = _sample_performance(clip, clip_bones, path_to_bone, times)
 
-    # Which face this rig wears is the GAME's own declaration, never the rig's name: it
-    # routinely gives an entity one name and its face table a completely different one.
-    template = identity.npc_template(armature.name)
+    # Which face this rig wears is the GAME's own statement about the entity the rig was built
+    # from, asked with that seed -- never the rig's name, which names whatever it was made from.
     request = {
-        "declaration": identity.declared_face_morph(template) if template else "",
-        "tagId": identity.character_tag(
-            face.state_of(context).character_token or armature.name),
+        "seed": host.rig_seed(armature),
         "bones": bones,
         "clipBones": clip_bones,
         "frameCount": frame_count,
@@ -129,10 +137,13 @@ def provide(context, armature, clip, options, into=None):
 
     started = _time.perf_counter()
     try:
-        report, poses = bridge.solve_face_retarget(json.dumps(request), samples.tobytes())
-        answer = json.loads(report)
+        framed = session.blob(datasets.FACE_RETARGET, payload=_framed(request, samples.tobytes()))
     except Exception as exc:
         raise FaceRetargetError(str(exc)) from exc
+    answer, poses = _unframed(framed)
+    if "refusal" in answer:
+        return None if answer["faceless"] else "face: '{0}' not restated -- {1}".format(
+            clip.name, answer["refusal"])
     print("[face] {0}: {1} frame(s) · {2} shared bone(s) of '{3}' (next '{4}' at {5:.3f}) · "
           "{6} candidate(s) · euler {7} · rest fit {8:.2f}deg · rest agreement {9:.1f}/{10:.1f}deg "
           "· {11} layer(s) · similarity {12:.1%} · {13:.1f}s".format(
@@ -144,8 +155,6 @@ def provide(context, armature, clip, options, into=None):
           flush=True)
 
     posed_bones = answer["bones"]
-    if not posed_bones:
-        return None
     host.bake_bone_poses(context, armature, posed_bones, answer["poseFrames"],
                          poses, clip.name, into)
 

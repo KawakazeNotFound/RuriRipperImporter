@@ -176,16 +176,18 @@ class GameModule:
         self.settings_schema = settings_schema
         # How this game states a face, if it states one at all. A clip whose facial
         # animation is baked into its bone tracks means nothing on another character's
-        # rig, so the game that owns the clip restates it on the rig it is played on. A
-        # game with no facial system simply declares none.
+        # rig, so the one clip path (Kernel.app.loading.perform) asks the game that owns
+        # the clip to restate it on the rig it is played on. A game with no facial system
+        # simply declares none.
         #
         # The callable takes (context, armature, clip, options, into) and returns a
-        # one-line report, or None when it had nothing to do. ``clip`` is anchored to the
-        # rig it was AUTHORED on, not to the one it is being played on -- the host resolves
-        # and loads that skeleton first, because reading a performance means asking where a
-        # bone was relative to ITS OWN rest. ``into`` is that clip's own (action, slot) to
-        # write the face INTO, or None for a caller with no action of its own: an object
-        # plays one action, so a face given its own would replace the body it came with.
+        # one-line report, or None when it had nothing to do. ``clip`` is the clip as it
+        # LANDED on ``armature``: its curve paths re-anchored on that rig's bones -- a binding
+        # the clip stores only as a hash names no bone until a skeleton is given -- and its
+        # values as the author keyed them, so reading a performance still asks where a bone
+        # was relative to the rest of the rig it was made on. ``into`` is where that
+        # performance landed: an object plays one performance, so a face given its own would
+        # replace the body it came with.
         self.face_retarget = face_retarget
         # How this game states the secondary motion its models carry -- the hair, cloth
         # and accessory chains an author tuned on the model itself. Only a game that

@@ -214,6 +214,10 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         from . import rig_identity
         return sorted(set(rig_identity.bone_paths(rig).values()))
 
+    def rig_seed(self, rig):
+        from . import rig_identity
+        return rig_identity.seed_of(rig)
+
     def rig_avatar(self, rig):
         from . import rig_identity
         return rig_identity.avatar_of(rig)
