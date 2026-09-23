@@ -535,19 +535,38 @@ class _Materialisation:
 
     # -- lights and cameras -------------------------------------------------
     def _light_data(self, node):
+        """A stated light as a Blender light that hands a light loop the source's own quantity.
+
+        A source's point or spot intensity is a radiant intensity; Blender's point and spot
+        power is radiant flux, and EEVEE hands a light loop ``power / (4 pi)`` for them
+        (``Light::point_radiance_get``). A sun's strength is already the irradiance it hands
+        over. So point and spot power is the intensity times 4 pi, and a sun's is the
+        intensity as stated. The source's lights are points: no radius.
+
+        A cone blends from its inner angle to its outer one; Blender blends over the fraction
+        ``spot_blend`` of the cosine span from the outer edge to the axis, so the same span is
+        ``(cos inner - cos outer) / (1 - cos outer)``."""
         stated = node.light
         kind = {0: "SPOT", 1: "SUN", 2: "POINT", 3: "AREA"}.get(stated["kind"], "POINT")
         light = bpy.data.lights.new(node.name, type=kind)
         light.color = stated["color"]
-        light.energy = stated["intensity"]
+        light.use_shadow = stated["shadows"]
+        if kind in ("POINT", "SPOT"):
+            light.energy = stated["intensity"] * 4.0 * np.pi
+            light.shadow_soft_size = 0.0
+            light.use_custom_distance = True
+            light.cutoff_distance = stated["range"]
+        else:
+            light.energy = stated["intensity"]
         if kind == "SPOT":
-            light.spot_size = np.radians(stated["angle"])
+            outer = np.radians(stated["angle"])
+            cos_outer = np.cos(outer * 0.5)
+            cos_inner = np.cos(np.radians(min(stated["inner_angle"], stated["angle"])) * 0.5)
+            light.spot_size = outer
+            light.spot_blend = float(np.clip((cos_inner - cos_outer) / max(1.0 - cos_outer, 1e-6), 0.0, 1.0))
         if kind == "AREA":
             light.size = stated["width"]
             light.size_y = stated["height"]
-        if kind in ("POINT", "SPOT"):
-            light.use_custom_distance = True
-            light.cutoff_distance = stated["range"]
         return light
 
     def _camera_data(self, node):
