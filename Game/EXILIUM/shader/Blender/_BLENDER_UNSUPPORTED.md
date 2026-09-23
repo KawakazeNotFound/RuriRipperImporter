@@ -6,6 +6,12 @@
 
 ## 栈 ruri_character_uber_girlsfrontline
 
+### 宿主答不出的环境询问(按缺席值折叠)
+
+| 能力 | 答案来源 | 缺席契约 | 结果语义 | 编译器为什么认不出 |
+|---|---|---|---|---|
+| GeometricDistortion | Pipeline | Identity | world-space vertex offset | 形变高度图、它的投影矩阵、作用球与方向都是管线每帧写的状态;编译器看见的只是一次矩阵变换加一次贴图读 |
+
 ### 不可发射函数
 
 | 函数 | 原因 |

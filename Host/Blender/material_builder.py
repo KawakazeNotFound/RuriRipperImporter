@@ -244,9 +244,22 @@ def rewire_capabilities(materials=None):
 def refresh_light_roles():
     """Re-stamp the main-light role. Unlike the rewire there is nothing
     per-material to count -- each stack re-picks ONE light -- so the report counts
-    the refreshers that ran."""
+    the refreshers that ran.
+
+    The role is stamped on the light itself and every stack's materials read the same
+    stamp, so every stack has to pick the same light. Stacks that disagree are stacks
+    deployed from different generator builds, and the last one to stamp would silently
+    decide for all of them -- a stack of one game switching off another game's whole
+    main-light pass -- so a disagreement is refused and names the lights it is between."""
+    chosen = {}
     for refresh in LIGHT_ROLE_REFRESHERS:
-        refresh()
+        light = refresh()
+        chosen[light.name if light is not None else None] = refresh
+    if len(chosen) > 1:
+        raise RuntimeError(
+            "[material] the loaded shading stacks pick different main lights {0}; they come "
+            "from different generator builds -- redeploy the stale ones".format(
+                sorted(name or "(none)" for name in chosen)))
     return len(LIGHT_ROLE_REFRESHERS)
 
 
