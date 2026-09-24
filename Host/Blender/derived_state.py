@@ -147,7 +147,10 @@ def _run_vertex(change):
 def _run_camera_basis(change):
     """顶点腿那几格相机 uniform。描边宽度是按投影矩阵与真实 backbuffer 像素解的,相机
     一动就过期 —— 过期的是**值**不是拓扑,所以这里只把已有顶点树上的那几格重灌一遍,
-    不建树、不建修改器、不重判任何一张材质。"""
+    不建树、不建修改器、不重判任何一张材质。读视点的顶点树不经这几格:视点物体在这里跟上
+    活动相机与渲染输出(没有界面时它就站在活动相机上),树里现读。"""
+    from . import viewpoint
+    viewpoint.sync(change.scene)
     scope = None if change.whole_scene else change.objects
     return material_builder.push_camera_stages(objects=scope)
 

@@ -310,7 +310,7 @@ HOST = host_port.bind(BlenderHost())
 from ... import Game                                                    # noqa: E402
 from . import (rna, render, coordinate, rig_identity, material_builder,  # noqa: E402
                material_panel, derived_state, animation_builder, step_loader, browser_panel,
-               post_panel)
+               post_panel, viewpoint)
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +439,8 @@ def register():
     # 派生态调度器:导入产物、灯、相机的变更从这里统一收敛成一次重建。装在游戏之前,
     # 这样一个游戏的着色栈注册进来的阶段第一次被用到时,调度器已经在监听了。
     derived_state.register()
+    # 顶点腿读的视点:界面里跟着用户正在转的那个 3D 视图走,文件换了 / 撤销了就重新认领。
+    viewpoint.register()
     # 材质参数面板:每个生成着色栈把自己的接口 + 读写路径注册进来(Game.register 里发生),
     # 所以这一格要先立起来。面板本体全场只有一个,画的是选中网格持有的那张材质。
     material_panel.register()
@@ -472,6 +474,7 @@ def unregister():
     post_panel.unregister()
     Game.unregister()
     material_panel.unregister()
+    viewpoint.unregister()
     derived_state.unregister()
     browser_panel.unregister()
     rna.unregister_shared()

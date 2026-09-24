@@ -232,6 +232,14 @@ def unregister_material_panel(panel):
     material_panel.unregister_stack(panel)
 
 
+def viewpoint():
+    """The object a vertex tree reads the view it is evaluated for through, with the names of the point
+    attributes it carries (see :mod:`viewpoint`). A stack builds the nodes that read it; which view it stands for
+    -- the viewport being looked through, else the scene camera -- is the host's to keep current."""
+    from . import viewpoint as viewpoint_module
+    return viewpoint_module.viewpoint()
+
+
 # ---------------------------------------------------------------------------
 # What the derived-state scheduler runs
 # ---------------------------------------------------------------------------
