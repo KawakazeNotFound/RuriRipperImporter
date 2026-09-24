@@ -176,6 +176,10 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         from . import light_records
         return light_records.apply(context.scene, records)
 
+    def apply_decals(self, context, boxes, range_attribute, list_table):
+        from . import decals
+        return decals.apply(context, boxes, range_attribute, list_table)
+
     def apply_medium(self, context, medium):
         from . import medium as medium_builder
         return medium_builder.apply(context, medium)

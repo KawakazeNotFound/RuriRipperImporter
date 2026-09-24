@@ -207,6 +207,16 @@ class SceneGraph(abc.ABC):
         written and the names of the stated lights no record was supplied for."""
 
     @abc.abstractmethod
+    def apply_decals(self, context, boxes, range_attribute, list_table):
+        """Hand every object the deferred decals whose boxes reach it, for the shading stacks that
+        apply them inside the material (the source projects them into its GBuffer between the GBuffer
+        pass and lighting). ``boxes`` lists the level's decals in the order they draw -- the order of
+        the records in the level's decal payload -- each as the column-major matrix taking the unit
+        cube onto its box, in the SOURCE's world. Each object's run of box indices goes into the data
+        table ``list_table``, and where the run starts and how long it is into the per-object global
+        ``range_attribute``. Returns the lines to report."""
+
+    @abc.abstractmethod
     def apply_medium(self, context, medium):
         """Stand a level's participating medium up in the document, replacing any stood up
         before, so the host integrates it the way the source integrates its fog. ``medium`` is

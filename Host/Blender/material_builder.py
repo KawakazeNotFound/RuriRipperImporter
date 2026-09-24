@@ -114,6 +114,14 @@ LEVEL_IMAGES = extensions.point(
     "blender.level_images",
     "Images a shading stack reads level state through, which the host fills.")
 
+#: ``object_attribute_bases() -> {name: [default, ...]}``. Engine globals a stack reads
+#: PER OBJECT from the object's own custom properties -- which of a level's decals reach
+#: that object, say -- each with the default its recipe declares. The graph reads
+#: ``property + default``, so an object nothing was written on answers the default.
+OBJECT_ATTRIBUTES = extensions.point(
+    "blender.object_attributes",
+    "Per-object engine globals a shading stack reads from object custom properties.")
+
 #: ``light_record_attributes() -> [name, ...]``. The LIGHT attributes a stack's light
 #: loop reads a source's own per-light record through, one per record vector in record
 #: order; the host stamps each light's record under them (:mod:`light_records`). A stack
@@ -224,6 +232,55 @@ def register_volume_textures(layouts):
 
 def unregister_volume_textures(layouts):
     LEVEL_IMAGES.remove(layouts)
+
+
+def register_object_attributes(bases):
+    OBJECT_ATTRIBUTES.add(bases)
+
+
+def unregister_object_attributes(bases):
+    OBJECT_ATTRIBUTES.remove(bases)
+
+
+def object_attribute_base(name):
+    """The default the registered stacks declare for one per-object global, or None when no
+    stack reads it. Two stacks declaring different defaults for one name cannot share an object
+    property, so that is refused."""
+    known = None
+    for provider in OBJECT_ATTRIBUTES:
+        base = provider().get(name)
+        if base is None:
+            continue
+        if known is not None and list(known) != list(base):
+            raise ValueError("[material] per-object global {0} has two defaults: {1} and {2}".format(
+                name, known, list(base)))
+        known = list(base)
+    return known
+
+
+def level_image_layout(name):
+    """The layout the registered stacks read one level image through, or None when no stack
+    reads it. Two stacks laying one resource out differently cannot share its image."""
+    found = None
+    for provider in LEVEL_IMAGES:
+        layout = provider().get(name)
+        if layout is None:
+            continue
+        if found is not None and found != layout:
+            raise ValueError("[material] level image {0} has two layouts".format(name))
+        found = layout
+    return found
+
+
+def write_level_table(name, rows):
+    """Fill one level data table from ``rows``, a float array shaped (elements, fields, 4) in
+    element order; the rows past them stay zero."""
+    layout = level_image_layout(name)
+    if layout is None or layout["kind"] != "table":
+        raise ValueError("[material] no stack reads a data table {0}".format(name))
+    image = volume_image(layout)
+    image.pixels.foreach_set(_table_pixels([rows[None]], layout).ravel())
+    image.pack()
 
 
 def register_light_records(attributes):
@@ -530,9 +587,9 @@ def _apply_level_globals(scene, values):
 
 
 _LEVEL_RESOURCES_MAGIC = 0x52564C52
-_LEVEL_RESOURCES_VERSION = 2
+_LEVEL_RESOURCES_VERSION = 3
 _TEXEL_FORMATS = {1: "<f2", 2: "u1", 3: "<f4"}
-_BLOCK_KINDS = {0: "volume", 1: "array"}
+_BLOCK_KINDS = {0: "volume", 1: "array", 2: "tiles"}
 
 
 def _level_resources(payload):
@@ -542,10 +599,12 @@ def _level_resources(payload):
     channels``, a format byte (1 = half, 2 = unorm8, 3 = float) and the texels of every
     mip from the largest, each x fastest, then y, then z. A mip halves a volume's depth
     with its width and height and keeps an array's slice count; a uniform array of
-    four-component rows is a one-slice array.
+    four-component rows is a one-slice array. A tile set (kind 2) states its tile count
+    as depth and then each tile as its own ``width, height`` and texels, first mip only.
 
     A block comes back as ``(kind, levels)``: one float32 array per mip shaped (depth,
-    height, width, channels), unorm8 already divided by 255."""
+    height, width, channels), unorm8 already divided by 255; a tile set's levels are its
+    tiles, each shaped (height, width, channels)."""
     import struct
     import numpy
     view = memoryview(payload)
@@ -580,6 +639,20 @@ def _level_resources(payload):
         width, height, depth, mips, channels = struct.unpack_from("<5i", view, cursor + 1)
         texel_format = _TEXEL_FORMATS[view[cursor + 21]]
         cursor += 22
+        if kind == "tiles":
+            tiles = []
+            for _tile in range(depth):
+                tile_width, tile_height = struct.unpack_from("<2i", view, cursor)
+                cursor += 8
+                texels = numpy.frombuffer(view, dtype=texel_format, count=tile_width * tile_height * channels,
+                                          offset=cursor)
+                cursor += texels.nbytes
+                texels = texels.astype(numpy.float32)
+                if texel_format == "u1":
+                    texels /= 255.0
+                tiles.append(texels.reshape(tile_height, tile_width, channels))
+            blocks[key] = (kind, tiles)
+            continue
         levels = []
         for mip in range(mips):
             level_width, level_height = max(1, width >> mip), max(1, height >> mip)
@@ -610,6 +683,8 @@ def volume_image(layout):
     fourth channel is. A data table holds the single-precision values the source
     reads as they are (positions, matrix rows), so it goes to the GPU at full
     precision; the atlases hold half and 8-bit texels and keep the half upload."""
+    if layout["kind"] == "tiles":
+        return _tiles_image(layout)
     size = layout["size"] if layout["kind"] == "table" else layout["atlas"]
     width, height = (int(value) for value in size)
     image = bpy.data.images.get(layout["image"])
@@ -627,6 +702,65 @@ def volume_image(layout):
     if image.use_half_precision == full_precision:
         image.use_half_precision = not full_precision
     return image
+
+
+def _tiles_image(layout):
+    """The one image a stack reads a tile set through: a UDIM image whose tile 1001 + i holds
+    texture i at its own size, sampled with the host's own mips and filtering. Its values are data
+    (linear already), channel-packed like every level image."""
+    image = bpy.data.images.get(layout["image"])
+    if image is not None and image.source != "TILED":
+        bpy.data.images.remove(image)
+        image = None
+    if image is None:
+        float_buffer = layout["format"] in ("HALF", "FLOAT")
+        image = bpy.data.images.new(layout["image"], 1, 1, alpha=True, float_buffer=float_buffer, tiled=True)
+        image.colorspace_settings.name = "Non-Color"
+    if image.alpha_mode != "CHANNEL_PACKED":
+        image.alpha_mode = "CHANNEL_PACKED"
+    return image
+
+
+def _write_tiles(image, tiles):
+    """Lay a tile set into its UDIM image: tile i as UDIM 1001 + i at its own size, its first
+    stored row at the bottom (Blender's pixel order, and the order the source stores rows in).
+    A tile takes its pixels only from a file, so each goes through a throwaway half-float OpenEXR
+    -- written top row first, as the format stores it -- the image reloads them as its tiles and
+    packs them, and the files go. A level with no tiles leaves the image as it is: nothing
+    reads it."""
+    import shutil
+    import tempfile
+    import numpy
+    import OpenImageIO as oiio
+    if not tiles:
+        return
+    directory = tempfile.mkdtemp()
+    try:
+        stem = os.path.join(directory, "tiles")
+        for index, texels in enumerate(tiles):
+            height, width, channels = texels.shape
+            pixels = numpy.zeros((height, width, 4), dtype=numpy.float32)
+            pixels[:, :, :channels] = texels
+            path = "{0}.{1}.exr".format(stem, 1001 + index)
+            output = oiio.ImageOutput.create(path)
+            if output is None or not output.open(path, oiio.ImageSpec(width, height, 4, "half")):
+                raise RuntimeError("[material] cannot write tile {0}: {1}".format(path, oiio.geterror()))
+            output.write_image(numpy.ascontiguousarray(pixels[::-1]))
+            output.close()
+        wanted = {1001 + index for index in range(len(tiles))}
+        for tile in list(image.tiles):
+            if tile.number not in wanted:
+                image.tiles.remove(tile)
+        for number in sorted(wanted):
+            if image.tiles.get(number) is None:
+                image.tiles.new(tile_number=number)
+        image.source = "TILED"
+        image.filepath = stem + ".<UDIM>.exr"
+        image.reload()
+        image.pack()
+        image.filepath_raw = "//textures/" + image.name + ".<UDIM>.exr"
+    finally:
+        shutil.rmtree(directory, ignore_errors=True)
 
 
 def _address(index, count, mode):
@@ -723,13 +857,18 @@ def _texture_pixels(levels, layout):
 
 def _table_pixels(levels, layout):
     """A uniform struct array as the stack reads it: element i on row i from the
-    bottom, its four-component fields left to right."""
+    bottom, its four-component fields left to right. A source states the elements it has;
+    the rows past them stay zero (nothing indexes them), and more than the stack holds is
+    refused."""
     import numpy
     fields, length = (int(value) for value in layout["size"])
-    if len(levels) != 1 or levels[0].shape != (1, length, fields, 4):
-        raise ValueError("[material] table {0}: stated {1}, the layout says {2} rows of {3} vectors".format(
+    if (len(levels) != 1 or levels[0].ndim != 4 or levels[0].shape[0] != 1 or levels[0].shape[2:] != (fields, 4)
+            or levels[0].shape[1] > length):
+        raise ValueError("[material] table {0}: stated {1}, the layout holds {2} rows of {3} vectors".format(
             layout["image"], [level.shape for level in levels], length, fields))
-    return numpy.ascontiguousarray(levels[0][0], dtype=numpy.float32)
+    pixels = numpy.zeros((length, fields, 4), dtype=numpy.float32)
+    pixels[:levels[0].shape[1]] = levels[0][0]
+    return pixels
 
 
 _LEVEL_PIXELS = {"texture": _texture_pixels, "volume": _volume_pixels, "array": _array_pixels,
@@ -751,11 +890,15 @@ def _apply_level_images(blocks):
         layout = layouts.get(name)
         if layout is None:
             continue
-        expected = "volume" if layout["kind"] == "volume" else "array"
+        expected = layout["kind"] if layout["kind"] in ("volume", "tiles") else "array"
         if kind != expected:
             raise ValueError("[material] level image {0}: stated as a {1}, read as a {2}".format(
                 name, kind, layout["kind"]))
         image = volume_image(layout)
+        if kind == "tiles":
+            _write_tiles(image, levels)
+            filled.append(name)
+            continue
         image.pixels.foreach_set(_LEVEL_PIXELS[layout["kind"]](levels, layout).ravel())
         image.pack()
         filled.append(name)
