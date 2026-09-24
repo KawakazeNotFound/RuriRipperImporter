@@ -68,6 +68,7 @@ SCENE_FOG = "endfield.scene.fog"
 RENDER_PIPELINE = "endfield.render.pipeline"
 SCENE_LIGHTS = "endfield.scene.lights"
 SCENE_COOKIES = "endfield.scene.cookies"
+SCENE_CLOUD_SHADOW = "endfield.scene.cloud_shadow"
 
 
 def _table(dataset_id, **args):
@@ -335,6 +336,15 @@ def scene_cookies(map_name, states):
     -- a level-resources payload the host applies as it is."""
     return cabmap_state.BRIDGE.game_data_blob(
         SCENE_COOKIES, map=map_name, states=[str(state) for state in states])
+
+
+def scene_cloud_shadow(map_name, anchor, states):
+    """The cloud shadow texture the level binds where a viewer at ``anchor`` (a point in the
+    game's own world) stands, in the given scene states -- a level-resources payload the host
+    applies as it is."""
+    x, y, z = anchor
+    return cabmap_state.BRIDGE.game_data_blob(
+        SCENE_CLOUD_SHADOW, map=map_name, x=x, y=y, z=z, states=[str(state) for state in states])
 
 
 def scene_reflection(map_name, anchor, states):
