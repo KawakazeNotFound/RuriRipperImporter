@@ -8,7 +8,9 @@ outline is drawn for a camera the user is not looking through, and a scene witho
 The viewpoint stands in the viewer's place: a single-point mesh linked into no scene, so nothing draws, selects or
 renders it, while every tree that names it still evaluates it. Its object transform is the view's camera-to-world
 transform; its point carries the view's projection matrix, its clip range with the orthographic flag, the pixel size
-of what is being drawn, and the render output's pixel size. A final render is evaluated for the scene camera rather
+of what is being drawn, and the render output's pixel size. The projection is also kept as a custom property on the
+object, sixteen values row by row: a compositor tree has no node that reads a mesh attribute, so it reads the view's
+projection through drivers on that property instead. A final render is evaluated for the scene camera rather
 than for any viewport -- the trees tell the two apart with Is Viewport -- so the render output's size rides along for
 them to switch to. With an interface the viewpoint follows the 3D viewport the user last moved; without one it follows
 the scene camera, so a background run evaluates what a render would see.
@@ -45,11 +47,12 @@ _written = [None]
 class Viewpoint:
     """The viewpoint object and the names of the point attributes it carries."""
 
-    __slots__ = ("object", "projection", "frame", "screen", "render_screen")
+    __slots__ = ("object", "projection", "projection_property", "frame", "screen", "render_screen")
 
     def __init__(self, obj):
         self.object = obj
         self.projection = PROJECTION
+        self.projection_property = PROJECTION
         self.frame = FRAME
         self.screen = SCREEN
         self.render_screen = RENDER_SCREEN
@@ -152,10 +155,12 @@ def _write(obj, state, render):
         transform, projection, frame, screen = state
         obj.matrix_world = _matrix(transform)
         attributes[PROJECTION].data[0].value = _matrix(projection)
+        obj[PROJECTION] = [float(value) for value in projection]
         attributes[FRAME].data[0].vector = frame
         attributes[SCREEN].data[0].vector = (screen[0], screen[1], 0.0)
     attributes[RENDER_SCREEN].data[0].vector = (render[0], render[1], 0.0)
     mesh.update()
+    obj.update_tag()
 
 
 def _flat(matrix):
