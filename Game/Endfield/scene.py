@@ -347,9 +347,14 @@ def _import(context, arguments):
              datasets.scene_reflection(map_name, anchor, states),
              datasets.scene_cookies(map_name, states),
              datasets.scene_cloud_shadow(map_name, anchor, states),
-             datasets.render_pipeline()])
+             datasets.render_pipeline(),
+             datasets.scene_decals(map_name, rect, states)])
         if unread:
             notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
+        # Its deferred decals, handed to the objects their boxes reach (the stacks apply them in
+        # the material, where the game projects them into its GBuffer).
+        notes.extend(host.apply_decals(context, datasets.scene_decal_boxes(map_name, rect, states),
+                                       datasets.DECAL_RANGE, datasets.DECAL_LISTS))
         # Its lamps as the game's light culling packs them for that same viewer.
         _stamped, unmatched = host.apply_light_records(context, datasets.scene_lights(map_name, anchor, states))
         if unmatched:

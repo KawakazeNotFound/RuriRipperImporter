@@ -69,6 +69,13 @@ RENDER_PIPELINE = "endfield.render.pipeline"
 SCENE_LIGHTS = "endfield.scene.lights"
 SCENE_COOKIES = "endfield.scene.cookies"
 SCENE_CLOUD_SHADOW = "endfield.scene.cloud_shadow"
+SCENE_DECALS = "endfield.scene.decals"
+SCENE_DECAL_BOXES = "endfield.scene.decal_boxes"
+#: The names the game's scene stack reads its deferred decals through: the per-object
+#: global holding where an object's run of decal indices starts and how long it is, and
+#: the data table those runs go into.
+DECAL_RANGE = "_DecalRange"
+DECAL_LISTS = "_DecalLists"
 
 
 def _table(dataset_id, **args):
@@ -336,6 +343,26 @@ def scene_cookies(map_name, states):
     -- a level-resources payload the host applies as it is."""
     return cabmap_state.BRIDGE.game_data_blob(
         SCENE_COOKIES, map=map_name, states=[str(state) for state in states])
+
+
+def scene_decals(map_name, rect, states):
+    """The deferred decals one world rect of the map streams in the given scene states -- their
+    records in drawing order and the textures they sample, a level-resources payload the host
+    applies as it is."""
+    min_x, min_z, max_x, max_z = rect
+    return cabmap_state.BRIDGE.game_data_blob(
+        SCENE_DECALS, map=map_name, minX=min_x, minZ=min_z, maxX=max_x, maxZ=max_z,
+        sceneState=[str(state) for state in states])
+
+
+def scene_decal_boxes(map_name, rect, states):
+    """The same decals' boxes in drawing order, in the shape
+    :meth:`Kernel.host.SceneGraph.apply_decals` takes: per decal, the column-major matrix taking
+    the unit cube onto its box, in the game's own world."""
+    min_x, min_z, max_x, max_z = rect
+    rows = _rows(SCENE_DECAL_BOXES, map=map_name, minX=min_x, minZ=min_z, maxX=max_x, maxZ=max_z,
+                 sceneState=[str(state) for state in states])
+    return [[float(row["o{0}".format(index)]) for index in range(16)] for row in rows]
 
 
 def scene_cloud_shadow(map_name, anchor, states):
