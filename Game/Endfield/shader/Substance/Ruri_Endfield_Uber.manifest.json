@@ -1090,6 +1090,12 @@
         "srgb": false
       },
       {
+        "name": "_TaaFrameInfo",
+        "type": "vec4",
+        "widget": "Vector",
+        "srgb": false
+      },
+      {
         "name": "_TintColor",
         "type": "vec4",
         "widget": "Color",
@@ -3257,6 +3263,7 @@
     "uniform _ParallaxTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
     "uniform _RuriOutlineShellGate:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
     "uniform _StrokeMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
+    "uniform _TaaFrameInfo:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
     "uniform _VFXSpecialBlendTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
     "uniform _VFXSpecialMainTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
     "uniform unity_SpecCube0_HDR:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)"

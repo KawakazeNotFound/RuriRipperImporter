@@ -451,6 +451,8 @@ uniform bool _StrokeOn;
 uniform float _StrokeScale;
 //: param custom { "default": 0, "label": "Surface Type", "min": 0, "max": 1, "group": "参数" }
 uniform int _SurfaceType;
+//: param custom { "default": [0, 0, 0, 0], "label": "_TaaFrameInfo", "group": "R 引擎态" }
+uniform vec4 _TaaFrameInfo;
 //: param custom { "default": [1, 1, 1, 1], "label": "TintColor", "widget": "color", "srgb": true, "group": "特效贴图/流动" }
 uniform vec4 _TintColor;
 //: param custom { "default": 1, "label": "Tint Color Alpha (Default 1)", "min": 0, "max": 10, "group": "特效贴图/流动" }
@@ -683,6 +685,7 @@ struct Light {
 
 struct RuriData {
     float alpha;
+    float overClearedBackdrop;
     vec3 albedo;
     float roughness;
     float metallic;
@@ -826,6 +829,7 @@ Light ruriZeroLight() {
 RuriData ruriZeroRuriData() {
     RuriData v;
     v.alpha = 0.0;
+    v.overClearedBackdrop = 0.0;
     v.albedo = vec3(0.0);
     v.roughness = 0.0;
     v.metallic = 0.0;
@@ -2180,6 +2184,16 @@ vec3 IBL_SpecularSplitSum_Endfield_Probe(vec3 V, vec3 N, float NdotV_spec, float
     return IBL_SplitSumCombine(cubeSample, NdotV_spec, roughness, specRampEnv, ambIntensity, ambCol);
 }
 
+// 真源毛发壳在角色深度预趟(PreGBuffer,LightMode DepthCharacterOnly,b1321)里的去留:本层 alpha
+// 不低于屏幕抖动阈值(整像素位加本帧相位的交错梯度噪声,同一像素各层共用)就写深度,并把颜色目标清成 0。
+// 返回 1 = 幸存。
+float Shell_SurvivesDepthPrepass(float shellAlpha, vec2 pixelPosition)
+{
+    vec2 seed = floor(pixelPosition + _TaaFrameInfo.zz);
+    float threshold = frac(52.98291778564453125 * frac(dot(seed, float2(0.067110560834407806396484375, 0.005837149918079376220703125))));
+    return step(threshold, shellAlpha);
+}
+
 void Endfield_Fur(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData, float faceSign)
 {
     float shellIdx = input_.uv1.x;
@@ -2302,6 +2316,9 @@ void Endfield_Fur(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuff
     }
     finalColor /= _ExposureWithMiscParams.x;
     ruriData.alpha = ((_SurfaceType == 1) ? shellAlpha : 1.0);
+    // 真源前向趟 ZWrite Off、ZTest LEqual、按壳序 over:预趟里幸存的最外层把基底与更里的层挡在深度外,
+    // 叠在预趟清出的 0 上;它外侧的层照常叠在它上面。
+    ruriData.overClearedBackdrop = ((_SurfaceType == 1) ? Shell_SurvivesDepthPrepass(shellAlpha, ruriData.normalizedScreenSpaceUV * _ScreenParams.xy) : 0.0);
     outputData.baseColor = furAlbedo;
     outputData.normalWS = N;
     outputData.roughness = ruriData.roughness;
@@ -2967,6 +2984,11 @@ GBufferFragOutput CharaMixedPassFragment(CharaVaryings input_, float facing)
     outputData.baseColor = outputData.globalIllumination.xyz;
     outputData.baseColor.rgb = outputData.baseColor.rgb + RuriCharaAdditionalLights(ruriData.positionWS, ruriData.normalWS, ruriData.normalizedScreenSpaceUV, ruriData.albedo);
     outputData.alpha = ruriData.alpha;
+    if (ruriData.overClearedBackdrop > 0.5)
+    {
+        outputData.baseColor = outputData.baseColor * outputData.alpha;
+        outputData.alpha = 1.0;
+    }
     return RuriGBufferDataToCharaGbuffer(ruriData, outputData);
 }
 
