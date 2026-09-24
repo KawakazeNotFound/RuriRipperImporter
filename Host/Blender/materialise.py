@@ -129,6 +129,7 @@ class _Materialisation:
             self._build_node(node, roots)
         for entry in self.statement.report:
             self.warnings.append("{0} x{1}: {2}".format(entry.what, entry.count, entry.detail))
+        self._fit_shadow_pool()
         # Building nothing is an ANSWER, and it is one of two different answers:
         # the selection stated nothing, or it stated transforms and not one of
         # them draws. Handing back an empty document without saying which is the
@@ -145,6 +146,21 @@ class _Materialisation:
             rig=None if first_rig is None else first_rig[0],
             objects=self.objects, missing=self.missing, warnings=self.warnings,
             imported=len(self.objects))
+
+    def _fit_shadow_pool(self):
+        """EEVEE's virtual shadow maps draw their pages from one pool shared by every light,
+        512 MB (2048 pages) by default. A level states dozens of shadow-casting lights and asks
+        for more pages than that (2419 at 960x540 on the first one measured); EEVEE then drops
+        shadows and says so only in the viewport. How many pages a frame needs follows the
+        render size and the view, which this host cannot know here, so a statement that brings
+        shadow-casting lights gets the largest pool the engine offers."""
+        if not any(obj.type == "LIGHT" and obj.data.use_shadow for obj in self.objects):
+            return
+        eevee = self.context.scene.eevee
+        sizes = [item.identifier for item in eevee.bl_rna.properties["shadow_pool_size"].enum_items]
+        largest = max(sizes, key=int)
+        if eevee.shadow_pool_size != largest:
+            eevee.shadow_pool_size = largest
 
     def _skeleton_keys(self):
         """The skeletons something SKINNED actually draws with.
