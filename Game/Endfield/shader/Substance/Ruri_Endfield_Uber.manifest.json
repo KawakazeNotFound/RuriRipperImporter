@@ -574,6 +574,18 @@
         "srgb": false
       },
       {
+        "name": "_FurColor",
+        "type": "vec4",
+        "widget": "Color",
+        "srgb": true
+      },
+      {
+        "name": "_FurColorEnable",
+        "type": "float",
+        "widget": "ToggleUI",
+        "srgb": false
+      },
+      {
         "name": "_FurCutoffEnd",
         "type": "float",
         "widget": "Range",
@@ -611,6 +623,12 @@
       },
       {
         "name": "_FurEdgeFade",
+        "type": "float",
+        "widget": "Range",
+        "srgb": false
+      },
+      {
+        "name": "_FurFlowBaseStrength",
         "type": "float",
         "widget": "Range",
         "srgb": false

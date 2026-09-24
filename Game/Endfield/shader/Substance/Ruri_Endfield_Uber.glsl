@@ -278,6 +278,10 @@ uniform float _FresnelFlip;
 uniform float _FresnelPower;
 //: param custom { "default": 1, "label": "发根AO", "min": 0, "max": 1, "group": "皮毛" }
 uniform float _FurAO;
+//: param custom { "default": [1, 1, 1, 1], "label": "尖端调色", "widget": "color", "srgb": true, "group": "皮毛" }
+uniform vec4 _FurColor;
+//: param custom { "default": 0, "label": "使用尖端调色", "group": "皮毛" }
+uniform float _FurColorEnable;
 //: param custom { "default": 1, "label": "发尾CutOff", "min": 0, "max": 1, "group": "皮毛" }
 uniform float _FurCutoffEnd;
 //: param custom { "default": 0, "label": "发根CutOff", "min": 0, "max": 1, "group": "皮毛" }
@@ -292,6 +296,8 @@ uniform float _FurDyeIntensity;
 uniform vec4 _FurDyeMap_ST;
 //: param custom { "default": 0, "label": "边缘平滑过度", "min": 0, "max": 1, "group": "皮毛" }
 uniform float _FurEdgeFade;
+//: param custom { "default": 0.005, "label": "毛发方向偏移强度", "min": 0, "max": 0.06, "group": "皮毛" }
+uniform float _FurFlowBaseStrength;
 //: param custom { "default": [1, 1, 0, 0], "label": "_FurMap_ST", "group": "R 引擎态" }
 uniform vec4 _FurMap_ST;
 //: param custom { "default": 0, "label": "皮毛叠加噪声", "group": "皮毛" }
@@ -2069,11 +2075,16 @@ void Endfield_Hair(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuf
     outputData.globalIllumination = float4(finalColor, ruriData.alpha);
 }
 
+vec2 Shell_SourceUv(vec2 uv)
+{
+    return (uv - _BaseMap_ST.zw) / max(abs(_BaseMap_ST.xy), 0.001);
+}
+
 vec3 Shell_DyeBlend(vec2 uv, vec3 albedo)
 {
     if (!_FurDyeEnable)
         return albedo;
-    vec2 dyeUV = float2(mad((uv.x - _BaseMap_ST.z) / max(0.001, abs(_BaseMap_ST.x)), _FurDyeMap_ST.x, _FurDyeMap_ST.z), mad((uv.y - _BaseMap_ST.w) / max(0.001, abs(_BaseMap_ST.y)), _FurDyeMap_ST.y, _FurDyeMap_ST.w));
+    vec2 dyeUV = Shell_SourceUv(uv) * _FurDyeMap_ST.xy + _FurDyeMap_ST.zw;
     vec3 dyeSmp = ruriSampleSrgb(_FurDyeMap, dyeUV).rgb;
     vec3 screenBlend = 1.0 - (1.0 - albedo) * (1.0 - dyeSmp);
     return lerp(albedo, screenBlend, _FurDyeIntensity);
@@ -2081,9 +2092,9 @@ vec3 Shell_DyeBlend(vec2 uv, vec3 albedo)
 
 void Shell_SampleSurface(vec2 uv, float shellIdx, vec3 V, vec3 normalWS_raw, out float furSample, out float shellAlpha)
 {
-    vec4 furDirSmp = texture(_FurDirMap, uv);
+    vec4 furDirSmp = texture(_FurDirMap, Shell_SourceUv(uv));
     float furShellNoise = (frac(sin(dot(float2(shellIdx, shellIdx), float2(12.9898, 78.233))) * 43758.5469) * 2.0 - 1.0) * _FurNoise * 0.05;
-    vec2 furDirOffset = float2((furDirSmp.x * 2.0 - 1.0) * _FurDirMapEnable * 0.005 + furShellNoise, (furDirSmp.y * 2.0 - 1.0) * _FurDirMapEnable * 0.005 + furShellNoise);
+    vec2 furDirOffset = float2((furDirSmp.x * 2.0 - 1.0) * _FurDirMapEnable * _FurFlowBaseStrength + furShellNoise, (furDirSmp.y * 2.0 - 1.0) * _FurDirMapEnable * _FurFlowBaseStrength + furShellNoise);
     vec2 furSampleUV = float2((uv.x - shellIdx * furDirOffset.x) * _FurMap_ST.x + _FurMap_ST.z, (uv.y - shellIdx * furDirOffset.y) * _FurMap_ST.x + _FurMap_ST.w);
     furSample = texture(_FurMap, furSampleUV).x;
     float cutoff = shellIdx * (_FurCutoffEnd - _FurCutoffStart) + _FurCutoffStart;
@@ -2172,7 +2183,7 @@ vec3 IBL_SpecularSplitSum_Endfield_Probe(vec3 V, vec3 N, float NdotV_spec, float
 void Endfield_Fur(inout RuriData ruriData, CharaVaryings input_, inout RuriGBufferData outputData, float faceSign)
 {
     float shellIdx = input_.uv1.x;
-    vec3 furAlbedo = Shell_DyeBlend(input_.uv, ruriData.albedo);
+    vec3 furAlbedo = Shell_DyeBlend(input_.uv, ruriData.albedo * lerp(float3(1, 1, 1), _FurColor.rgb, saturate(_FurColorEnable * shellIdx * 0.5)));
     vec3 shadowColor = ComputeShadowColor(furAlbedo);
     float nrmZ_raw = 1.0;
     vec3 N;
