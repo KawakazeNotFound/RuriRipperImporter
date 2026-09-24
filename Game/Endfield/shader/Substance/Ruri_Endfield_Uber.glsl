@@ -216,7 +216,7 @@ uniform float _ColorAdjustmentRimIntensity;
 uniform float _ColorAdjustmentRimWidth;
 //: param custom { "default": 1, "label": "Color Adjustment Saturation", "min": 0, "max": 2, "group": "特效调色" }
 uniform float _ColorAdjustmentSaturation;
-//: param custom { "default": [0, 0, 0, 0], "label": "_DirectionalShadowParams", "group": "R 引擎态" }
+//: param custom { "default": [1, 0, 0, 0], "label": "_DirectionalShadowParams", "group": "R 引擎态" }
 uniform vec4 _DirectionalShadowParams;
 //: param custom { "default": 0, "label": "Disable VertColor", "group": "特效贴图/流动" }
 uniform float _DisableVertColor;
@@ -248,9 +248,9 @@ uniform bool _EnableCharacterVFX;
 uniform float _EnableNormalMap;
 //: param custom { "default": 0, "label": "VFX Color Adjustment", "group": "特效调色" }
 uniform float _EnableVFXColorAdjustment;
-//: param custom { "default": [1.67, 1.5, 1, 0], "label": "EnvGlobalParams0", "group": "引擎全局 CP" }
+//: param custom { "default": [1, 1, 1, 0], "label": "EnvGlobalParams0 (.x=环境光 .y=反射)", "group": "引擎全局 CP" }
 uniform vec4 _EnvironmentGlobalParams0;
-//: param custom { "default": [1, 0, 0, 0], "label": "ExposureWithMiscParams", "group": "引擎全局 CP" }
+//: param custom { "default": [1, 1, 1, 1], "label": "ExposureWithMiscParams (.x=光照强度 .y=片元尾)", "group": "引擎全局 CP" }
 uniform vec4 _ExposureWithMiscParams;
 //: param custom { "default": false, "label": "Eye High Light", "group": "眼睛 Matcap" }
 uniform bool _EyeHighLight;
@@ -1692,7 +1692,7 @@ void Endfield_Face(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuf
     vec3 litColor = DesaturateAroundLuma(mainLit, mainLitLum, desatAmt) + skinTerm + subsurfSpec + cp14Term;
     if (_EnableVFXColorAdjustment > 0.5)
         litColor = VFXColorAdjust(litColor, NdotV_sat, rimModifier);
-    vec3 finalColor = litColor / _ExposureWithMiscParams.x;
+    vec3 finalColor = litColor * _ExposureWithMiscParams.y;
     // 真源片元尾(characternpr_skin b* _3324.w = 1.0f):脸从不透明,alpha 恒 1
     // (RURI_INIT_COMMON 给的 baseA 在脸上是数据位,不是透明度)。
     ruriData.alpha = 1.0;
@@ -1867,7 +1867,7 @@ void Endfield_Eyes(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuf
         vec3 emissionTerm = (_UseEmission ? ruriRead_EmissionMap(sampleUV).rgb * _EmissionColor.rgb * _EmissionBrightness : float3(0, 0, 0));
         eyeDirect = (emissionTerm + eyeAlbedo * _CharacterParams13.x + (irisMask * _EyeHighLightColor.rgb) * _CharacterParams13.y + (eyeBaseAlpha * _EyeScatteringColor.rgb) * _CharacterParams13.z) * alphaPremult;
     }
-    vec3 finalColor = (eyeDirect + subsurfSpec + term1) / _ExposureWithMiscParams.x;
+    vec3 finalColor = (eyeDirect + subsurfSpec + term1) * _ExposureWithMiscParams.y;
     // 真源片元尾(b24 _2175.w):alpha = (_SurfaceType==1) ? baseA*_BaseColor.w : 1。
     // RURI_INIT_COMMON 无条件给的 baseA 在不透明眼材质上是虹膜散射遮罩,不是透明度——门必须补回。
     ruriData.alpha = (_SurfaceType == 1 ? eyeBaseAlpha : 1.0);
@@ -2066,7 +2066,7 @@ void Endfield_Hair(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuf
     vec3 litColor = DesaturateAroundLuma(combined, combinedLum, desatAmt) + skinSpec + subsurfSpec;
     if (_EnableVFXColorAdjustment > 0.5)
         litColor = VFXColorAdjust(litColor, saturate(dot(N, ruriData.V)), 1.0);
-    vec3 finalColor = litColor / _ExposureWithMiscParams.x;
+    vec3 finalColor = litColor * _ExposureWithMiscParams.y;
     // 真源 b100 `_3483.w = (_SurfaceType == 1.0f) ? _471 : 1.0f;`,`_471 = _455.w * _BaseColor.w`
     // —— 即本函数开头那个 baseAlpha,且**是赋值**。旧版既漏了 _BaseColor.a、又写成 `*=`
     // (详见 CharacterEndfield.Standard 同款)。
@@ -2314,7 +2314,7 @@ void Endfield_Fur(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuff
         vec3 vfxContrib = vfxOpacity * lerp(vfxDissolvedColor, _VFXFresnelColor.rgb, vfxFresnelAlpha);
         finalColor += vfxContrib * alphaPremul;
     }
-    finalColor /= _ExposureWithMiscParams.x;
+    finalColor *= _ExposureWithMiscParams.y;
     ruriData.alpha = ((_SurfaceType == 1) ? shellAlpha : 1.0);
     // 真源前向趟 ZWrite Off、ZTest LEqual、按壳序 over:预趟里幸存的最外层把基底与更里的层挡在深度外,
     // 叠在预趟清出的 0 上;它外侧的层照常叠在它上面。
@@ -2412,8 +2412,8 @@ void Endfield_VFX(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuff
         float fresnelBlend = fresnelTerm * _FresnelColor.a;
         color = lerp(color, _FresnelColor.rgb, fresnelBlend);
     }
-    float exposureScale = mad(_ExposureWithMiscParams.x, _IgnorePostExposure, 1.0 - _IgnorePostExposure);
-    color = clamp(color / exposureScale, 0.0, 1000.0);
+    float exposureScale = mad(_ExposureWithMiscParams.y, _IgnorePostExposure, 1.0 - _IgnorePostExposure);
+    color = clamp(color * exposureScale, 0.0, 1000.0);
     float nearFade = 1.0;
     if (_UseNearCameraFade != 0.0)
     {
@@ -2742,7 +2742,7 @@ void Endfield_LiquidAg(inout RuriData ruriData, CharaVaryings input_, inout Ruri
     }
     if (_EnableVFXColorAdjustment > 0.5)
         litColor = VFXColorAdjust(litColor, ggxNdotV, 1.0);
-    vec3 finalColor = litColor / _ExposureWithMiscParams.x;
+    vec3 finalColor = litColor * _ExposureWithMiscParams.y;
     // 真源 b12 `_2442.w = (_SurfaceType == 1.0f) ? _454 : 1.0f;`,`_454 = _438.w * _BaseColor.w`。
     // 与 Standard 同款:**赋值**不是乘,旧版的 `*=` 让两支都错(详见 CharacterEndfield.Standard)。
     ruriData.alpha = ((_SurfaceType == 1) ? (ruriData.baseAlpha * _BaseColor.a) : 1.0);
@@ -2874,7 +2874,7 @@ void Endfield_Standard(inout RuriData ruriData, CharaVaryings input_, inout Ruri
     vec3 litColor = desatMainLit + skinSpec + subsurfSpec + emissionContrib + cubemapContrib;
     if (_EnableVFXColorAdjustment > 0.5)
         litColor = VFXColorAdjust(litColor, ggxNdotV, 1.0);
-    vec3 finalColor = litColor / _ExposureWithMiscParams.x;
+    vec3 finalColor = litColor * _ExposureWithMiscParams.y;
     // 真源 b360 `_3276.w = (_SurfaceType == 1.0f) ? _485 : 1.0f;`,其中 `_485 = _469.w * _BaseColor.w`
     // (= baseAlpha × _BaseColor.a)。**是赋值不是乘**:不透明支写的是字面 1,而不是"乘个 1"。
     // 旧版写成 `*=`,而此刻 ruriData.alpha 已经等于 _485(RURI_INIT_COMMON 播种 baseMap.a,
