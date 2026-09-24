@@ -418,6 +418,11 @@ def scene_grading(map_name, anchor, states):
     The bloom inputs are the build's own packed constants as they stand: their zero is
     already "no bloom" (the intensity packs as two to its power minus one), so there is
     no identity to subtract.
+
+    The screen-space reflection inputs are the post stack's switch and the two fades its
+    trace passes read (screen edge; mirror angle as multiply and add). Their zero is the
+    switch off, which is identity; the fades mean something only with it on, so they go
+    out as the volumes state them.
     """
     row = _rows(SCENE_ENVIRONMENT, **_viewer(map_name, anchor, states))[0]
     return {
@@ -439,6 +444,9 @@ def scene_grading(map_name, anchor, states):
             "bloomTint": tuple(float(row["bloomTint" + channel]) for channel in "RGB"),
             "bloomScatter": float(row["bloomScatter"]),
             "bloomResolution": float(row["bloomResolution"]),
+            "ssrEnabled": float(row["ssrEnable"]),
+            "ssrScreenFade": float(row["ssrScreenFade"]),
+            "ssrMirrorFade": (float(row["ssrMirrorMultiply"]), float(row["ssrMirrorAdd"])),
         },
     }
 

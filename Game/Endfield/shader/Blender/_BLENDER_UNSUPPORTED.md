@@ -31,7 +31,6 @@
 | GeometricDistortion | Pipeline | Identity | world-space vertex offset | 形变高度图、它的投影矩阵、作用球与方向都是管线每帧写的状态;编译器看见的只是一次矩阵变换加一次贴图读 |
 | ScreenColor | Pipeline | Declared | linear scene radiance | 有的管线是 RT 有的是 copy,分辨率/mip 链/色彩空间各不相同;而材质节点图**根本读不到**已绘制的帧缓冲 |
 | ScreenDepth | Pipeline | Declared | raw device depth | reversed-Z / 线性 / 对数深度三种约定并存,_ZBufferParams 的打包也是引擎私有;而材质节点图读不到深度缓冲 |
-| ScreenSpaceReflection | Pipeline | Identity | linear reflected radiance (rgb) and its [0,1] confidence (w) | 追踪算法、分辨率与可信度的定义各家自定(HG 是 _SSRLightingTexture 与 _SSRFadenessTexture 两张 RT),编译器看见的只是两次按屏幕坐标的纹理取值 |
 | VolumetricFogScattering | Pipeline | Declared | linear in-scattered radiance (rgb) and transmittance (w) between the camera and this point | froxel 网格的分辨率、深度分布、抖动与时间累积各家自定(HG 是 _IntegratedLightScattering 一张 3D RT,按抖动后的屏幕坐标与对数深度切片取值);编译器看见的只是一次 3D 纹理取值 |
 | WaterWetnessMask | Pipeline | Declared | dry coverage (x) and the wet part that keeps its roughness (y) | 润湿的来源(水面、贴花、雨)与它的屏幕空间投影都是管线逐帧画的;编译器看见的只是一次按屏幕坐标的纹理取值 |
 
@@ -41,6 +40,24 @@
 |---|---|
 | SampleNormalMap | uniform _UseBumpMap 挂 [ShaderProperty] 但 Default 缺失/不可解析——禁止发明默认值 |
 | DitherClip | uniform _DitherMatrix 为结构/资源型(float4x4),无节点图等价 |
+| Lit | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| Lit | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitForward | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitForward | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitTransparent | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitTransparent | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitEffect | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitEffect | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitEffectBlend | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitEffectBlend | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitHLod | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| LitHLod | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| Leaf | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| Leaf | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| Grass | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| Grass | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| Trunk | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
+| Trunk | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | SceneMixedPassVertex[Lit] | GpuClothPosition 降不下来:uniform _ClothSkeletonDataBuffer 为结构/资源型(StructuredBuffer),无节点图等价 |
 | SceneMixedPassVertex[LitForward] | GpuClothPosition 降不下来:uniform _ClothSkeletonDataBuffer 为结构/资源型(StructuredBuffer),无节点图等价 |
 | SceneMixedPassVertex[LitTransparent] | GpuClothPosition 降不下来:uniform _ClothSkeletonDataBuffer 为结构/资源型(StructuredBuffer),无节点图等价 |
