@@ -122,6 +122,15 @@ OBJECT_ATTRIBUTES = extensions.point(
     "blender.object_attributes",
     "Per-object engine globals a shading stack reads from object custom properties.")
 
+#: ``texel_size_bases() -> {name: [4 floats]}``. The ``<texture>_TexelSize`` globals a
+#: stack reads a level texture's size through when the texture is made at the size its
+#: level states: each time the host fills such a texture's image it writes (1/w, 1/h, w, h)
+#: minus the default on the scene, the way level globals are written. An image never
+#: filled keeps the default -- its one-texel placeholder's own size.
+TEXEL_SIZES = extensions.point(
+    "blender.texel_sizes",
+    "Texel-size globals of level textures made at their level's own size.")
+
 #: ``light_record_attributes() -> [name, ...]``. The LIGHT attributes a stack's light
 #: loop reads a source's own per-light record through, one per record vector in record
 #: order; the host stamps each light's record under them (:mod:`light_records`). A stack
@@ -240,6 +249,29 @@ def register_object_attributes(bases):
 
 def unregister_object_attributes(bases):
     OBJECT_ATTRIBUTES.remove(bases)
+
+
+def register_texel_sizes(bases):
+    TEXEL_SIZES.add(bases)
+
+
+def unregister_texel_sizes(bases):
+    TEXEL_SIZES.remove(bases)
+
+
+def _texel_size_base(name):
+    """The default the registered stacks declare for one texel-size global, or None when no
+    stack reads it; two different defaults for one name are refused."""
+    known = None
+    for provider in TEXEL_SIZES:
+        base = provider().get(name)
+        if base is None:
+            continue
+        if known is not None and list(known) != list(base):
+            raise ValueError("[material] texel size {0} has two defaults: {1} and {2}".format(
+                name, known, list(base)))
+        known = list(base)
+    return known
 
 
 def object_attribute_base(name):
@@ -543,7 +575,7 @@ def apply_level_resources(scene, values, payloads):
                 raise ValueError("[material] level block {0} stated twice".format(name))
             blocks[name] = block
     written, unclaimed = _apply_level_globals(scene, merged)
-    filled, unread = _apply_level_images(blocks)
+    filled, unread = _apply_level_images(scene, blocks)
     return written + filled, unclaimed + unread
 
 
@@ -882,18 +914,39 @@ _LEVEL_PIXELS = {"texture": _texture_pixels, "volume": _volume_pixels, "array": 
                  "table": _table_pixels}
 
 
-def _apply_level_images(blocks):
+def _apply_level_images(scene, blocks):
     """Fill the image behind every stated block some registered stack reads. Two
     stacks laying one resource out differently cannot share its image, so that is
-    refused. Returns ``(filled, unread)``."""
+    refused. A texture array a stack reads one image per slice (``slice`` layouts)
+    comes as a tile set, tile i being slice i; a level stating more slices than the
+    stack reads is refused, since the stack clamps a slice index it has no image for.
+    A texture made at its level's own size gets its ``_TexelSize`` global written
+    alongside, when a stack reads one. Returns ``(filled, unread)``."""
     layouts = {}
     for provider in LEVEL_IMAGES:
         for name, layout in provider().items():
             known = layouts.setdefault(name, layout)
             if known != layout:
                 raise ValueError("[material] level image {0} has two layouts".format(name))
+    slices = {}
+    for layout in layouts.values():
+        if layout["kind"] == "slice":
+            slices.setdefault(layout["array"], {})[int(layout["index"])] = layout
     filled = []
     for name, (kind, levels) in blocks.items():
+        if name in slices:
+            if kind != "tiles":
+                raise ValueError("[material] level image {0}: stated as a {1}, read one image per slice".format(
+                    name, kind))
+            if len(levels) > len(slices[name]):
+                raise ValueError("[material] level image {0}: {1} slices stated, the stacks read {2}".format(
+                    name, len(levels), len(slices[name])))
+            for index, layout in sorted(slices[name].items()):
+                if index >= len(levels):
+                    continue
+                _fill_image(volume_image(layout), _tile_pixels(levels[index]))
+            filled.append(name)
+            continue
         layout = layouts.get(name)
         if layout is None:
             continue
@@ -907,12 +960,34 @@ def _apply_level_images(blocks):
             filled.append(name)
             continue
         pixels = _LEVEL_PIXELS[layout["kind"]](levels, layout)
-        if (int(image.size[0]), int(image.size[1])) != (pixels.shape[1], pixels.shape[0]):
-            image.scale(pixels.shape[1], pixels.shape[0])
-        image.pixels.foreach_set(pixels.ravel())
-        image.pack()
+        _fill_image(image, pixels)
+        base = _texel_size_base(name + "_TexelSize") if layout["kind"] == "texture" and "size" not in layout else None
+        if base is not None:
+            height, width = pixels.shape[:2]
+            scene[name + "_TexelSize"] = [value - offset for value, offset in
+                                          zip((1.0 / width, 1.0 / height, float(width), float(height)), base)]
         filled.append(name)
-    return filled, sorted(name for name in blocks if name not in layouts)
+    scene.update_tag()
+    return filled, sorted(name for name in blocks if name not in layouts and name not in slices)
+
+
+def _fill_image(image, pixels):
+    """Write a (height, width, 4) texel array into ``image``, first row at the bottom, scaling
+    the image to it first when a level states its own size, and pack it."""
+    if (int(image.size[0]), int(image.size[1])) != (pixels.shape[1], pixels.shape[0]):
+        image.scale(pixels.shape[1], pixels.shape[0])
+    image.pixels.foreach_set(pixels.ravel())
+    image.pack()
+
+
+def _tile_pixels(texels):
+    """One tile of a tile set, shaped (height, width, channels), as RGBA with its first stored
+    row at the bottom (Blender's pixel order and the order the source stores rows in)."""
+    import numpy
+    height, width, channels = texels.shape
+    pixels = numpy.zeros((height, width, 4), dtype=numpy.float32)
+    pixels[:, :, :channels] = texels
+    return pixels
 
 
 # ---------------------------------------------------------------------------
