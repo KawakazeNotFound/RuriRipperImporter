@@ -361,8 +361,6 @@ def _import(context, arguments):
     grading = datasets.scene_grading(map_name, anchor, states) if anchor is not None else None
     if grading is not None and host_port.Compositor in host.capabilities:
         host.apply_post_inputs(context, grading["inputs"])
-        if grading["white_balance"] > 0.5:
-            notes.append("white balance is on in this volume and is not graded")
         if grading["automatic_exposure"]:
             notes.append("this volume adapts its exposure automatically; only its "
                          "compensation is applied")

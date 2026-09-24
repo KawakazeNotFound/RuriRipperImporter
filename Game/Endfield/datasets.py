@@ -401,19 +401,19 @@ def scene_grading(map_name, anchor, states):
     exposure adapts to its frame's histogram first, which is not read here, so that comes
     back as its own flag too.
 
-    White balance comes back as its own flag: turning a temperature and a tint into LMS
-    coefficients happens inside the build's post pass, which is not read here, so a
-    phase that enables it has to be reported rather than graded by an identity that is
-    not the phase's answer.
+    White balance is the LMS coefficients the build computes from the phase's temperature
+    and tint (the identity when the phase turns it off); they are multipliers, so the
+    difference from one goes out.
     """
     row = _rows(SCENE_ENVIRONMENT, **_viewer(map_name, anchor, states))[0]
     return {
-        "white_balance": float(row.get("gradeWhiteBalance") or 0),
         "tonemap": float(row.get("tonemap") or 0),
         "automatic_exposure": float(row.get("exposureMode") or 0) < 0.5,
         "inputs": {
             "exposureStops": float(row.get("exposureCompensation") or 0),
-            "gradeColorBalance": (0.0, 0.0, 0.0),
+            "gradeColorBalance": (float(row["gradeBalanceL"]) - 1.0,
+                                  float(row["gradeBalanceM"]) - 1.0,
+                                  float(row["gradeBalanceS"]) - 1.0),
             "gradeColorFilter": (float(row["gradeFilterR"]) - 1.0,
                                  float(row["gradeFilterG"]) - 1.0,
                                  float(row["gradeFilterB"]) - 1.0),
