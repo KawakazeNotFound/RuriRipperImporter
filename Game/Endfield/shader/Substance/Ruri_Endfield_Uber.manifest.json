@@ -3246,7 +3246,7 @@
     "纹理形参特化:SampleNormal(_BumpMap) → SampleNormal_BumpMap(源纹理已拆进宿主通道,GLSL 无法把它当采样器传参)",
     "能力 MainLight(GetMainLight/0):@body 兑现(镜像体 + 引擎态)",
     "能力 ShadowAttenuation(MainLightRealtimeShadow/1):宿主无兑现 → 缺席值 1.0(Identity)",
-    "能力 ScreenSpaceShadowMask(LoadScreenSpaceShadowMask/1):宿主无兑现 → 缺席值 float2(1.0, 1.0)(Identity)",
+    "能力 ScreenSpaceShadowMask(LoadScreenSpaceShadowMask/2):宿主无兑现 → 缺席值 float2(1.0, 1.0)(Identity)",
     "能力 ScreenDepth(SampleSceneDepth/1):宿主无兑现 → 缺席值 0.0(Declared)",
     "uniform _BaseMap_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",
     "uniform _BlendTex_ST:无标签但有初始化器缺省 → 注解参数(组 R 引擎态,缺省同 Blender 腿)",

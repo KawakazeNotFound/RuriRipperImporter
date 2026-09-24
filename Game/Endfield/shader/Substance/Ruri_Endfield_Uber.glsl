@@ -1342,7 +1342,7 @@ vec3 ComputeShadowColor(vec3 albedo)
     return _ShadowColorSaturation * (shadBright - shadLum) + shadLum;
 }
 
-vec2 LoadScreenSpaceShadowMask(vec2 normalizedScreenSpaceUV) {
+vec2 LoadScreenSpaceShadowMask(vec2 normalizedScreenSpaceUV, vec3 positionWS) {
     return float2(1.0, 1.0);
 }
 
@@ -1571,7 +1571,7 @@ void Endfield_Face(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuf
     vec3 specColor = _Metallic * (rimAlbedo - specScale * 0.04) + specScale * 0.04;
     vec3 shadowLut = oneMinusRefl * ComputeShadowColor(albedo);
     Light mainLight = ruriData.mainLight;
-    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV);
+    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV, ruriData.positionWS);
     vec3 blendedLightCol;
     blendedLightCol.r = mainLight.color.r + _CharacterParams12.y * (_CharacterParams4.x - mainLight.color.r);
     blendedLightCol.g = mainLight.color.g + _CharacterParams12.y * (_CharacterParams4.y - mainLight.color.g);
@@ -1802,7 +1802,7 @@ void Endfield_Eyes(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuf
     // 是「暗支/亮支整式 lerp」:_1345/_1361 都以屏幕阴影 _1248 为 lerp 因子,
     // ramp alpha 不乘阴影(_1315 = min(1, ramp.a)),也没有 smoothstep。
     // 阴影源改成真源的屏幕空间遮罩(旧版读 mainLight.shadowAttenuation —— 那条链已确证是自造并删除)。
-    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV);
+    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV, ruriData.positionWS);
     float eyeShadow = Endfield_CastShadow(ssShadowMask.x);
     float minRampA = min(eyeRampAlpha, 1.0);
     float combWeight = saturate(eyeRampViewAlpha + eyeRampAlpha);
@@ -1976,7 +1976,7 @@ void Endfield_Hair(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuf
     vec3 shadowDiff = darkenedShadowColor * 0.96;
     float diffColorLum = Luminance(diffColor);
     Light mainLight = ruriData.mainLight;
-    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV);
+    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV, ruriData.positionWS);
     vec3 blendedLightCol = lerp(mainLight.color, _CharacterParams5.xyz, _CharacterParams12.y);
     float blendedLightInt = 1.0;
     float geomNdotL = dot(N, ruriData.adjustedLightDir);
@@ -2266,7 +2266,7 @@ void Endfield_Fur(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuff
     float furChroma;
     float furViewAlpha;
     vec4 furRamp = SampleDiffRamp(modNdotL, N, ruriData.camFwd, furChroma, furViewAlpha);
-    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV);
+    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV, ruriData.positionWS);
     // 真源 _2136/_2167/_2173:三个互不相同的量,旧版混成了一个 minShadow。
     float castShadow = Endfield_CastShadow(ssShadowMask.x);
     // 真源 body 家族的 A 是「视角 ramp alpha × 遮罩.y」(b360 `_2107 = _2099 * _2049`),
@@ -2663,7 +2663,7 @@ void Endfield_LiquidAg(inout RuriData ruriData, CharaVaryings input_, inout Ruri
     float stdChroma;
     float stdViewAlpha;
     vec4 stdRamp = SampleDiffRamp(modNdotL, N, ruriData.camFwd, stdChroma, stdViewAlpha);
-    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV);
+    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV, ruriData.positionWS);
     // 真源 _2136/_2167/_2173:三个互不相同的量,旧版混成了一个 minShadow。
     float castShadow = Endfield_CastShadow(ssShadowMask.x);
     // 真源 body 家族的 A 是「视角 ramp alpha × 遮罩.y」(b360 `_2107 = _2099 * _2049`),
@@ -2807,7 +2807,7 @@ void Endfield_Standard(inout RuriData ruriData, CharaVaryings input_, inout Ruri
     float stdChroma;
     float stdViewAlpha;
     vec4 stdRamp = SampleDiffRamp(modNdotL, N, ruriData.camFwd, stdChroma, stdViewAlpha);
-    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV);
+    vec2 ssShadowMask = LoadScreenSpaceShadowMask(ruriData.normalizedScreenSpaceUV, ruriData.positionWS);
     // 真源 _2136/_2167/_2173:三个互不相同的量,旧版混成了一个 minShadow。
     float castShadow = Endfield_CastShadow(ssShadowMask.x);
     // 真源 body 家族的 A 是「视角 ramp alpha × 遮罩.y」(b360 `_2107 = _2099 * _2049`),

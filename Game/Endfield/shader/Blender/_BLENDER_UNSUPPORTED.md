@@ -13,7 +13,6 @@
 | GeometricDistortion | Pipeline | Identity | world-space vertex offset | 形变高度图、它的投影矩阵、作用球与方向都是管线每帧写的状态;编译器看见的只是一次矩阵变换加一次贴图读 |
 | MainLight @ 顶点腿 OverlayShadow | Scene | Identity | directional light record (direction toward light, linear radiance) | 几何节点树里没有灯节点也没有闭包:片元里由宿主兑现的这条询问,顶点腿只能落缺席值 |
 | ScreenDepth | Pipeline | Declared | raw device depth | reversed-Z / 线性 / 对数深度三种约定并存,_ZBufferParams 的打包也是引擎私有;而材质节点图读不到深度缓冲 |
-| ScreenSpaceShadowMask | Pipeline | Identity | [0,1] screen-space resolved shadow mask | 解算通道数与语义各家自定(HG 是 .x 场景 / .y 角色图集),而且它是本帧的一张 RT;编译器看见的只是一次按屏幕坐标的纹理取值 |
 
 ### 不可发射函数
 
