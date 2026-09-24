@@ -639,6 +639,7 @@ struct CharaVaryings {
     vec4 tangentWS;
     vec4 uv1;
     vec2 uv0zw;
+    vec2 uv2;
     vec4 positionNDC;
     vec4 color;
     vec4 positionCS;
@@ -787,6 +788,7 @@ CharaVaryings ruriZeroCharaVaryings() {
     v.tangentWS = vec4(0.0);
     v.uv1 = vec4(0.0);
     v.uv0zw = vec2(0.0);
+    v.uv2 = vec2(0.0);
     v.positionNDC = vec4(0.0);
     v.color = vec4(0.0);
     v.positionCS = vec4(0.0);
@@ -1023,8 +1025,8 @@ vec3 SampleNormal(vec2 uv, sampler2D bumpMap, float scale)
 {
     if (_NORMALMAP)
     {
-        vec4 n = vec4(texture(bumpMap, uv));
-        return vec3(UnpackNormalScale(n, scale));
+        vec4 n = half4(texture(bumpMap, uv));
+        return half3(UnpackNormalScale(n, scale));
     }
     else
     {
@@ -1044,7 +1046,7 @@ vec3 TransformTangentToWorld(vec3 directionTS, mat3 tangentToWorld)
 
 vec3 ResolveNormalWS(vec3 normalTS, vec3 positionWS, vec3 vertexNormalWS, vec4 tangentWS, vec2 uv)
 {
-    vec3 N = vec3(NormalizeNormalPerPixel(vertexNormalWS));
+    vec3 N = half3(NormalizeNormalPerPixel(vertexNormalWS));
     vec3 dp1 = ddx(positionWS);
     vec3 dp2 = ddy(positionWS);
     vec2 duv1 = ddx(uv);
@@ -1063,10 +1065,10 @@ vec3 ResolveNormalWS(vec3 normalTS, vec3 positionWS, vec3 vertexNormalWS, vec4 t
         vec3 Td = dp2perp * duv1.x + dp1perp * duv2.x;
         vec3 Bd = dp2perp * duv1.y + dp1perp * duv2.y;
         float invmax = rsqrt(max(dot(Td, Td), dot(Bd, Bd)) + 1e-8);
-        T = vec3(Td * invmax);
-        B = vec3(Bd * invmax);
+        T = half3(Td * invmax);
+        B = half3(Bd * invmax);
     }
-    return vec3(NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, ruriMat3Rows(T, B, N))));
+    return half3(NormalizeNormalPerPixel(TransformTangentToWorld(normalTS, ruriMat3Rows(T, B, N))));
 }
 
 bool IsPerspectiveProjection()
@@ -1120,8 +1122,8 @@ vec3 SampleNormal_BumpMap(vec2 uv, float scale)
 {
     if (_NORMALMAP)
     {
-        vec4 n = vec4(ruriRead_BumpMap(uv));
-        return vec3(UnpackNormalScale(n, scale));
+        vec4 n = half4(ruriRead_BumpMap(uv));
+        return half3(UnpackNormalScale(n, scale));
     }
     else
     {
@@ -2354,7 +2356,7 @@ void Endfield_VFX(inout RuriData ruriData, CharaVaryings input_, inout RuriGBuff
     if (_EnableNormalMap != 0.0)
     {
         vec2 normalUV = ComputeVFXUV_Endfield(uv0, uv1, _NormalMapUVWeights, _NormalMapUVSpeed, time, custom1Y, _NormalMapUVRotateMat, _NormalMap_ST, disturb, _NormalMapUseDisturb);
-        vec4 nSample = ruriSampleSrgb(_NormalMap, normalUV);
+        vec4 nSample = texture(_NormalMap, normalUV);
         vec3 normalTS = float3(0, 0, 0);
         normalTS.x = nSample.r * nSample.a * 2.0 - 1.0;
         normalTS.y = nSample.g * 2.0 - 1.0;
@@ -2927,7 +2929,7 @@ GBufferFragOutput RuriGBufferDataToCharaGbuffer(RuriData ruriData, RuriGBufferDa
     output_.gBuffer0 = float4(outputData.baseColor, outputData.alpha);
     output_.gBuffer1 = float4(unused, outputData.metallic, outputData.specular, outputData.occlusion);
     output_.gBuffer2 = float4(packedNormalWS, 1.0 - outputData.roughness);
-    output_.color = vec4(outputData.globalIllumination);
+    output_.color = half4(outputData.globalIllumination);
     return output_;
 }
 
