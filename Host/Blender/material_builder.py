@@ -682,16 +682,21 @@ def volume_image(layout):
     colour channels are premultiplied on upload and come back zero wherever the
     fourth channel is. A data table holds the single-precision values the source
     reads as they are (positions, matrix rows), so it goes to the GPU at full
-    precision; the atlases hold half and 8-bit texels and keep the half upload."""
+    precision; the atlases hold half and 8-bit texels and keep the half upload.
+
+    A texture whose layout states no size takes the size of the texture a level states: it is made
+    at one texel and the level scales it (the stack samples it through a plain image node, so no
+    coordinate depends on that size)."""
     if layout["kind"] == "tiles":
         return _tiles_image(layout)
-    size = layout["size"] if layout["kind"] == "table" else layout["atlas"]
-    width, height = (int(value) for value in size)
+    size = layout["size"] if layout["kind"] == "table" else layout.get("atlas")
     image = bpy.data.images.get(layout["image"])
-    if image is not None and (int(image.size[0]), int(image.size[1])) != (width, height):
+    if image is not None and size is not None and (int(image.size[0]), int(image.size[1])) != tuple(
+            int(value) for value in size):
         bpy.data.images.remove(image)
         image = None
     if image is None:
+        width, height = (int(value) for value in size) if size is not None else (1, 1)
         float_buffer = layout["format"] in ("HALF", "FLOAT")
         image = bpy.data.images.new(layout["image"], width, height, alpha=True, float_buffer=float_buffer)
         image.colorspace_settings.name = "Non-Color"
@@ -843,9 +848,11 @@ def _array_pixels(levels, layout):
 
 def _texture_pixels(levels, layout):
     """A 2D texture as the stack reads it: one image, row 0 at the bottom. It is stated
-    as a one-slice, one-mip array."""
+    as a one-slice, one-mip array, at the layout's size or, for a layout stating none, at
+    its own."""
     import numpy
-    width, height = (int(value) for value in layout["size"])
+    width, height = ((int(value) for value in layout["size"]) if "size" in layout
+                     else (int(levels[0].shape[2]), int(levels[0].shape[1])))
     if len(levels) != 1 or levels[0].shape[:3] != (1, height, width):
         raise ValueError("[material] texture {0}: stated {1}, the layout says one {2}x{3} image".format(
             layout["image"], [level.shape for level in levels], width, height))
@@ -899,7 +906,10 @@ def _apply_level_images(blocks):
             _write_tiles(image, levels)
             filled.append(name)
             continue
-        image.pixels.foreach_set(_LEVEL_PIXELS[layout["kind"]](levels, layout).ravel())
+        pixels = _LEVEL_PIXELS[layout["kind"]](levels, layout)
+        if (int(image.size[0]), int(image.size[1])) != (pixels.shape[1], pixels.shape[0]):
+            image.scale(pixels.shape[1], pixels.shape[0])
+        image.pixels.foreach_set(pixels.ravel())
         image.pack()
         filled.append(name)
     return filled, sorted(name for name in blocks if name not in layouts)
