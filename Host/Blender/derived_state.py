@@ -156,6 +156,7 @@ def _run_camera_basis(change):
     活动相机与渲染输出(没有界面时它就站在活动相机上),树里现读。"""
     from . import viewpoint
     viewpoint.sync(change.scene)
+    viewpoint.sync_footprint(change.scene)
     scope = None if change.whole_scene else change.objects
     return material_builder.push_camera_stages(objects=scope)
 
@@ -191,8 +192,9 @@ STAGES = (
     Stage("rig-basis", (OBJECTS, MATERIALS, RIG), _run_rig_basis),
     # 后处理读的其实是「这个场景现在在放游戏内容了吗」:网格、材质、游戏自己的灯,
     # 任何一样进场都是证据(展示台可以只上太阳不上美术,那时也该有 tonemap)。
-    # 装过就跳过,所以在灯上反复触发也只是一次 installed() 判断。
-    Stage("post", (OBJECTS, MATERIALS, LIGHT_SET), _run_post),
+    # 装过就跳过,所以在灯上反复触发也只是一次 installed() 判断;相机事实含出图尺寸,
+    # 泛光金字塔的级数与各级尺寸跟着它走,尺寸没变时重建图链也只是一次签名比较。
+    Stage("post", (OBJECTS, MATERIALS, LIGHT_SET, CAMERA), _run_post),
     Stage("material-panels", (MATERIALS,), _run_material_panels),
 )
 

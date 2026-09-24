@@ -122,6 +122,15 @@ LIGHT_RECORDS = extensions.point(
     "blender.light_records",
     "Per-light records of a source's own light table a shading stack reads as light attributes.")
 
+#: ``render_footprint_attributes() -> [name, ...]``. Scene attributes a stack reads the
+#: world size of one render output pixel through: (orthographic term, perspective term
+#: per unit of view depth). The host keeps them on the scene from the render camera and
+#: the output size (:mod:`viewpoint`), so a lens or resolution change rewrites a value and
+#: rewires nothing.
+RENDER_FOOTPRINTS = extensions.point(
+    "blender.render_footprints",
+    "Scene attributes a shading stack reads the render's per-pixel world size through.")
+
 #: Custom property stamped on every material this module or a stack builds.
 SOURCE_KEY_PROPERTY = "ruri_source_key"
 #: Marker on an image datablock: its colour space is already what the ASSET
@@ -223,6 +232,19 @@ def register_light_records(attributes):
 
 def unregister_light_records(attributes):
     LIGHT_RECORDS.remove(attributes)
+
+
+def register_render_footprints(attributes):
+    RENDER_FOOTPRINTS.add(attributes)
+
+
+def unregister_render_footprints(attributes):
+    RENDER_FOOTPRINTS.remove(attributes)
+
+
+def render_footprint_attributes():
+    """Every scene attribute the loaded stacks read the render's pixel footprint through."""
+    return sorted({name for provider in RENDER_FOOTPRINTS for name in provider()})
 
 
 def register_material_panel(panel):
@@ -361,14 +383,21 @@ def apply_post_stages(scene, force=False):
     compositor tree and writes the view transform and the viewport's compositor
     switch back to shipped values, so re-running it on every import silently
     zeroes every knob the user turned. ``force`` is the panel button that means
-    start over."""
+    start over. An installed stage still rebuilds its image chains when the output
+    size moved: a bloom pyramid's level count and level sizes are the frame's."""
     graded = [stage for stage in POST_STAGES if stage.grades(scene)]
     if len(graded) > 1:
         print("[material] !! the scene holds content of {0} post stages ({1}); a scene has ONE "
               "compositor tree, so none is installed".format(
                   len(graded), sorted(stage.post["group"] for stage in graded)))
         return []
-    return [stage.install(scene) for stage in graded if force or not stage.installed(scene)]
+    installed = []
+    for stage in graded:
+        if force or not stage.installed(scene):
+            installed.append(stage.install(scene))
+        else:
+            stage.refresh_chains(scene)
+    return installed
 
 
 def remove_post_stages(scene):

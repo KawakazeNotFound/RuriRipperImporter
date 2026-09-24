@@ -404,6 +404,10 @@ def scene_grading(map_name, anchor, states):
     White balance is the LMS coefficients the build computes from the phase's temperature
     and tint (the identity when the phase turns it off); they are multipliers, so the
     difference from one goes out.
+
+    The bloom inputs are the build's own packed constants as they stand: their zero is
+    already "no bloom" (the intensity packs as two to its power minus one), so there is
+    no identity to subtract.
     """
     row = _rows(SCENE_ENVIRONMENT, **_viewer(map_name, anchor, states))[0]
     return {
@@ -420,6 +424,11 @@ def scene_grading(map_name, anchor, states):
             "gradeHueSatCon": (float(row["gradeHue"]),
                                float(row["gradeSaturation"]) - 1.0,
                                float(row["gradeContrast"]) - 1.0),
+            "bloomParams": tuple(float(row["bloomParams" + axis]) for axis in "XYZW"),
+            "bloomThreshold": tuple(float(row["bloomThreshold" + axis]) for axis in "XYZW"),
+            "bloomTint": tuple(float(row["bloomTint" + channel]) for channel in "RGB"),
+            "bloomScatter": float(row["bloomScatter"]),
+            "bloomResolution": float(row["bloomResolution"]),
         },
     }
 

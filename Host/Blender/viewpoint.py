@@ -87,6 +87,29 @@ def sync(scene=None):
     return True
 
 
+def sync_footprint(scene):
+    """Keep the world size of one render output pixel on the scene, under every name a loaded stack reads it by:
+    (orthographic term, perspective term per unit of view depth), from the render camera's projection at the output
+    size -- two over the vertical scale over the output height, the perspective term for a perspective camera and
+    the orthographic one otherwise. A final render is what a pipeline's screen-space pass is sized against; a
+    viewport has no shader-side switch to the viewport's own size. Returns how many values were written."""
+    from . import material_builder
+
+    names = material_builder.render_footprint_attributes()
+    state = _camera_state(scene) if names else None
+    if state is None:
+        return 0
+    projection = _matrix(state[1])
+    size = 2.0 / (projection[1][1] * state[3][1])
+    footprint = (0.0, size, 0.0) if projection[3][3] < 0.5 else (size, 0.0, 0.0)
+    written = 0
+    for name in names:
+        if tuple(scene.get(name, ())) != footprint:
+            scene[name] = footprint
+            written += 1
+    return written
+
+
 def _alive():
     try:
         return all(obj.get(MARKER) for obj in _objects)
