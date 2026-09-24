@@ -352,9 +352,9 @@ def unregister_material_panel(panel):
 
 
 def viewpoint():
-    """The object a vertex tree reads the view it is evaluated for through, with the names of the point
-    attributes it carries (see :mod:`viewpoint`). A stack builds the nodes that read it; which view it stands for
-    -- the viewport being looked through, else the scene camera -- is the host's to keep current."""
+    """The object a compositor tree reads the view it is finishing through, with the name of the custom property
+    that carries the view's projection (see :mod:`viewpoint`). A stack builds the nodes that read it; which view it
+    stands for -- the viewport being looked through, else the scene camera -- is the host's to keep current."""
     from . import viewpoint as viewpoint_module
     return viewpoint_module.viewpoint()
 

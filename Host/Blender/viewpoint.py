@@ -1,23 +1,22 @@
-"""The view a vertex tree is evaluated for, kept as one object the trees read.
+"""The view a compositor tree solves its screen-space passes against, kept as one object the trees read.
 
-A geometry tree is evaluated once per dependency graph. It has a node for the scene's active camera and none for the
-3D viewport it is drawn in -- yet an outline a source draws is defined against whoever is looking: its width is solved
-in screen pixels and it pushes each vertex along the screen projection of the normal. Read from the scene camera, that
-outline is drawn for a camera the user is not looking through, and a scene without a camera has no outline at all.
+A compositor tree runs for every frame it finishes -- each redraw of a 3D viewport as well as a final render -- yet it
+has no node that reads the view it is finishing: its camera nodes name the scene camera. A screen-space pass
+reconstructs positions from the depth it is handed, so solved against the scene camera it reconstructs them wrong in
+every viewport not looked through that camera.
 
-The viewpoint stands in the viewer's place: a single-point mesh linked into no scene, so nothing draws, selects or
-renders it, while every tree that names it still evaluates it. Its object transform is the view's camera-to-world
-transform; its point carries the view's projection matrix, its clip range with the orthographic flag, the pixel size
-of what is being drawn, and the render output's pixel size. The projection is also kept as a custom property on the
-object, sixteen values row by row: a compositor tree has no node that reads a mesh attribute, so it reads the view's
-projection through drivers on that property instead. A final render is evaluated for the scene camera rather
-than for any viewport -- the trees tell the two apart with Is Viewport -- so the render output's size rides along for
-them to switch to. With an interface the viewpoint follows the 3D viewport the user last moved; without one it follows
-the scene camera, so a background run evaluates what a render would see.
+The viewpoint stands in the viewer's place: an empty linked into no scene, so nothing draws, selects or renders it,
+while every tree that names it still evaluates it. Its object transform is the view's camera-to-world transform; the
+view's projection is kept as a custom property on it, sixteen values row by row, which a tree reads through drivers.
+A final render is drawn for the scene camera rather than for any viewport -- the trees tell the two apart with Is
+Viewport. With an interface the viewpoint follows the 3D viewport the user last moved; without one it follows the
+scene camera, so a background run evaluates what a render would see.
 
-Every write re-evaluates each tree that reads the viewpoint, so a write happens only when what it carries changed, and
-a file without a viewpoint costs the poll nothing: the object is found once per file load or undo step, never by
-scanning on a tick.
+Only compositor trees read it. A geometry tree that named it would be evaluated again on every step of a viewport
+orbit, and with it the deformation below it -- the whole vertex stage of every character on each redraw -- so the
+vertex stage reads the scene camera instead. Every write re-evaluates each tree that reads the viewpoint, so a write
+happens only when what it carries changed, and a file without a viewpoint costs the poll nothing: the object is found
+once per file load or undo step, never by scanning on a tick.
 """
 
 from __future__ import annotations
@@ -31,10 +30,6 @@ import mathutils
 MARKER = "ruri_viewpoint"
 NAME = "Ruri Viewpoint"
 PROJECTION = "ruri_view_projection"
-FRAME = "ruri_view_frame"
-SCREEN = "ruri_view_screen"
-RENDER_SCREEN = "ruri_render_screen"
-LAYOUT = ((PROJECTION, "FLOAT4X4"), (FRAME, "FLOAT_VECTOR"), (SCREEN, "FLOAT_VECTOR"), (RENDER_SCREEN, "FLOAT_VECTOR"))
 #: How often the interface is asked whether a 3D viewport moved.
 POLL_SECONDS = 1.0 / 30.0
 
@@ -45,17 +40,13 @@ _written = [None]
 
 
 class Viewpoint:
-    """The viewpoint object and the names of the point attributes it carries."""
+    """The viewpoint object and the name of the custom property that carries the view's projection."""
 
-    __slots__ = ("object", "projection", "projection_property", "frame", "screen", "render_screen")
+    __slots__ = ("object", "projection_property")
 
     def __init__(self, obj):
         self.object = obj
-        self.projection = PROJECTION
         self.projection_property = PROJECTION
-        self.frame = FRAME
-        self.screen = SCREEN
-        self.render_screen = RENDER_SCREEN
 
 
 def viewpoint():
@@ -81,12 +72,11 @@ def sync(scene=None):
     state = _viewport_state()
     if state is None:
         state = _camera_state(scene)
-    signature = (state, _render_screen(scene))
-    if signature == _written[0]:
+    if state is None or state == _written[0]:
         return False
     for obj in _objects:
-        _write(obj, state, signature[1])
-    _written[0] = signature
+        _write(obj, state)
+    _written[0] = state
     return True
 
 
@@ -103,7 +93,7 @@ def sync_footprint(scene):
     if state is None:
         return 0
     projection = _matrix(state[1])
-    size = 2.0 / (projection[1][1] * state[3][1])
+    size = 2.0 / (projection[1][1] * state[2][1])
     footprint = (0.0, size, 0.0) if projection[3][3] < 0.5 else (size, 0.0, 0.0)
     written = 0
     for name in names:
@@ -126,40 +116,16 @@ def _rescan():
 
 
 def _make():
-    mesh = bpy.data.meshes.new(NAME)
-    mesh.vertices.add(1)
-    obj = bpy.data.objects.new(NAME, mesh)
+    obj = bpy.data.objects.new(NAME, None)
     obj[MARKER] = 1
-    _layout(mesh)
     _written[0] = None
     return obj
 
 
-def _layout(mesh):
-    for name, kind in LAYOUT:
-        attribute = mesh.attributes.get(name)
-        if attribute is not None and (attribute.data_type != kind or attribute.domain != "POINT"):
-            mesh.attributes.remove(attribute)
-            attribute = None
-        if attribute is None:
-            mesh.attributes.new(name, kind, "POINT")
-
-
-def _write(obj, state, render):
-    mesh = obj.data
-    _layout(mesh)
-    attributes = mesh.attributes
-    if state is None:
-        attributes[FRAME].data[0].vector = (0.0, 0.0, 0.0)
-    else:
-        transform, projection, frame, screen = state
-        obj.matrix_world = _matrix(transform)
-        attributes[PROJECTION].data[0].value = _matrix(projection)
-        obj[PROJECTION] = [float(value) for value in projection]
-        attributes[FRAME].data[0].vector = frame
-        attributes[SCREEN].data[0].vector = (screen[0], screen[1], 0.0)
-    attributes[RENDER_SCREEN].data[0].vector = (render[0], render[1], 0.0)
-    mesh.update()
+def _write(obj, state):
+    transform, projection, _size = state
+    obj.matrix_world = _matrix(transform)
+    obj[PROJECTION] = [float(value) for value in projection]
     obj.update_tag()
 
 
@@ -169,20 +135,6 @@ def _flat(matrix):
 
 def _matrix(flat):
     return mathutils.Matrix((flat[0:4], flat[4:8], flat[8:12], flat[12:16]))
-
-
-def _clip_range(projection):
-    """Near and far clip planes of a GL projection matrix, perspective or orthographic."""
-    a = projection[2][2]
-    b = projection[2][3]
-    if projection[3][3] > 0.5:
-        return (b + 1.0) / a, (b - 1.0) / a
-    return b / (a - 1.0), b / (a + 1.0)
-
-
-def _frame(projection):
-    near, far = _clip_range(projection)
-    return near, far, 1.0 if projection[3][3] > 0.5 else 0.0
 
 
 def _render_screen(scene):
@@ -210,9 +162,8 @@ def _viewport_state():
             view = getattr(area.spaces.active, "region_3d", None)
             if region is None or view is None or region.width <= 1 or region.height <= 1:
                 continue
-            window_matrix = view.window_matrix
-            views[area.as_pointer()] = (_flat(view.view_matrix.inverted()), _flat(window_matrix),
-                                        _frame(window_matrix), (float(region.width), float(region.height)))
+            views[area.as_pointer()] = (_flat(view.view_matrix.inverted()), _flat(view.window_matrix),
+                                        (float(region.width), float(region.height)))
     if not views:
         _views.clear()
         _driver[0] = None
@@ -221,7 +172,7 @@ def _viewport_state():
     if moved and _driver[0] not in moved:
         _driver[0] = moved[0]
     elif _driver[0] not in views:
-        _driver[0] = max(views, key=lambda key: views[key][3][0] * views[key][3][1])
+        _driver[0] = max(views, key=lambda key: views[key][2][0] * views[key][2][1])
     _views.clear()
     _views.update(views)
     return views[_driver[0]]
@@ -236,8 +187,7 @@ def _camera_state(scene):
     render = scene.render
     projection = camera.calc_matrix_camera(depsgraph, x=int(round(width)), y=int(round(height)),
                                            scale_x=render.pixel_aspect_x, scale_y=render.pixel_aspect_y)
-    return (_flat(camera.evaluated_get(depsgraph).matrix_world), _flat(projection), _frame(projection),
-            (width, height))
+    return _flat(camera.evaluated_get(depsgraph).matrix_world), _flat(projection), (width, height)
 
 
 def _poll():
