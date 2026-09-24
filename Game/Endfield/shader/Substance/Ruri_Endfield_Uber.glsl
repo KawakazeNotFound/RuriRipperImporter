@@ -561,7 +561,7 @@ uniform SamplerSparse basecolor_tex;
 uniform SamplerSparse opacity_tex;
 //: param custom { "default": "", "default_color": [0.0, 0.0, 0.0, 0.0], "label": "Blend Tex", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _BlendTex;
-//: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "Cubemap", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.2158605, 0.2158605, 0.2158605, 0.5], "label": "Cubemap", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _CharMaxCubemap;
 //: param auto channel_user1
 uniform SamplerSparse slot_user1_tex;
@@ -609,19 +609,19 @@ uniform sampler2D _ShadowLutTex;
 uniform sampler2D _SilkStockingsMask;
 //: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "Specular Ramp", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _SpecRampMap;
-//: param custom { "default": "", "default_color": [0.5, 0.5, 0.5, 1.0], "label": "Stroke Map(R:anisotropy G:specular offset)", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.5, 0.5, 0.5, 0.5], "label": "Stroke Map(R:anisotropy G:specular offset)", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _StrokeMap;
 //: param custom { "default": "", "default_color": [0.0, 0.0, 0.0, 0.0], "label": "VFX Special Blend Tex", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _VFXSpecialBlendTex;
 //: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "VFX Special Main Tex", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _VFXSpecialMainTex;
-//: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "_BumpMap 余量(ba)", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.2158605, 0.2158605, 0.2158605, 0.5], "label": "_BumpMap 余量(ba)", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _BumpMap_ba;
-//: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "_ClearCoatMask 余量(gba)", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.2158605, 0.2158605, 0.2158605, 0.5], "label": "_ClearCoatMask 余量(gba)", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _ClearCoatMask_gba;
-//: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "_ParallaxTex 余量(gba)", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.2158605, 0.2158605, 0.2158605, 0.5], "label": "_ParallaxTex 余量(gba)", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _ParallaxTex_gba;
-//: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "_SplitNormalMap 余量(ba)", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.2158605, 0.2158605, 0.2158605, 0.5], "label": "_SplitNormalMap 余量(ba)", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _SplitNormalMap_ba;
 //----------------------------------------------------------------------endregion
 
