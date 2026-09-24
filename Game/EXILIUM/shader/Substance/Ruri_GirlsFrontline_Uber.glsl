@@ -221,7 +221,7 @@ uniform vec4 light_main;
 uniform SamplerSparse basecolor_tex;
 //: param auto channel_opacity
 uniform SamplerSparse opacity_tex;
-//: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "Blend Tex", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.2158605, 0.2158605, 0.2158605, 0.5], "label": "Blend Tex", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _BlendTex;
 //: param auto channel_user1
 uniform SamplerSparse slot_user1_tex;
@@ -239,7 +239,7 @@ uniform sampler2D _RMOTex;
 uniform sampler2D _RampMap;
 //: param custom { "default": "", "default_color": [0.0, 0.0, 0.0, 0.0], "label": "Specular Map", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _Specularmap;
-//: param custom { "default": "", "default_color": [1.0, 1.0, 1.0, 1.0], "label": "_BumpMap 余量(ba)", "usage": "texture", "group": "2 贴图" }
+//: param custom { "default": "", "default_color": [0.2158605, 0.2158605, 0.2158605, 0.5], "label": "_BumpMap 余量(ba)", "usage": "texture", "group": "2 贴图" }
 uniform sampler2D _BumpMap_ba;
 //----------------------------------------------------------------------endregion
 
@@ -316,6 +316,7 @@ struct Light {
 
 struct RuriData {
     float alpha;
+    float overClearedBackdrop;
     vec3 albedo;
     float roughness;
     float metallic;
@@ -474,6 +475,7 @@ Light ruriZeroLight() {
 RuriData ruriZeroRuriData() {
     RuriData v;
     v.alpha = 0.0;
+    v.overClearedBackdrop = 0.0;
     v.albedo = vec3(0.0);
     v.roughness = 0.0;
     v.metallic = 0.0;
@@ -1416,6 +1418,11 @@ GBufferFragOutput CharaMixedPassFragment(CharaVaryings input_, float facing)
     CalcRuriNPR(ruriData, input_, outputData, facing);
     outputData.baseColor = outputData.globalIllumination.xyz;
     outputData.alpha = ruriData.alpha;
+    if (ruriData.overClearedBackdrop > 0.5)
+    {
+        outputData.baseColor = outputData.baseColor * outputData.alpha;
+        outputData.alpha = 1.0;
+    }
     return RuriGBufferDataToCharaGbuffer(ruriData, outputData);
 }
 
