@@ -312,7 +312,8 @@ class G:
         nd.vector_type = kind
         nd.convert_from = frm
         nd.convert_to = to
-        self._set(nd.inputs[0], v)
+        # 按名取:5.3 起首个输入是只在内部着色树可用的 LightIndex,Vector 退到第二位。
+        self._set(nd.inputs['Vector'], v)
         self._cse[k] = nd.outputs[0]
         return nd.outputs[0]
 
