@@ -19,6 +19,7 @@ on the kernel side.
 
 from __future__ import annotations
 
+import hashlib
 import os
 
 import bpy
@@ -72,6 +73,13 @@ RIG_STAGES = extensions.point(
 CAPABILITY_REWIRES = extensions.point(
     "blender.capability_rewires",
     "Re-answering a built material's environment queries after the scene changed.")
+
+#: The scene state a material's environment answers were last built against,
+#: stamped on the material when it is built and whenever it is rewired. A rewire
+#: whose state is the one already built in is skipped: an import states its world
+#: before it builds a single material, so the world-driven rewire that follows
+#: used to rebuild every fulfilment node it had just built (445 s of a 537 s flush).
+CAPABILITY_STATE_PROPERTY = "ruri_capability_state"
 
 #: ``refresh()``. Re-stamps WHICH LIGHT IS THE MAIN ONE -- a per-light custom
 #: property the stack's own light loop reads. No texture stands in for lights, so
@@ -255,14 +263,64 @@ def apply_rig_stages(objects=None):
     return sum(stage(objects=objects) for stage in RIG_STAGES)
 
 
-def rewire_capabilities(materials=None):
-    """Re-answer the environment queries of every built material. A stack returns
-    False for a material it did not build, so asking all of them is safe and
-    order-independent. Returns how many were claimed and rewired."""
+def _state_value(value):
+    if isinstance(value, bpy.types.ID):
+        return value.name_full
+    if isinstance(value, bpy.types.bpy_struct):
+        return None
+    if isinstance(value, float):
+        return round(value, 6)
+    if isinstance(value, (set, frozenset)):
+        return tuple(sorted(value))
+    if hasattr(value, "__len__") and not isinstance(value, str):
+        return tuple(round(float(component), 6) for component in value)
+    return value
+
+
+def _world_state(world):
+    """The world as the environment answers sample it: each node's own settings and
+    input values, and the links. A node's generic editor state (location, selection)
+    is not read by any answer, so nudging the world in the editor rebuilds nothing."""
+    if world is None or world.node_tree is None:
+        return world.name_full if world is not None else None
+    generic = set(bpy.types.Node.bl_rna.properties.keys()) - {"mute"}
+    nodes = []
+    for node in world.node_tree.nodes:
+        settings = tuple((prop.identifier, _state_value(getattr(node, prop.identifier, None)))
+                         for prop in node.bl_rna.properties if prop.identifier not in generic)
+        inputs = tuple((socket.identifier, _state_value(getattr(socket, "default_value", None)))
+                       for socket in node.inputs)
+        nodes.append((node.name, node.bl_idname, settings, inputs))
+    links = [(link.from_node.name, link.from_socket.identifier, link.to_node.name, link.to_socket.identifier)
+             for link in world.node_tree.links]
+    return world.name_full, tuple(sorted(nodes, key=repr)), tuple(sorted(links))
+
+
+def capability_state(scene):
+    """Everything a material's environment answers read from the scene, as one
+    comparable digest: the render engine (closures and answers are built per engine)
+    and the world's content (the environment is a snapshot of its nodes). A
+    material's own main-light override is per material and set by an operator that
+    rewires that material itself, forced."""
+    state = (scene.render.engine, _world_state(scene.world))
+    return hashlib.sha1(repr(state).encode("utf-8")).hexdigest()
+
+
+def rewire_capabilities(materials=None, force=False):
+    """Re-answer the environment queries of every built material whose answers were
+    built against another scene state than the current one (``force`` rewires them
+    all). A stack returns False for a material it did not build, so asking all of
+    them is safe and order-independent. Returns how many were claimed and rewired."""
+    state = capability_state(bpy.context.scene)
     pool = list(bpy.data.materials) if materials is None else list(materials)
-    return sum(1 for material in pool
-               if material is not None
-               and any(rewire(material) for rewire in CAPABILITY_REWIRES))
+    rewired = 0
+    for material in pool:
+        if material is None or (not force and material.get(CAPABILITY_STATE_PROPERTY) == state):
+            continue
+        if any(rewire(material) for rewire in CAPABILITY_REWIRES):
+            material[CAPABILITY_STATE_PROPERTY] = state
+            rewired += 1
+    return rewired
 
 
 def refresh_light_roles():
@@ -810,6 +868,7 @@ class MaterialBuilder:
             return made
         made = self._build(stated)
         made[SOURCE_KEY_PROPERTY] = str(key)
+        made[CAPABILITY_STATE_PROPERTY] = capability_state(bpy.context.scene)
         self._by_key[key] = made
         _announce(made)
         return made

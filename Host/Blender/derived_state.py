@@ -84,19 +84,20 @@ class Change:
     过期;灯集合变了 → 每个材质的兑现分支都可能变),所以阶段必须扫全场,而不是只看
     这批新对象。"""
 
-    __slots__ = ("facts", "objects", "materials", "whole_scene", "scene")
+    __slots__ = ("facts", "objects", "materials", "whole_scene", "scene", "force")
 
-    def __init__(self, facts, objects, materials, whole_scene, scene):
+    def __init__(self, facts, objects, materials, whole_scene, scene, force):
         self.facts = frozenset(facts)
         self.objects = objects
         self.materials = materials
         self.whole_scene = whole_scene
         self.scene = scene
+        self.force = force
 
     def __repr__(self):
-        return "<Change {0} objects={1} materials={2}{3}>".format(
+        return "<Change {0} objects={1} materials={2}{3}{4}>".format(
             ",".join(sorted(self.facts)), len(self.objects), len(self.materials),
-            " whole-scene" if self.whole_scene else "")
+            " whole-scene" if self.whole_scene else "", " forced" if self.force else "")
 
 
 class Stage:
@@ -123,9 +124,13 @@ def _run_capabilities(change):
     唯一还绑灯的是用户主动指定的逐角色覆盖灯,由设置它的算子对那一张材质单独重接。
 
     这条纪律的理由是量出来的:重接是 O(材质 × 树),单张 NPR 角色材质 ~0.8s、24 张 20 秒。
-    摆灯是美术每秒都在做的事,绝不能和它挂钩。"""
+    摆灯是美术每秒都在做的事,绝不能和它挂钩。
+
+    材质上记着它的答案按哪一份场景状态(引擎 + 世界内容)建的,状态没变的材质不重接 ——
+    导入先定世界再建材质,紧跟着的这一次重接原本是把刚建好的兑现面整场重做一遍。
+    「重建派生态」强制,不看记号。"""
     scope = None if change.whole_scene else change.materials
-    return material_builder.rewire_capabilities(scope)
+    return material_builder.rewire_capabilities(scope, force=change.force)
 
 
 def _run_light_roles(_change):
@@ -197,6 +202,7 @@ _pending_facts = set()
 _pending_objects = []
 _pending_materials = []
 _pending_whole_scene = False
+_pending_force = False
 _marked_at = 0.0
 _flushing = False
 
@@ -224,12 +230,13 @@ def announce(*datablocks):
     _mark(facts, objects=objects, materials=materials)
 
 
-def _mark(facts, objects=(), materials=(), whole_scene=False):
-    global _pending_whole_scene, _marked_at
+def _mark(facts, objects=(), materials=(), whole_scene=False, force=False):
+    global _pending_whole_scene, _pending_force, _marked_at
     _pending_facts.update(facts)
     _pending_objects.extend(objects)
     _pending_materials.extend(materials)
     _pending_whole_scene = _pending_whole_scene or whole_scene
+    _pending_force = _pending_force or force
     _marked_at = time.monotonic()
     _arm_timer()
 
@@ -272,7 +279,7 @@ def _in_scene(objects, scene):
 
 def flush():
     """把攒下的变更落地。范围内跑一次,不重复、不递归。"""
-    global _pending_whole_scene, _flushing, LAST_ERROR
+    global _pending_whole_scene, _pending_force, _flushing, LAST_ERROR
     if _flushing or not _pending_facts:
         return None
     scene = bpy.context.scene
@@ -285,11 +292,13 @@ def flush():
                     _in_scene(_live(_pending_objects), scene),
                     _live(_pending_materials),
                     _pending_whole_scene,
-                    scene)
+                    scene,
+                    _pending_force)
     _pending_facts.clear()
     del _pending_objects[:]
     del _pending_materials[:]
     _pending_whole_scene = False
+    _pending_force = False
 
     _flushing = True
     failures = []
@@ -322,7 +331,7 @@ def flush():
 def rebuild_all():
     """把所有派生态按整场景重建一次 —— 撤销之后、或用户改了监视器看不见的东西
     (世界的节点树内部接线之类)时的唯一强制路径。"""
-    _mark(ALL_FACTS, whole_scene=True)
+    _mark(ALL_FACTS, whole_scene=True, force=True)
     return flush()
 
 

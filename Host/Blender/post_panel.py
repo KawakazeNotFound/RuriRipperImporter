@@ -151,7 +151,7 @@ class RURI_OT_main_light_set(bpy.types.Operator):
         # is just how the user points at it.
         for mat in mats:
             mat[MAIN_LIGHT_OVERRIDE] = light
-        count = material_builder.rewire_capabilities(mats)
+        count = material_builder.rewire_capabilities(mats, force=True)
         self.report({"INFO"}, "{0} material(s) now lit by '{1}'.".format(count, light.name))
         return {"FINISHED"}
 
@@ -170,7 +170,7 @@ class RURI_OT_main_light_clear(bpy.types.Operator):
             return {"CANCELLED"}
         for mat in mats:
             del mat[MAIN_LIGHT_OVERRIDE]
-        count = material_builder.rewire_capabilities(mats)
+        count = material_builder.rewire_capabilities(mats, force=True)
         self.report({"INFO"}, "{0} material(s) back on the scene light.".format(count))
         return {"FINISHED"}
 
