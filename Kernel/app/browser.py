@@ -2230,10 +2230,7 @@ def draw_import_options(layout, context, state=None):
         if asks is not None and asks(game_name) is None:
             continue
         row = layout.row(align=True)
-        if entry.key == "link_shader_templates":
-            # 只在着色栈真的会建图时才有意义 —— 不开 Game Shaders 就没有模板组可取。
-            row.enabled = state.game_shaders
-        elif entry.key in _OPTION_NEEDS_RIG:
+        if entry.key in _OPTION_NEEDS_RIG:
             row.active = has_rig
         row.prop(state, entry.key, icon=_OPTION_ICONS.get(entry.key, ""))
 

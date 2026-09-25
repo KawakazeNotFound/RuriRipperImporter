@@ -48,7 +48,8 @@ class RURI_OT_post_install(bpy.types.Operator):
         return bool(material_builder.POST_STAGES)
 
     def execute(self, context):
-        # 明说要装就整条重建(参数回出厂值);自动收尾那条路是「装过就不动」。
+        # 明说要装就整条重建;关卡写的输入与面板旋钮是场景记下的内容,照记下的写回(回出厂值用重置参数)。
+        # 自动收尾那条路是「装过就不动」。
         material_builder.apply_post_stages(context.scene, force=True)
         self.report({"INFO"}, "Post chain installed on the compositor.")
         return {"FINISHED"}

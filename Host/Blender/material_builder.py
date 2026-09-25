@@ -24,6 +24,7 @@ import os
 
 import bpy
 
+from . import plugin_data as _plugin_data
 from ...Kernel import extensions
 
 #: A stack registers ``provider(builder, props) -> bpy.types.Material | None``
@@ -147,6 +148,21 @@ LIGHT_RECORDS = extensions.point(
 RENDER_FOOTPRINTS = extensions.point(
     "blender.render_footprints",
     "Scene attributes a shading stack reads the render's per-pixel world size through.")
+
+#: ``purge() -> int``. The plugin's own data is never written to a .blend (see
+#: :mod:`plugin_data`); a generated runtime drops what an older build of it saved into a
+#: file before that was so, by its own vocabulary. The load pass runs every one of them
+#: before anything compiles.
+PLUGIN_PURGES = extensions.point(
+    "blender.plugin_purges",
+    "Dropping what an older build of a shading stack saved into a file.")
+
+#: ``compile_all() -> [material]``. A stack compiles every material it claims that this
+#: session has not compiled yet -- after a file opens that is every one -- from the record
+#: the material carries. The graph is the plugin's to rebuild; the record is the content.
+MATERIAL_COMPILES = extensions.point(
+    "blender.material_compiles",
+    "Compiling a shading stack's materials from their records.")
 
 #: Custom property stamped on every material this module or a stack builds.
 SOURCE_KEY_PROPERTY = "ruri_source_key"
@@ -313,6 +329,7 @@ def write_level_table(name, rows):
     image = volume_image(layout)
     image.pixels.foreach_set(_table_pixels([rows[None]], layout).ravel())
     image.pack()
+    _plugin_data.content(image)
 
 
 def register_light_records(attributes):
@@ -334,6 +351,34 @@ def unregister_render_footprints(attributes):
 def render_footprint_attributes():
     """Every scene attribute the loaded stacks read the render's pixel footprint through."""
     return sorted({name for provider in RENDER_FOOTPRINTS for name in provider()})
+
+
+def register_plugin_purge(purge):
+    PLUGIN_PURGES.add(purge)
+
+
+def unregister_plugin_purge(purge):
+    PLUGIN_PURGES.remove(purge)
+
+
+def register_material_compile(compile_all):
+    MATERIAL_COMPILES.add(compile_all)
+
+
+def unregister_material_compile(compile_all):
+    MATERIAL_COMPILES.remove(compile_all)
+
+
+def plugin_data(block):
+    """The door a generated product makes its own datablocks through: runtime data, never
+    written to a .blend (see :mod:`plugin_data`)."""
+    return _plugin_data.born(block)
+
+
+def content(block):
+    """The door a generated product hands a datablock it made over to the document through
+    (a material instance copied off a template): written with the file from now on."""
+    return _plugin_data.content(block)
 
 
 def register_material_panel(panel):
@@ -372,6 +417,39 @@ def push_camera_stages(objects=None, camera=None):
 
 def apply_rig_stages(objects=None):
     return sum(stage(objects=objects) for stage in RIG_STAGES)
+
+
+def refill_vertex_stages():
+    """The vertex trees of the modifiers already on objects, rebuilt from the materials'
+    records: a tree is the plugin's own data and no file carries one, while the modifier
+    holding it is the object's content and does. No modifier is added or removed."""
+    return sum(stage(objects=None, camera=None, refill=True) for stage in VERTEX_STAGES)
+
+
+def rebuild_plugin_data(purge):
+    """The load pass. ``purge``: a file just opened or the stacks just loaded, so every piece
+    of the plugin's own data in memory is dropped first -- this session's, or an older build's
+    that a file carries -- and then every material a stack claims is compiled from its record.
+    Without it only the materials this session has not compiled yet (appended from another
+    file) are. The compiled materials' environment answers are the current scene's, and are
+    stamped so. One stack failing leaves the others compiling; the failures are raised
+    together afterwards. Returns ``(dropped, compiled)``."""
+    dropped = 0
+    if purge:
+        dropped = _plugin_data.purge() + sum(drop() for drop in PLUGIN_PURGES)
+    compiled = []
+    failures = []
+    for compile_all in MATERIAL_COMPILES:
+        try:
+            compiled.extend(compile_all())
+        except Exception as error:
+            failures.append(str(error))
+    state = capability_state(bpy.context.scene)
+    for material in compiled:
+        material[CAPABILITY_STATE_PROPERTY] = state
+    if failures:
+        raise RuntimeError("; ".join(failures))
+    return dropped, len(compiled)
 
 
 def _state_value(value):
@@ -470,10 +548,13 @@ def apply_post_stages(scene, force=False):
 
     Already installed is skipped by default: install() rebuilds the whole
     compositor tree and writes the view transform and the viewport's compositor
-    switch back to shipped values, so re-running it on every import silently
-    zeroes every knob the user turned. ``force`` is the panel button that means
-    start over. An installed stage still rebuilds its image chains when the output
-    size moved: a bloom pyramid's level count and level sizes are the frame's."""
+    switch back to shipped values, so re-running it on every import would take
+    those away from the user each time (the stage's own inputs are the scene's and
+    come back). ``force`` is the panel button that means start over. An installed
+    stage still rebuilds its image chains when the output size moved: a bloom
+    pyramid's level count and level sizes are the frame's. The tree is the
+    plugin's own data, so after a file opens no stage is installed and this is
+    what puts it back."""
     graded = [stage for stage in POST_STAGES if stage.grades(scene)]
     if len(graded) > 1:
         print("[material] !! the scene holds content of {0} post stages ({1}); a scene has ONE "
@@ -718,7 +799,10 @@ def volume_image(layout):
 
     A texture whose layout states no size takes the size of the texture a level states: it is made
     at one texel and the level scales it (the stack samples it through a plain image node, so no
-    coordinate depends on that size)."""
+    coordinate depends on that size).
+
+    Made unfilled it is the plugin's own placeholder (runtime, never written); a level filling it
+    makes it the document's content."""
     if layout["kind"] == "tiles":
         return _tiles_image(layout)
     size = layout["size"] if layout["kind"] == "table" else layout.get("atlas")
@@ -730,7 +814,8 @@ def volume_image(layout):
     if image is None:
         width, height = (int(value) for value in size) if size is not None else (1, 1)
         float_buffer = layout["format"] in ("HALF", "FLOAT")
-        image = bpy.data.images.new(layout["image"], width, height, alpha=True, float_buffer=float_buffer)
+        image = _plugin_data.born(bpy.data.images.new(layout["image"], width, height, alpha=True,
+                                                      float_buffer=float_buffer))
         image.colorspace_settings.name = "Non-Color"
         image.file_format = "OPEN_EXR" if float_buffer else "PNG"
     if image.alpha_mode != "CHANNEL_PACKED":
@@ -751,7 +836,8 @@ def _tiles_image(layout):
         image = None
     if image is None:
         float_buffer = layout["format"] in ("HALF", "FLOAT")
-        image = bpy.data.images.new(layout["image"], 1, 1, alpha=True, float_buffer=float_buffer, tiled=True)
+        image = _plugin_data.born(bpy.data.images.new(layout["image"], 1, 1, alpha=True, float_buffer=float_buffer,
+                                                      tiled=True))
         image.colorspace_settings.name = "Non-Color"
     if image.alpha_mode != "CHANNEL_PACKED":
         image.alpha_mode = "CHANNEL_PACKED"
@@ -796,6 +882,7 @@ def _write_tiles(image, tiles):
         image.reload()
         image.pack()
         image.filepath_raw = "//textures/" + image.name + ".<UDIM>.exr"
+        _plugin_data.content(image)
     finally:
         shutil.rmtree(directory, ignore_errors=True)
 
@@ -973,11 +1060,13 @@ def _apply_level_images(scene, blocks):
 
 def _fill_image(image, pixels):
     """Write a (height, width, 4) texel array into ``image``, first row at the bottom, scaling
-    the image to it first when a level states its own size, and pack it."""
+    the image to it first when a level states its own size, and pack it: from here on it holds
+    the level's data, the document's content."""
     if (int(image.size[0]), int(image.size[1])) != (pixels.shape[1], pixels.shape[0]):
         image.scale(pixels.shape[1], pixels.shape[0])
     image.pixels.foreach_set(pixels.ravel())
     image.pack()
+    _plugin_data.content(image)
 
 
 def _tile_pixels(texels):

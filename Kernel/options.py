@@ -81,15 +81,6 @@ SCHEMA = (
            "like itself; a scene window is hundreds, which is why that road remembers its "
            "own answer",
            requires=host_port.NodeMaterials),
-    Option("link_shader_templates", BOOL, False, "Link Shader Templates",
-           "Where the game shading stack's node-group templates live. Off (default) "
-           "APPENDS them so they become this file's own data: the file still renders "
-           "correctly after you move it, hand it to someone else, archive it, or link it "
-           "from a third file. On LINKS a copy placed NEXT TO this file and referenced by "
-           "a relative path -- smaller files, one shared copy per folder, but the copy has "
-           "to travel with them. A link that stops resolving is not an error: an empty "
-           "stand-in is substituted silently and the whole model renders black",
-           requires=host_port.NodeMaterials),
     Option("import_empties", BOOL, False, "Import Empties",
            "Keep every GameObject as an Empty. Off keeps only the empties that hold "
            "imported content in the hierarchy",

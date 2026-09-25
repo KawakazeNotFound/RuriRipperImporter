@@ -312,7 +312,7 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
 HOST = host_port.bind(BlenderHost())
 
 from ... import Game                                                    # noqa: E402
-from . import (rna, render, coordinate, rig_identity, material_builder,  # noqa: E402
+from . import (rna, render, coordinate, rig_identity, plugin_data, material_builder,  # noqa: E402
                material_panel, derived_state, animation_builder, step_loader, browser_panel,
                post_panel, viewpoint)
 
@@ -338,7 +338,7 @@ def _holds_process_state(module):
 #: not the module. Anything under this driver that is NOT listed is still
 #: reloaded, just after these, so forgetting one costs ordering rather than
 #: correctness.
-_DRIVER_ORDER = (rna, render, coordinate, rig_identity, material_builder, material_panel,
+_DRIVER_ORDER = (rna, render, coordinate, rig_identity, plugin_data, material_builder, material_panel,
                  derived_state, animation_builder, step_loader, browser_panel, post_panel)
 
 
@@ -439,6 +439,8 @@ def register():
     bpy.utils.register_class(RuriRipperImporterPreferences)
     # The records every panel state shares, before the first state that contains one.
     rna.register_shared()
+    # ⛔ 插件自己的数据严禁写进 .blend:存盘前的守卫。
+    plugin_data.register()
     browser_panel.register()
     # 派生态调度器:导入产物、灯、相机的变更从这里统一收敛成一次重建。装在游戏之前,
     # 这样一个游戏的着色栈注册进来的阶段第一次被用到时,调度器已经在监听了。
@@ -481,5 +483,6 @@ def unregister():
     viewpoint.unregister()
     derived_state.unregister()
     browser_panel.unregister()
+    plugin_data.unregister()
     rna.unregister_shared()
     bpy.utils.unregister_class(RuriRipperImporterPreferences)

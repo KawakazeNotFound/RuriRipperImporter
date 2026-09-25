@@ -41,6 +41,13 @@ announce ⇒ 修改器只在从游戏导入时生成;相机动了、骨改名了
 / `register_light_role_refresh` / `register_post_stage`(那是生成器拥有的契约)。本模块
 只拥有**时机**:谁在什么变更下跑、跑在哪个范围上。
 
+## 插件数据从不写进 .blend(见 plugin_data)
+
+所以打开一个文件时派生态一样都不在:材质的树(模板组、参数表都是插件数据)、顶点树、合成树、视点、兜底灯。
+LOADED 这件事实由开文件与本调度器注册(着色栈刚载入)立起来,第一段阶段(plugin-data)先清光内存里的插件数据、
+再让各栈按材质记录把材质全部现编,其余阶段照常按整场景现建。存盘时文件里什么也不留,下一次打开照样全建 ——
+没有任何一份派生物会在文件里放旧。从别的文件 append 进来的材质与对象(APPENDED)带着的树同样是死的,只编那些。
+
 ## 时机是空闲态,不是操作符结束
 
 批量导入会造几百个对象,逐个收尾是 O(n²);而相机拖动每帧都在变。所以 announce 只打脏
@@ -66,8 +73,10 @@ LIGHT_VALUES = "light_values"  # 灯的位姿/颜色/强度/锥角(宿主自己�
 WORLD = "world"                # 世界被换或被改(环境采样是建组时快照,只有这件事还要重接兑现面)
 RIG = "rig"                    # 骨架的骨骼名册变了(顶点腿的骨骼基座按名字接进几何节点)
 ENGINE = "engine"              # 渲染引擎被换(表面闭包与能力答案按引擎建;灯只有宿主自己的原生灯节点)
+LOADED = "loaded"              # 插件数据一样都不在:开了一个文件,或着色栈刚载入(插件数据从不写进 .blend)
+APPENDED = "appended"          # 材质/对象不经导入进场(从别的文件 append):它们引用的插件数据是死的
 
-ALL_FACTS = frozenset((OBJECTS, MATERIALS, CAMERA, LIGHT_SET, LIGHT_VALUES, WORLD, RIG, ENGINE))
+ALL_FACTS = frozenset((OBJECTS, MATERIALS, CAMERA, LIGHT_SET, LIGHT_VALUES, WORLD, RIG, ENGINE, LOADED, APPENDED))
 
 # 去抖窗口:批量导入的几百次 announce、相机拖动的每帧变更,都收敛成末尾的一次落地。
 DEBOUNCE_SECONDS = 0.1
@@ -114,6 +123,13 @@ class Stage:
         return "<Stage {0} reads={1}>".format(self.name, ",".join(sorted(self.facts)))
 
 
+def _run_plugin_data(change):
+    """load pass。开了文件 / 着色栈刚载入:先清光内存里的插件数据(本会话的,或旧文件存下的上一版),再让各栈按
+    材质记录把本栈的材质全部现编;只是有东西从别的文件 append 进来:只编本会话还没编过的那些。"""
+    _dropped, compiled = material_builder.rebuild_plugin_data(purge=LOADED in change.facts)
+    return compiled
+
+
 def _run_capabilities(change):
     """材质的环境查询兑现面重接。两个触发者:**世界被换**(环境采样是建组时快照)与
     **渲染引擎被换**(表面闭包与能力答案按引擎建,EEVEE 的 Light Accumulation 到别的引擎是
@@ -142,11 +158,19 @@ def _run_light_roles(_change):
 def _run_vertex(change):
     """顶点腿的**拓扑**:壳层位移与反壳描边那棵几何节点树,以及挂着它的那个修改器。
 
-    只读「有东西进场」这两个事实,而它们只由导入路径 announce —— 也就是说**修改器只在从
+    建拓扑只读「有东西进场」这两个事实,而它们只由导入路径 announce —— 也就是说**修改器只在从
     游戏导入时生成**。相机与骨名不进这条路,各自只重灌自己那几格 uniform(camera-basis /
-    rig-basis 两阶段):按材质现值重判一次描边,等于让用户删掉的修改器自己长回来。"""
-    scope = None if change.whole_scene else change.objects
-    return material_builder.apply_vertex_stages(objects=scope)
+    rig-basis 两阶段):按材质现值重判一次描边,等于让用户删掉的修改器自己长回来。
+
+    开文件 / append 进来之后只重填:树是插件数据,文件不带;修改器是对象的内容,还在。已经挂着的
+    修改器照材质记录重建它那棵树,一个修改器都不增不删。"""
+    built = 0
+    if change.facts & {OBJECTS, MATERIALS}:
+        scope = None if change.whole_scene else change.objects
+        built += material_builder.apply_vertex_stages(objects=scope)
+    if change.facts & {LOADED, APPENDED}:
+        built += material_builder.refill_vertex_stages()
+    return built
 
 
 def _run_camera_basis(change):
@@ -185,17 +209,19 @@ def _run_material_panels(change):
 # 表就是调度策略的全部。顺序 = 注册顺序:兑现节点先接好,顶点腿再按材质真值建树,
 # 后处理最后落在合成器上(三者互不读对方产物,顺序只为报告好读)。
 STAGES = (
+    # 插件数据不在文件里:先按记录把材质编出来,后面各阶段才有东西可接。
+    Stage("plugin-data", (LOADED, APPENDED), _run_plugin_data),
     Stage("capabilities", (WORLD, ENGINE), _run_capabilities),
-    Stage("light-roles", (LIGHT_SET, LIGHT_VALUES), _run_light_roles),
-    Stage("vertex", (OBJECTS, MATERIALS), _run_vertex),
-    Stage("camera-basis", (CAMERA,), _run_camera_basis),
-    Stage("rig-basis", (OBJECTS, MATERIALS, RIG), _run_rig_basis),
+    Stage("light-roles", (LIGHT_SET, LIGHT_VALUES, LOADED), _run_light_roles),
+    Stage("vertex", (OBJECTS, MATERIALS, LOADED, APPENDED), _run_vertex),
+    Stage("camera-basis", (CAMERA, LOADED, APPENDED), _run_camera_basis),
+    Stage("rig-basis", (OBJECTS, MATERIALS, RIG, LOADED, APPENDED), _run_rig_basis),
     # 后处理读的其实是「这个场景现在在放游戏内容了吗」:网格、材质、游戏自己的灯,
     # 任何一样进场都是证据(展示台可以只上太阳不上美术,那时也该有 tonemap)。
     # 装过就跳过,所以在灯上反复触发也只是一次 installed() 判断;相机事实含出图尺寸,
     # 泛光金字塔的级数与各级尺寸跟着它走,尺寸没变时重建图链也只是一次签名比较。
-    Stage("post", (OBJECTS, MATERIALS, LIGHT_SET, CAMERA), _run_post),
-    Stage("material-panels", (MATERIALS,), _run_material_panels),
+    Stage("post", (OBJECTS, MATERIALS, LIGHT_SET, CAMERA, LOADED), _run_post),
+    Stage("material-panels", (MATERIALS, LOADED, APPENDED), _run_material_panels),
 )
 
 
@@ -347,6 +373,7 @@ _camera = None
 _world = None
 _rig = None
 _engine = None
+_counts = None
 
 
 def _light_set_signature(scene):
@@ -461,8 +488,15 @@ def _camera_touched(depsgraph):
     return False
 
 
+def _datablock_counts():
+    """材质与对象的个数:涨了而没人 announce = 从别的文件 append 进来了(导入会 announce,也会让它涨;两边都判到
+    只是多问一次「有没有还没编的」)。"""
+    return len(bpy.data.materials), len(bpy.data.objects)
+
+
 def _resnapshot(scene):
-    global _light_set, _light_values, _camera, _world, _rig, _engine
+    global _light_set, _light_values, _camera, _world, _rig, _engine, _counts
+    _counts = _datablock_counts()
     _engine = scene.render.engine
     _light_set = _light_set_signature(scene)
     _light_values = _light_values_signature(scene)
@@ -473,9 +507,13 @@ def _resnapshot(scene):
 
 @bpy.app.handlers.persistent
 def _on_depsgraph_update(scene, depsgraph):
-    global _light_set, _light_values, _camera, _world, _rig, _engine
+    global _light_set, _light_values, _camera, _world, _rig, _engine, _counts
     if _flushing:
         return
+    counts = _datablock_counts()
+    if _counts is not None and (counts[0] > _counts[0] or counts[1] > _counts[1]):
+        _mark((APPENDED,), whole_scene=True)
+    _counts = counts
     # 引擎签名是一次字符串比较,每拍都问;它不靠任何被更新的数据块判"碰没碰"。
     # 注册时没有场景可采(启动期 register 跑在文件加载之前)的话,第一拍只采基准不算换引擎。
     if _engine is None:
@@ -510,7 +548,8 @@ def _on_depsgraph_update(scene, depsgraph):
 
 @bpy.app.handlers.persistent
 def _on_load_post(_path):
-    # 打开文件时只采基准、不动手:存盘时它就是按这些灯这些相机接好的,每次开都重建是白干。
+    """开了一个文件:插件数据从不写进 .blend,此刻一样都不在 —— 整场景的派生态照内容现建。有界面时交给去抖
+    计时器(依赖图求值过之后灯的可见性才答得准);后台没有事件循环、计时器永远不响,求值一次当场落地。"""
     global _pending_whole_scene
     _pending_facts.clear()
     del _pending_objects[:]
@@ -519,6 +558,10 @@ def _on_load_post(_path):
     scene = bpy.context.scene
     if scene is not None:
         _resnapshot(scene)
+    _mark((LOADED,), whole_scene=True)
+    if bpy.app.background and scene is not None:
+        bpy.context.evaluated_depsgraph_get()
+        flush()
 
 
 def register():
@@ -530,6 +573,10 @@ def register():
     scene = getattr(bpy.context, "scene", None)
     if scene is not None:
         _resnapshot(scene)
+    # 着色栈刚载入(启动、启用插件、重载脚本):会话里已经开着的文件同样一样插件数据都没有(或是上一次载入的那一份)。
+    # 后台跑的文件由 load_post 当场落地;脚本自己导入的东西已经是本次载入编的,不再清一遍重编。
+    if not bpy.app.background:
+        _mark((LOADED,), whole_scene=True)
 
 
 def unregister():
