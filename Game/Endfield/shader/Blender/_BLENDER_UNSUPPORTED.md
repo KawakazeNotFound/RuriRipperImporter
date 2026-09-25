@@ -39,23 +39,12 @@
 |---|---|
 | SampleNormalMap | uniform _UseBumpMap 挂 [ShaderProperty] 但 Default 缺失/不可解析——禁止发明默认值 |
 | DitherClip | uniform _DitherMatrix 为结构/资源型(float4x4),无节点图等价 |
-| Lit | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | Lit | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| LitForward | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | LitForward | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| LitTransparent | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | LitTransparent | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| LitEffect | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | LitEffect | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| LitEffectBlend | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | LitEffectBlend | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| LitHLod | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | LitHLod | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| Leaf | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| Leaf | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| Grass | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| Grass | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
-| Trunk | 终点 __overlay__ScreenSpaceReflection__normal 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | Trunk | 终点 __overlay__ScreenSpaceReflection__weight 依赖灯答案却接非 Light 口:宿主下沿污染路径按能力缺席值重算 |
 | SceneMixedPassVertex[Lit] | GpuClothPosition 降不下来:uniform _ClothSkeletonDataBuffer 为结构/资源型(StructuredBuffer),无节点图等价 |
 | SceneMixedPassVertex[LitForward] | GpuClothPosition 降不下来:uniform _ClothSkeletonDataBuffer 为结构/资源型(StructuredBuffer),无节点图等价 |
