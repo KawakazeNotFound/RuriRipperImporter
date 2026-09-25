@@ -502,11 +502,13 @@ def adopt_action(owner, action, slot=None, scene=None, frame_range=True):
 #      practice -- exactly the reported "I still have to pick the slot in the
 #      Action editor every time I switch clips";
 #   2. a depsgraph_update_post handler -- the reliable net. EVERY assignment
-#      path (UI dropdown, Python, other addons) causes a depsgraph update, so
-#      an action-without-slot is healed by the very next update tick and the
-#      clip just plays. The scan is a couple of attribute reads per object
-#      (micro-seconds at real scene sizes) and self-quiesces: once every slot
-#      is assigned it writes nothing, so it cannot ping-pong the depsgraph.
+#      path (UI dropdown, Python, other addons) tags the owner (the Object, or
+#      the shape-key Key) for update, so an action-without-slot is healed by
+#      the very next update tick and the clip just plays. It looks only at the
+#      owners that update carries: a level holds thousands of objects, and a
+#      whole-file scan on every update (each orbit step, each frame of
+#      playback) was paid for nothing. It self-quiesces: once every slot is
+#      assigned it writes nothing, so it cannot ping-pong the depsgraph.
 
 _MSGBUS_OWNER = object()
 
@@ -562,9 +564,14 @@ def _resubscribe_on_load(_dummy=None):
 
 
 @bpy.app.handlers.persistent
-def _repair_on_depsgraph(_scene=None, _depsgraph=None):
+def _repair_on_depsgraph(_scene=None, depsgraph=None):
     try:
-        _repair_unassigned_action_slots()
+        for update in depsgraph.updates:
+            copy = update.id
+            if isinstance(copy, bpy.types.Object):
+                _repair_adt(copy.original.animation_data, "OBJECT")
+            elif isinstance(copy, bpy.types.Key):
+                _repair_adt(copy.original.animation_data, "KEY")
     except Exception:
         pass  # a handler must never throw into the depsgraph
 

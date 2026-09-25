@@ -20,7 +20,8 @@
 
 每个栈一个 PropertyGroup 类(按 INTERFACE 动态生成注解),挂在 `bpy.types.Material` 上 ——
 所以面板值随 .blend 存盘,与材质同生命周期。PropertyGroup 只是**镜子**:改一格立刻经生成物
-写进图里;图被重建后由 `sync()` 回读(导入后由 derived_state 统一叫一次,见那边的 stage)。
+写进图里;图由 `sync()` 回读,**按需**:面板第一次画到一张本会话还没回读过的材质时,下一拍回读它
+这一张。开文件与导入不再把全场材质都回读一遍 —— 九千对象的关卡上那一遍要一分钟,而面板一次只画一张。
 """
 
 from __future__ import annotations
@@ -40,6 +41,11 @@ _ROWS = {}
 # 「这张材质挂在哪副骨架上」同样要扫对象,同样按材质缓存、同样在回读时作废。
 # 值是骨架的**名字**("" = 扫过、没有骨架),不是对象引用:见 _rig_armature。
 _RIGS = {}
+
+# 本会话回读过的材质(session_uid),与排着下一拍回读的。材质照记录重编 = 一张新材质(新的 session_uid),
+# 自然不在里面;换文件 / 撤销 / 重做整个换掉数据库,两份一起丢。
+_SYNCED = set()
+_PENDING = set()
 
 # 基座骨这一行的镜子。它不是着色属性(图上没有它的 socket),所以名字由本模块拥有,
 # 不走 _value_attribute 那套 INTERFACE 命名域。
@@ -251,12 +257,28 @@ def sync(material):
         _GUARD[0] = False
     properties["_rig_note"] = ""
     _ROWS.pop(material.name_full, None)
-    properties["_synced"] = 1
+    _SYNCED.add(material.session_uid)
     return True
 
 
-def sync_all(materials):
-    return sum(1 for material in materials if sync(material))
+def _sync_soon(material):
+    """draw 里不许写数据:排到下一拍回读这一张,回读完重画界面。同一张只排一次。"""
+    key = material.session_uid
+    if key in _PENDING:
+        return
+    _PENDING.add(key)
+
+    def run():
+        _PENDING.discard(key)
+        target = next((one for one in bpy.data.materials if one.session_uid == key), None)
+        if target is not None and key not in _SYNCED:
+            sync(target)
+            for window in bpy.context.window_manager.windows:
+                for area in window.screen.areas:
+                    area.tag_redraw()
+        return None
+
+    bpy.app.timers.register(run, first_interval=0.0)
 
 
 def rows_of(material, entry):
@@ -380,9 +402,9 @@ def draw_materials(layout, context):
         stack.PANEL_TITLE, material.get("ruri_uber_part", ""),
         material.get("ruri_uber_shader", "") or ""), icon="NODE_MATERIAL")
     head.operator(RURI_OT_material_panel_sync.bl_idname, text="", icon="FILE_REFRESH")
-    if not properties.get("_synced"):
-        # 回读只能由 operator / derived_state 做:draw 期间禁止写数据。
-        box.label(text="这张材质还没回读过参数,点上面的刷新。", icon="INFO")
+    if material.session_uid not in _SYNCED:
+        _sync_soon(material)
+        box.label(text="正在回读这张材质的参数……", icon="INFO")
     _draw_rig(box, stack, material, properties)
 
     body = box.column()
@@ -423,6 +445,8 @@ _DATABASE_SWAPPED = ("load_post", "undo_post", "redo_post")
 def _drop_caches(*_arguments):
     _ROWS.clear()
     _RIGS.clear()
+    _SYNCED.clear()
+    _PENDING.clear()
 
 
 def register():
@@ -443,5 +467,7 @@ def unregister():
         unregister_stack(_STACKS[key]["stack"])
     _ROWS.clear()
     _RIGS.clear()
+    _SYNCED.clear()
+    _PENDING.clear()
     for cls in reversed(_CLASSES):
         bpy.utils.unregister_class(cls)

@@ -197,17 +197,9 @@ def _run_post(change):
     return len(material_builder.apply_post_stages(change.scene))
 
 
-def _run_material_panels(change):
-    """材质参数面板是图的镜子,图刚建好就得照一次 —— 否则面板显示的是接口缺省值,
-    用户一动某一格就把**没回读过的其它格**按缺省写进图里。"""
-    from . import material_panel
-
-    pool = list(bpy.data.materials) if change.whole_scene else change.materials
-    return material_panel.sync_all(pool)
-
-
 # 表就是调度策略的全部。顺序 = 注册顺序:兑现节点先接好,顶点腿再按材质真值建树,
-# 后处理最后落在合成器上(三者互不读对方产物,顺序只为报告好读)。
+# 后处理最后落在合成器上(三者互不读对方产物,顺序只为报告好读)。材质参数面板不在这里:
+# 它是按需回读的镜子,面板画到哪张才回读哪张(见 material_panel)。
 STAGES = (
     # 插件数据不在文件里:先按记录把材质编出来,后面各阶段才有东西可接。
     Stage("plugin-data", (LOADED, APPENDED), _run_plugin_data),
@@ -221,7 +213,6 @@ STAGES = (
     # 装过就跳过,所以在灯上反复触发也只是一次 installed() 判断;相机事实含出图尺寸,
     # 泛光金字塔的级数与各级尺寸跟着它走,尺寸没变时重建图链也只是一次签名比较。
     Stage("post", (OBJECTS, MATERIALS, LIGHT_SET, CAMERA, LOADED), _run_post),
-    Stage("material-panels", (MATERIALS, LOADED, APPENDED), _run_material_panels),
 )
 
 
@@ -301,8 +292,10 @@ def _live(datablocks):
 
 def _in_scene(objects, scene):
     """只保留当下真在这个场景里的对象:reset_scene 那类流程会先删后建,
-    队列里可能留着已被解链的产物。按身份比对,不按名字(名字会被复用)。"""
-    return [obj for obj in objects if scene.objects.get(obj.name) is obj]
+    队列里可能留着已被解链的产物。按身份比对,不按名字(名字会被复用)。
+    场景成员先收成一个集合:scene.objects 按名字查是逐个走一遍全场景,一次导入九千个对象就是平方级。"""
+    members = set(scene.objects)
+    return [obj for obj in objects if obj in members]
 
 
 def flush():
@@ -403,7 +396,9 @@ def _world_edited(scene, depsgraph):
     if world is None:
         return False
     for update in depsgraph.updates:
-        block = getattr(update.id, "original", update.id)
+        if not isinstance(update.id, (bpy.types.World, bpy.types.ShaderNodeTree)):
+            continue
+        block = update.id.original
         if block == world or (world.node_tree is not None and block == world.node_tree):
             return True
     return False

@@ -56,18 +56,22 @@ def viewpoint():
         _rescan()
     if not _objects:
         _objects.append(_make())
-    sync()
+    _write_current(bpy.context.scene)
     return Viewpoint(_objects[0])
 
 
 def sync(scene=None):
-    """Bring every viewpoint to the view it stands for: the 3D viewport the user last moved, else the scene camera.
-    Returns whether anything was written."""
+    """Bring every viewpoint some tree still reads to the view it stands for: the 3D viewport the user last moved,
+    else the scene camera. A viewpoint no tree reads any more (the chain that read it runs in the final render only)
+    is left alone -- every write is a depsgraph update. Returns whether anything was written."""
     if _objects and not _alive():
         _rescan()
-    if not _objects:
+    if not any(obj.users for obj in _objects):
         return False
-    scene = scene if scene is not None else bpy.context.scene
+    return _write_current(scene if scene is not None else bpy.context.scene)
+
+
+def _write_current(scene):
     if scene is None:
         return False
     state = _viewport_state()

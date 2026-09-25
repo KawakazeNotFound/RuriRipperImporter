@@ -75,6 +75,26 @@ class RURI_OT_post_remove(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class RURI_OT_post_viewport_preview(bpy.types.Operator):
+    bl_idname = "ruri.post_viewport_preview"
+    bl_label = "Viewport Preview"
+    bl_description = ("Also run this chain in the 3D viewport. Off, it runs in the final render only: the viewport "
+                      "compositor re-runs every chain on each redraw -- every orbit step and every sample while the "
+                      "view converges -- so heavy screen-space chains stay out of it until asked for")
+    bl_options = {"REGISTER", "UNDO"}
+
+    group: bpy.props.StringProperty()
+    kind: bpy.props.StringProperty()
+
+    def execute(self, context):
+        stage = next((one for one in material_builder.POST_STAGES if one.post["group"] == self.group), None)
+        if stage is None or not stage.installed(context.scene):
+            self.report({"WARNING"}, "'{0}' is not installed on this scene.".format(self.group))
+            return {"CANCELLED"}
+        stage.set_viewport_preview(context.scene, self.kind, not stage.viewport_previewed(context.scene, self.kind))
+        return {"FINISHED"}
+
+
 class RURI_OT_post_reset(bpy.types.Operator):
     bl_idname = "ruri.post_reset"
     bl_label = "Reset Parameters"
@@ -303,6 +323,17 @@ def draw_post_chain_section(layout, context):
         head = box.row()
         head.label(text=node.node_tree.name, icon="NODE_COMPOSITING")
         head.operator(RURI_OT_post_reset.bl_idname, text="", icon="LOOP_BACK")
+        kinds = stage.viewport_preview_kinds()
+        if kinds:
+            preview = box.column(align=True)
+            preview.label(text="Also in the viewport:", icon="RESTRICT_VIEW_OFF")
+            for kind in kinds:
+                on = stage.viewport_previewed(scene, kind)
+                toggle = preview.operator(RURI_OT_post_viewport_preview.bl_idname,
+                                          text=kind.replace("_", " ").title(), depress=on,
+                                          icon="CHECKBOX_HLT" if on else "CHECKBOX_DEHLT")
+                toggle.group = stage.post["group"]
+                toggle.kind = kind
         drawn = 0
         for socket in node.inputs:
             if socket.is_linked:
@@ -320,6 +351,7 @@ def draw_post_chain_section(layout, context):
 _CLASSES = (
     RURI_OT_post_install,
     RURI_OT_post_remove,
+    RURI_OT_post_viewport_preview,
     RURI_OT_post_reset,
     RURI_OT_main_light_set,
     RURI_OT_main_light_clear,
