@@ -70,6 +70,7 @@ SCENE_LIGHTS = "endfield.scene.lights"
 SCENE_COOKIES = "endfield.scene.cookies"
 SCENE_CLOUD_SHADOW = "endfield.scene.cloud_shadow"
 SCENE_SHADOW_RAMP = "endfield.scene.shadow_ramp"
+SCENE_WATER = "endfield.scene.water"
 SCENE_DECALS = "endfield.scene.decals"
 SCENE_DECAL_BOXES = "endfield.scene.decal_boxes"
 #: The names the game's scene stack reads its deferred decals through: the per-object
@@ -382,6 +383,16 @@ def scene_shadow_ramp(map_name, anchor, states):
     x, y, z = anchor
     return cabmap_state.BRIDGE.game_data_blob(
         SCENE_SHADOW_RAMP, map=map_name, x=x, y=y, z=z, states=[str(state) for state in states])
+
+
+def scene_water(map_name, anchor, states):
+    """What the level's water passes read where a viewer at ``anchor`` (a point in the game's own
+    world) stands, in the given scene states -- the water data array, its LOD parameters and its
+    textures, a level-resources payload the host applies as it is. A level without water states
+    only its LOD parameters."""
+    x, y, z = anchor
+    return cabmap_state.BRIDGE.game_data_blob(
+        SCENE_WATER, map=map_name, x=x, y=y, z=z, states=[str(state) for state in states])
 
 
 def scene_reflection(map_name, anchor, states):

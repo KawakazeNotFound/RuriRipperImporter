@@ -339,7 +339,7 @@ def _import(context, arguments):
     # Everything the level states for every material, as one state the stacks read live: its
     # globals (fog, the default sky SH), its baked irradiance rebuilt as the game's camera
     # clipmaps, the reflection probes the game's camera would use, the cloud shadow texture, the
-    # shadow ramp and what the render pipeline itself binds for every material.
+    # shadow ramp, the water state and what the render pipeline itself binds for every material.
     if anchor is not None:
         _written, unread = host.apply_level_resources(
             context, datasets.scene_globals(map_name, anchor, states),
@@ -348,6 +348,7 @@ def _import(context, arguments):
              datasets.scene_cookies(map_name, states),
              datasets.scene_cloud_shadow(map_name, anchor, states),
              datasets.scene_shadow_ramp(map_name, anchor, states),
+             datasets.scene_water(map_name, anchor, states),
              datasets.render_pipeline(),
              datasets.scene_decals(map_name, rect, states)])
         if unread:
