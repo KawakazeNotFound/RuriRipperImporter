@@ -204,18 +204,16 @@ def apply_character_params(pushed, materials=None):
             if current is None:
                 # 快照里没有 = 还停在声明缺省。必须从**声明缺省**起手补齐四分量,
                 # 否则只推 x 的绑定会把 yzw 一并清零。
-                current = [float(row[4][0]), float(row[4][1]), float(row[4][2]), float(row[5])]
+                current = [float(row[2][0]), float(row[2][1]), float(row[2][2]), float(row[3])]
             current = [float(component) for component in current][:4]
             current += [0.0] * (4 - len(current))
             if _write_slot(current, comps, value):
                 colors[name] = current
                 hits += 1
         if hits:
-            # 🔴 快照是参数唯一真源,不能再写 socket.default_value:CP 槽的 socket
-            # 现在**接在参数表上**,而被接住的 socket 求值时根本不看自己的缺省值 ——
-            # 直写 socket 会静默无效(编译干净、控制台干净、画面纹丝不动)。
+            # 快照是参数唯一真源:写记录,再由栈把记录写成组输入的常量(sRGB 线性化与各段各循环体的口都在那一处)。
             material["ruri_uber_colors"] = colors
-            stack._param_write(material)
+            stack.apply_params(material)
             touched += 1
             written += hits
     return touched, written
