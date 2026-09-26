@@ -65,10 +65,11 @@ SCHEMA = (
            "detail with instead. -1 builds every level at once, which is for inspecting "
            "a model, not rendering one",
            minimum=-1, soft_maximum=4),
-    Option("import_shadow_proxies", BOOL, True, "Keep Shadow Proxies",
+    Option("import_shadow_proxies", BOOL, False, "Keep Shadow Proxies",
            "Keep renderers the game draws only into the shadow map. They arrive casting "
            "shadows and seen by nothing else; the renderers they stand in for often cast "
-           "none of their own, so leaving them out takes those shadows away"),
+           "none of their own, so leaving them out takes those shadows away. Offered only "
+           "by a game whose builds carry them"),
     Option("import_inactive", BOOL, True, "Import Inactive Renderers",
            "Renderers that are disabled, or sit on a deactivated GameObject, draw nothing "
            "in the game -- but they are usually runtime-toggled variants. Untick to import "

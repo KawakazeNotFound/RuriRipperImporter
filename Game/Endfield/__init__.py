@@ -132,6 +132,10 @@ GAME_MODULE = GameModule(
     # The hair/cloth/accessory chains this game tunes ON the model prefab itself,
     # which is why they can travel with an import at all (see secondary_motion.read).
     secondary_motion=_secondary_motion,
+    # A character ships a low-detail copy of every part drawn only into the shadow
+    # map, and a streamed tree's shadow is cast by a proxy while its visible branches
+    # cast none.
+    shadow_proxies=True,
     register=_register,
     unregister=_unregister,
 )

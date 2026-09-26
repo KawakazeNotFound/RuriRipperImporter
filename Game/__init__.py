@@ -148,11 +148,11 @@ class GameModule:
     register/unregister pair for the bpy classes those tabs need."""
 
     __slots__ = ("game_name", "label", "tabs", "sections", "face_retarget",
-                 "secondary_motion", "engine", "settings_schema",
+                 "secondary_motion", "shadow_proxies", "engine", "settings_schema",
                  "shaders", "all_shaders", "directory", "package", "_register", "_unregister")
 
     def __init__(self, game_name, label, tabs, register, unregister, sections=(),
-                 face_retarget=None, secondary_motion=None, engine=None,
+                 face_retarget=None, secondary_motion=None, shadow_proxies=False, engine=None,
                  settings_schema=None, shaders=None, all_shaders=None):
         # The Unity productName this game's player builds under -- the install's own
         # word for itself, and the upstream decoder's GameName. Nothing translates it.
@@ -197,6 +197,10 @@ class GameModule:
         # The callable takes (context, armature, cabs, report) and writes onto whatever
         # cloth add-on is present, returning the report it was handed.
         self.secondary_motion = secondary_motion
+        # Whether this game's builds carry shadow proxies: renderers drawn only into the
+        # shadow map, standing in for the shadows of renderers that cast none of their
+        # own. Only such a game offers keeping them; everywhere else they are dropped.
+        self.shadow_proxies = shadow_proxies
         # There is no importer here, deliberately: whatever engine a build is on, a row loads
         # by handing its seed to the ONE load (Kernel.app.loading), and what the seed IS is
         # answered by that game's statement source on the reader side.
@@ -333,6 +337,13 @@ def secondary_motion_of(game_name):
     ships none simply never answers and the option never appears."""
     game = module_for(game_name)
     return game.secondary_motion if game is not None else None
+
+
+def shadow_proxies_of(game_name):
+    """Whether ONE game's builds carry shadow proxies. The import panel asks before it
+    offers to keep them; a game that states none never shows the option."""
+    game = module_for(game_name)
+    return game is not None and game.shadow_proxies
 
 
 def shaders_of(game_name, engine=""):

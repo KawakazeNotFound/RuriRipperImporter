@@ -972,16 +972,23 @@ def as_options(self, scene=False):
     The options are read off the ONE table that declares them, so a key here and
     the key an importer reads cannot drift apart. ``scene=True`` is the scene
     window / display stage road: identical but for which of the two remembered
-    Game Shaders answers it takes (see scene_shaders)."""
+    Game Shaders answers it takes (see scene_shaders). An option the game in front
+    of us does not offer is absent from its panel, so it answers its default here
+    whatever an earlier game's panel left stored."""
+    game_name = _active_game_name(self)
     values = {}
     for entry in kernel_options.schema():
+        asks = _OPTION_ASKS_GAME.get(entry.key)
+        if asks is not None and not asks(game_name):
+            values[entry.key] = entry.default
+            continue
         value = getattr(self, entry.key)
         values[entry.key] = int(value) if entry.kind == kernel_options.INT else value
     if scene and "game_shaders" in values:
         values["game_shaders"] = self.scene_shaders
     # THE game this session is looking at, resolved exactly once here and stamped
     # onto every armature the import builds.
-    values["source_game"] = _active_game_name(self)
+    values["source_game"] = game_name
     # The layers the reader resolves this install's materials through, over its own
     # default, and the product the names none of them states are filed under.
     values["role_layers"] = _reader_role_layers(self)
@@ -2206,7 +2213,8 @@ _OPTION_NEEDS_RIG = ("retarget_face", "import_secondary_motion")
 #: Options only a game that STATES the thing can offer. The host never learns
 #: which games those are; it asks the registry per option.
 _OPTION_ASKS_GAME = {"retarget_face": lambda name: Game.face_retarget_of(name),
-                     "import_secondary_motion": lambda name: Game.secondary_motion_of(name)}
+                     "import_secondary_motion": lambda name: Game.secondary_motion_of(name),
+                     "import_shadow_proxies": lambda name: Game.shadow_proxies_of(name)}
 
 
 def draw_import_options(layout, context, state=None):
@@ -2227,7 +2235,7 @@ def draw_import_options(layout, context, state=None):
     has_rig = host_port.selected_rig(context) is not None
     for entry in kernel_options.schema():
         asks = _OPTION_ASKS_GAME.get(entry.key)
-        if asks is not None and asks(game_name) is None:
+        if asks is not None and not asks(game_name):
             continue
         row = layout.row(align=True)
         if entry.key in _OPTION_NEEDS_RIG:
