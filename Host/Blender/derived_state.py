@@ -181,6 +181,7 @@ def _run_camera_basis(change):
     它就站在活动相机上)。"""
     from . import viewpoint
     viewpoint.sync(change.scene)
+    viewpoint.sync_windows(change.scene)
     viewpoint.sync_footprint(change.scene)
     scope = None if change.whole_scene else change.objects
     return material_builder.push_camera_stages(objects=scope)

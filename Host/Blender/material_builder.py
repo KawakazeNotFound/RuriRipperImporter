@@ -158,6 +158,24 @@ RENDER_FOOTPRINTS = extensions.point(
     "blender.render_footprints",
     "Scene attributes a shading stack reads the render's per-pixel world size through.")
 
+#: ``view_window_attributes() -> {"columns": [4 names], "inverse_columns": [4 names],
+#: "clip": name, "screen": name} | None``. Object attributes a stack's vertex-stage programs
+#: read the view being drawn through: that view's projection column by column (xyz, w) and
+#: its inverse, (near, far, orthographic) and its size in pixels. The host keeps them on the
+#: objects that read them (``view_window_readers``) for the 3D viewport the user is looking
+#: through, and for the render camera while a render runs (:mod:`viewpoint`); the view matrix
+#: itself the GPU already has.
+VIEW_WINDOWS = extensions.point(
+    "blender.view_windows",
+    "Object attributes a shading stack reads the projection of the view being drawn through.")
+
+#: ``view_window_readers(scene) -> [object, ...]``. The objects whose materials read the view
+#: window. Asked after a file opens, an undo step, and whenever a stack says they changed
+#: (:func:`view_window_readers_changed`) -- never on a tick.
+VIEW_WINDOW_READERS = extensions.point(
+    "blender.view_window_readers",
+    "The objects whose materials read the view window.")
+
 #: ``purge() -> int``. The plugin's own data is never written to a .blend (see
 #: :mod:`plugin_data`); a generated runtime drops what an older build of it saved into a
 #: file before that was so, by its own vocabulary. The load pass runs every one of them
@@ -360,6 +378,47 @@ def unregister_render_footprints(attributes):
 def render_footprint_attributes():
     """Every scene attribute the loaded stacks read the render's pixel footprint through."""
     return sorted({name for provider in RENDER_FOOTPRINTS for name in provider()})
+
+
+def register_view_windows(attributes):
+    VIEW_WINDOWS.add(attributes)
+
+
+def unregister_view_windows(attributes):
+    VIEW_WINDOWS.remove(attributes)
+
+
+def view_window_attributes():
+    """The distinct view-window layouts the loaded stacks read, each stated once."""
+    layouts = []
+    for provider in VIEW_WINDOWS:
+        layout = provider()
+        if layout and layout not in layouts:
+            layouts.append(layout)
+    return layouts
+
+
+def register_view_window_readers(readers):
+    VIEW_WINDOW_READERS.add(readers)
+
+
+def unregister_view_window_readers(readers):
+    VIEW_WINDOW_READERS.remove(readers)
+
+
+def view_window_readers(scene):
+    """Every object of ``scene`` some loaded stack says reads the view window, each once."""
+    found = {}
+    for provider in VIEW_WINDOW_READERS:
+        for obj in provider(scene):
+            found.setdefault(obj.as_pointer(), obj)
+    return list(found.values())
+
+
+def view_window_readers_changed():
+    """A stack built or removed what reads the view window: the host asks again before it next writes."""
+    from . import viewpoint
+    viewpoint.invalidate_readers()
 
 
 def register_plugin_purge(purge):

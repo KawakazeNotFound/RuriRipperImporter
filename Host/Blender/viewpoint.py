@@ -18,6 +18,11 @@ orbit, and with it the deformation below it -- the whole vertex stage of every c
 vertex stage reads the scene camera instead. Every write re-evaluates each tree that reads the viewpoint, so a write
 happens only when what it carries changed, and a file without a viewpoint costs the poll nothing: the object is found
 once per file load or undo step, never by scanning on a tick.
+
+A program that has to follow the view per vertex (an outline) is evaluated by the GPU in the material's
+displacement, which already has the view matrix of every view it draws; what it lacks is the projection and the
+size in pixels, stated on the objects that read them as the view window (:func:`sync_windows`). Those change with a
+lens, a viewport size or a camera view, never with an orbit, so they cost the orbit nothing.
 """
 
 from __future__ import annotations
@@ -38,6 +43,11 @@ _objects = []
 _views = {}
 _driver = [None]
 _written = [None]
+#: The view window last stated on the readers: (projection, size). A render running states its camera's.
+_windows = [None]
+#: The objects the view window is stated on, as (scene pointer, objects); None until asked again.
+_readers = [None]
+_rendering = [False]
 
 
 class Viewpoint:
@@ -106,6 +116,105 @@ def sync_footprint(scene):
             scene[name] = footprint
             written += 1
     return written
+
+
+def sync_windows(scene=None):
+    """Keep the projection of the view being drawn on every object that reads it, under every name a loaded stack
+    reads it by (:func:`material_builder.view_window_attributes`): the window matrix column by column and its
+    inverse, (near, far, orthographic) read off that matrix, and the view's size in pixels. The view is the 3D
+    viewport the user last moved, else -- in a background run, or while a render runs -- the scene camera at the
+    output size. The view matrix is not stated: the GPU has it for every view it draws. Orbiting, panning and zooming
+    the viewport move only that matrix, so they write nothing here; a lens, a viewport size or a camera view change
+    writes once.
+
+    The values sit on the readers themselves, each followed by a shading-only tag -- writing the object's own
+    colour is the one Python path to it (``rna_Object_internal_update_draw``). A scene property would need the
+    scene tagged, and on a large level that re-evaluates everything that hangs off the scene (measured 330 ms on a
+    9276-object level against 25 ms for twenty readers there, 1 ms on a lone character, nothing on a level with no
+    reader). Returns whether anything was written."""
+    from . import material_builder
+
+    layouts = material_builder.view_window_attributes()
+    scene = scene if scene is not None else bpy.context.scene
+    if not layouts or scene is None:
+        return False
+    readers = _reader_objects(scene)
+    if not readers:
+        return False
+    state = None if _rendering[0] else _viewport_state()
+    if state is None:
+        state = _camera_state(scene)
+    if state is None:
+        return False
+    key = (state[1], state[2])
+    if key == _windows[0]:
+        return False
+    columns, inverse_columns, clip, size = _window_values(state)
+    try:
+        for obj in readers:
+            for layout in layouts:
+                for name, column in zip(layout["columns"], columns):
+                    obj[name] = column
+                for name, column in zip(layout["inverse_columns"], inverse_columns):
+                    obj[name] = column
+                obj[layout["clip"]] = clip
+                obj[layout["screen"]] = size
+            obj.color = tuple(obj.color)
+    except ReferenceError:
+        invalidate_readers()
+        return False
+    _windows[0] = key
+    return True
+
+
+def invalidate_readers():
+    """The objects reading the view window changed (an import built or removed outline shells): ask again, and
+    state the window on the new set whatever it was before."""
+    _readers[0] = None
+    _windows[0] = None
+
+
+def _reader_objects(scene):
+    from . import material_builder
+
+    cached = _readers[0]
+    if cached is not None and cached[0] == scene.as_pointer():
+        return cached[1]
+    objects = material_builder.view_window_readers(scene)
+    _readers[0] = (scene.as_pointer(), objects)
+    _windows[0] = None
+    return objects
+
+
+def _window_values(state):
+    """(columns, inverse columns, (near, far, orthographic), (width, height, 0)) of a view's window matrix, the
+    clipping planes solved from the matrix itself so a camera view and a free viewport both answer from what is
+    drawn."""
+    _transform, projection, size = state
+    window = _matrix(projection)
+    inverse = window.inverted()
+    columns = tuple(tuple(float(window[row][column]) for row in range(4)) for column in range(4))
+    inverse_columns = tuple(tuple(float(inverse[row][column]) for row in range(4)) for column in range(4))
+    if window[3][3] > 0.5:
+        near = (window[2][3] + 1.0) / window[2][2]
+        far = (window[2][3] - 1.0) / window[2][2]
+        orthographic = 1.0
+    else:
+        near = window[2][3] / (window[2][2] - 1.0)
+        far = window[2][3] / (window[2][2] + 1.0)
+        orthographic = 0.0
+    return columns, inverse_columns, (float(near), float(far), orthographic), (float(size[0]), float(size[1]), 0.0)
+
+
+def _window_names():
+    from . import material_builder
+
+    names = []
+    for layout in material_builder.view_window_attributes():
+        names.extend(layout["columns"])
+        names.extend(layout["inverse_columns"])
+        names.extend((layout["clip"], layout["screen"]))
+    return names
 
 
 def _alive():
@@ -200,6 +309,7 @@ def _camera_state(scene):
 def _poll():
     try:
         sync()
+        sync_windows()
     except Exception:
         traceback.print_exc()
     return POLL_SECONDS
@@ -209,13 +319,49 @@ def _poll():
 def _on_data_replaced(*_args):
     # Opening a file or stepping undo replaces the data the cached objects and the written state describe.
     _rescan()
+    invalidate_readers()
+
+
+@bpy.app.handlers.persistent
+def _on_render_start(scene, *_args):
+    # A render is drawn for its camera at the output size, whatever viewport the user last moved.
+    _rendering[0] = True
+    sync_windows(scene)
+
+
+@bpy.app.handlers.persistent
+def _on_render_end(scene, *_args):
+    _rendering[0] = False
+    sync_windows(scene)
+
+
+@bpy.app.handlers.persistent
+def _on_save_pre(*_args):
+    # The view window is this session's view, not the document's: it never goes into the file.
+    names = _window_names()
+    if names:
+        for obj in bpy.data.objects:
+            for name in names:
+                if name in obj:
+                    del obj[name]
+    _windows[0] = None
+
+
+@bpy.app.handlers.persistent
+def _on_save_post(*_args):
+    sync_windows()
+
+
+_HANDLERS = (("load_post", _on_data_replaced), ("undo_post", _on_data_replaced), ("redo_post", _on_data_replaced),
+             ("render_pre", _on_render_start), ("render_post", _on_render_end), ("render_cancel", _on_render_end),
+             ("save_pre", _on_save_pre), ("save_post", _on_save_post))
 
 
 def register():
-    handlers = bpy.app.handlers
-    for chain in (handlers.load_post, handlers.undo_post, handlers.redo_post):
-        if _on_data_replaced not in chain:
-            chain.append(_on_data_replaced)
+    for chain_name, handler in _HANDLERS:
+        chain = getattr(bpy.app.handlers, chain_name)
+        if handler not in chain:
+            chain.append(handler)
     if not bpy.app.background and not bpy.app.timers.is_registered(_poll):
         bpy.app.timers.register(_poll, first_interval=POLL_SECONDS, persistent=True)
 
@@ -223,11 +369,14 @@ def register():
 def unregister():
     if bpy.app.timers.is_registered(_poll):
         bpy.app.timers.unregister(_poll)
-    handlers = bpy.app.handlers
-    for chain in (handlers.load_post, handlers.undo_post, handlers.redo_post):
-        if _on_data_replaced in chain:
-            chain.remove(_on_data_replaced)
+    for chain_name, handler in _HANDLERS:
+        chain = getattr(bpy.app.handlers, chain_name)
+        if handler in chain:
+            chain.remove(handler)
     _objects.clear()
     _views.clear()
     _driver[0] = None
     _written[0] = None
+    _windows[0] = None
+    _readers[0] = None
+    _rendering[0] = False
