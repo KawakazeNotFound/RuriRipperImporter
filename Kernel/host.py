@@ -198,13 +198,13 @@ class SceneGraph(abc.ABC):
         level."""
 
     @abc.abstractmethod
-    def apply_decals(self, context, boxes, range_attribute, list_table):
-        """Hand every object the deferred decals whose boxes reach it, for the shading stacks that
-        apply them inside the material (the source projects them into its GBuffer between the GBuffer
-        pass and lighting). ``boxes`` lists the level's decals in the order they draw -- the order of
-        the records in the level's decal payload -- each as the column-major matrix taking the unit
-        cube onto its box, in the SOURCE's world. Each object's run of box indices goes into the data
-        table ``list_table``, and where the run starts and how long it is into the per-object global
+    def apply_box_lists(self, context, boxes, range_attribute, list_table):
+        """Hand every object the level boxes that reach it, for the shading stacks that walk them inside
+        the material where the source culls them per pixel before shading (the decal pass, the reflection
+        probe binning). ``boxes`` lists them in the order the shading walks them -- the order of the
+        records in the payload they belong to -- each as the column-major matrix taking the unit cube
+        onto its box, in the SOURCE's world. Each object's run of box indices goes into the data table
+        ``list_table``, and where the run starts and how long it is into the per-object global
         ``range_attribute``. Returns the lines to report."""
 
     @abc.abstractmethod

@@ -355,8 +355,12 @@ def _import(context, arguments):
             notes.append("{0} level resource(s) no shading stack reads".format(len(unread)))
         # Its deferred decals, handed to the objects their boxes reach (the stacks apply them in
         # the material, where the game projects them into its GBuffer).
-        notes.extend(host.apply_decals(context, datasets.scene_decal_boxes(map_name, rect, states),
-                                       datasets.DECAL_RANGE, datasets.DECAL_LISTS))
+        notes.extend(host.apply_box_lists(context, datasets.scene_decal_boxes(map_name, rect, states),
+                                          datasets.DECAL_RANGE, datasets.DECAL_LISTS))
+        # Its reflection probes, each object walking only the slots whose boxes can reach it (the game
+        # bins them per pixel before shading).
+        notes.extend(host.apply_box_lists(context, datasets.scene_reflection_boxes(map_name, anchor, states),
+                                          datasets.PROBE_RANGE, datasets.PROBE_LISTS))
         # The level's volumetric fog, integrated by the host the way the game integrates it.
         medium = datasets.scene_medium(map_name, anchor, states)
         if medium is not None:

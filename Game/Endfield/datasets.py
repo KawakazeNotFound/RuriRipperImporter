@@ -77,6 +77,9 @@ SCENE_DECAL_BOXES = "endfield.scene.decal_boxes"
 #: the data table those runs go into.
 DECAL_RANGE = "_DecalRange"
 DECAL_LISTS = "_DecalLists"
+PROBE_RANGE = "_ReflectionProbeRange"
+PROBE_LISTS = "_ReflectionProbeLists"
+SCENE_REFLECTION_BOXES = "endfield.scene.reflection_boxes"
 
 
 def _table(dataset_id, **args):
@@ -344,11 +347,19 @@ def scene_decals(map_name, rect, states):
 
 def scene_decal_boxes(map_name, rect, states):
     """The same decals' boxes in drawing order, in the shape
-    :meth:`Kernel.host.SceneGraph.apply_decals` takes: per decal, the column-major matrix taking
+    :meth:`Kernel.host.SceneGraph.apply_box_lists` takes: per decal, the column-major matrix taking
     the unit cube onto its box, in the game's own world."""
     min_x, min_z, max_x, max_z = rect
     rows = _rows(SCENE_DECAL_BOXES, map=map_name, minX=min_x, minZ=min_z, maxX=max_x, maxZ=max_z,
                  sceneState=[str(state) for state in states])
+    return [[float(row["o{0}".format(index)]) for index in range(16)] for row in rows]
+
+
+def scene_reflection_boxes(map_name, anchor, states):
+    """The boxes of the reflection probes a viewer at ``anchor`` binds, in slot order from slot 1, in the
+    shape :meth:`Kernel.host.SceneGraph.apply_box_lists` takes: per probe, the column-major matrix taking
+    the unit cube onto the region its box test admits, in the game's own world."""
+    rows = _rows(SCENE_REFLECTION_BOXES, **_viewer(map_name, anchor, states))
     return [[float(row["o{0}".format(index)]) for index in range(16)] for row in rows]
 
 

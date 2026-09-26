@@ -1,16 +1,19 @@
-"""A level's deferred decals, handed to the objects their boxes reach.
+"""A level's boxes, handed to the objects they reach -- its deferred decals, its reflection probes' boxes.
 
-The source projects each decal box into its GBuffer between the GBuffer pass and deferred lighting;
-a host shading each surface in one pass applies the decals inside the material instead, and a
-material can only afford the boxes that can reach its own object. Each object's list is the indices
--- in drawing order, the order of the level's decal records -- of the boxes whose world bounds meet
-the object's world bounds: a conservative cut, since the material tests every pixel against the box
-itself. Only objects with a material that reads the per-object global get a list -- which materials
-read it is whatever their graphs say (an object attribute node of that name, at any group depth).
-The lists of all objects go end to end into one data table; each object carries where its run starts
-and how many entries it has as a per-object global (the value minus the default the stacks declare,
-the encoding every per-object global uses), and an object no box reaches carries none, so it reads
-the default: no decals.
+The source culls such boxes per pixel before shading (the decal pass projects each box into its GBuffer;
+the probe binning marks the boxes that reach each froxel); a host shading each surface in one pass
+walks them inside the material instead, and a material can only afford the boxes that can reach its
+own object. Each object's list is the indices -- in the order the boxes are given, which is the order
+the shading walks them -- of the boxes whose world bounds meet the object's world bounds: a
+conservative cut, since the material tests every pixel against the box itself. Only objects with a
+material that reads the per-object global get a list -- which materials read it is whatever their
+graphs say (an object attribute node of that name, at any group depth).
+
+Objects reaching the same boxes share one run: the distinct lists go end to end into one data table,
+and each object carries where its run starts and how many entries it has as a per-object global (the
+value minus the default the stacks declare, the encoding every per-object global uses). An object no
+box reaches carries an empty run -- and, when that equals the declared default, nothing at all, so it
+reads the default.
 """
 import numpy
 from mathutils import Matrix, Vector
@@ -21,18 +24,19 @@ _UNIT_CORNERS = [Vector((x, y, z, 1.0)) for x in (-0.5, 0.5) for y in (-0.5, 0.5
 
 
 def apply(context, boxes, range_attribute, list_table):
-    """Bind ``boxes`` -- the level's decals in drawing order, each the column-major matrix taking the
-    unit cube onto its box in the SOURCE's world -- to the objects they reach, through the per-object
+    """Bind ``boxes`` -- each the column-major matrix taking the unit cube onto a box in the SOURCE's
+    world, in the order the shading walks them -- to the objects they reach, through the per-object
     global ``range_attribute`` and the data table ``list_table`` the stacks read. Returns the lines to
     report."""
     base = material_builder.object_attribute_base(range_attribute)
     layout = material_builder.level_image_layout(list_table)
     if base is None or layout is None:
-        return ["no shading stack reads decal lists ({0}, {1})".format(range_attribute, list_table)]
+        return ["no shading stack reads box lists ({0}, {1})".format(range_attribute, list_table)]
     basis = Matrix(material_builder.world_basis()).to_4x4()
     bounds = [_bounds([(basis @ (_matrix(columns) @ corner)).xyz for corner in _UNIT_CORNERS]) for columns in boxes]
     depsgraph = context.evaluated_depsgraph_get()
     readers = {}
+    runs = {}
     entries = []
     reached = 0
     for obj in context.scene.objects:
@@ -45,23 +49,30 @@ def apply(context, boxes, range_attribute, list_table):
             continue
         evaluated = obj.evaluated_get(depsgraph)
         low, high = _bounds([evaluated.matrix_world @ Vector(corner) for corner in evaluated.bound_box])
-        hits = [index for index, (box_low, box_high) in enumerate(bounds)
-                if all(low[axis] <= box_high[axis] and box_low[axis] <= high[axis] for axis in range(3))]
-        if not hits:
+        hits = tuple(index for index, (box_low, box_high) in enumerate(bounds)
+                     if all(low[axis] <= box_high[axis] and box_low[axis] <= high[axis] for axis in range(3)))
+        first = 0
+        if hits:
+            first = runs.get(hits)
+            if first is None:
+                first = runs[hits] = len(entries)
+                entries.extend(hits)
+            reached += 1
+        value = [float(first), float(len(hits)), 0.0, 0.0]
+        if value == list(base):
             if range_attribute in obj:
                 del obj[range_attribute]
             continue
-        obj[range_attribute] = [float(len(entries)) - base[0], float(len(hits)) - base[1], -base[2], -base[3]]
-        entries.extend(hits)
-        reached += 1
+        obj[range_attribute] = [component - default for component, default in zip(value, base)]
     capacity = int(layout["size"][1])
     if len(entries) > capacity:
-        raise ValueError("[decals] {0} list entries for {1} object(s); the stacks' {2} holds {3}".format(
-            len(entries), reached, list_table, capacity))
+        raise ValueError("[box-lists] {0} entries in {1} distinct run(s) overflow {2}, which holds {3}".format(
+            len(entries), len(runs), list_table, capacity))
     rows = numpy.zeros((len(entries), 1, 4), dtype=numpy.float32)
     rows[:, 0, 0] = entries
     material_builder.write_level_table(list_table, rows)
-    return ["{0} decal(s) reach {1} object(s)".format(len(boxes), reached)] if boxes else []
+    return (["{0} box(es) of {1} reach {2} object(s) through {3} distinct run(s)".format(
+        len(boxes), list_table, reached, len(runs))] if boxes else [])
 
 
 def _reads(tree, name, readers):

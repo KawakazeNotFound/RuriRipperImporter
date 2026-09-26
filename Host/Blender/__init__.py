@@ -172,9 +172,9 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         from . import material_builder
         return material_builder.apply_level_resources(context.scene, values, payloads)
 
-    def apply_decals(self, context, boxes, range_attribute, list_table):
-        from . import decals
-        return decals.apply(context, boxes, range_attribute, list_table)
+    def apply_box_lists(self, context, boxes, range_attribute, list_table):
+        from . import box_lists
+        return box_lists.apply(context, boxes, range_attribute, list_table)
 
     def apply_medium(self, context, medium):
         from . import medium as medium_builder
