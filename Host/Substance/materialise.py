@@ -209,6 +209,7 @@ def _bake(job):
     force = bool(job.options.get("force_rebuild", False))
     folder = job.texture_dir()
     os.makedirs(folder, exist_ok=True)
+    textures = job.statement.textures
     written = 0
     reused = 0
     for name, plan in sorted(job.plans.items()):
@@ -217,11 +218,8 @@ def _bake(job):
         for kind, jobs in (("channels", plan.channel_jobs), ("params", plan.param_jobs)):
             done = {}
             for entry in jobs:
-                # The WHOLE basename through the sanitiser, not only the
-                # material's half: a texture is keyed by what the build files it
-                # under, and that key routinely carries a path separator.
-                path = os.path.join(folder, _safe(
-                    "{0}_{1}".format(name, entry.cache_key())) + ".png")
+                # One file per texture and operation, whichever materials bind it.
+                path = os.path.join(folder, _safe(entry.file_stem(textures[entry.guid].name)) + ".png")
                 if force or not os.path.isfile(path):
                     # Asked of the STATEMENT, so the seeds and reading options
                     # of the selection being built go with it: the bake reads

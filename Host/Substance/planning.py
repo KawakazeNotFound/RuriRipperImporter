@@ -19,6 +19,7 @@ is left is this application's own channel vocabulary.
 from __future__ import annotations
 
 import collections
+import hashlib
 import json
 import os
 
@@ -99,8 +100,13 @@ class TextureJob:
         self.target = target
         self.source_property = source_property
 
-    def cache_key(self):
-        return "{0}_{1}_v{2}".format(self.guid[:12], self.op, self.BAKE_VERSION)
+    def file_stem(self, texture_name):
+        """The baked file's name: the texture's own name to read it by, a digest of its WHOLE key to
+        tell it apart, the operation and the bake rules. The key is where the build files the texture
+        -- archive chain, collection, path id -- so every texture of one archive family shares any
+        prefix of it, and a name cut from a prefix gives all of them one file."""
+        digest = hashlib.blake2b(self.guid.encode("utf-8"), digest_size=8).hexdigest()
+        return "{0}_{1}_{2}_v{3}".format(texture_name, digest, self.op, self.BAKE_VERSION)
 
 
 class MaterialPlan:
