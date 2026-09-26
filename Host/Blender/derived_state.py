@@ -150,8 +150,9 @@ def _run_capabilities(change):
 
 
 def _run_light_roles(_change):
-    """主光身份重刷。灯的增删/位姿/颜色都走这条 —— 它只改灯上的一个自定义属性,
-    宿主的光循环下一帧就按新身份走;没有任何 CPU 写纹理,所以挪灯不再拖着材质重求值。"""
+    """灯上那一格(主光身份与朝向)重刷。灯的增删/位姿/颜色都走这条 —— 它只改灯上的一个自定义属性,
+    宿主的光循环下一帧就按新身份走;没有任何 CPU 写纹理,所以挪灯不再拖着材质重求值。新材质进场也走这条:
+    场上还没有灯时由它立起兜底 Sun,一批材质只刷一次,不在每张材质的实例化里各刷一遍。"""
     return material_builder.refresh_light_roles()
 
 
@@ -204,7 +205,7 @@ STAGES = (
     # 插件数据不在文件里:先按记录把材质编出来,后面各阶段才有东西可接。
     Stage("plugin-data", (LOADED, APPENDED), _run_plugin_data),
     Stage("capabilities", (WORLD, ENGINE), _run_capabilities),
-    Stage("light-roles", (LIGHT_SET, LIGHT_VALUES, LOADED), _run_light_roles),
+    Stage("light-roles", (LIGHT_SET, LIGHT_VALUES, LOADED, MATERIALS, APPENDED), _run_light_roles),
     Stage("vertex", (OBJECTS, MATERIALS, LOADED, APPENDED), _run_vertex),
     Stage("camera-basis", (CAMERA, LOADED, APPENDED), _run_camera_basis),
     Stage("rig-basis", (OBJECTS, MATERIALS, RIG, LOADED, APPENDED), _run_rig_basis),

@@ -24,7 +24,7 @@ import bpy
 from mathutils import Matrix, Quaternion, Vector
 
 from ...Kernel import statement as kernel_statement
-from . import derived_state, light_records, material_builder, rig_identity, shadow_casting
+from . import derived_state, light_parameters, material_builder, rig_identity, shadow_casting
 
 #: The custom property a placed object carries its stated tag under, so a camera
 #: the game tagged is found again by what the game called it.
@@ -326,8 +326,6 @@ class _Materialisation:
         made.matrix_basis = local
         if node.tag:
             made[TAG] = node.tag
-        if node.light is not None:
-            made[light_records.SOURCE_LIGHT_PROPERTY] = node.path
         self._apply_morphs(made, node.mesh)
         self.built[node.index] = made
         self.objects.append(made)
@@ -624,6 +622,7 @@ class _Materialisation:
         if kind == "AREA":
             light.size = stated["width"]
             light.size_y = stated["height"]
+        light_parameters.stamp(light, stated)
         return light
 
     def _camera_data(self, node):

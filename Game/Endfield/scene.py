@@ -357,10 +357,6 @@ def _import(context, arguments):
         # the material, where the game projects them into its GBuffer).
         notes.extend(host.apply_decals(context, datasets.scene_decal_boxes(map_name, rect, states),
                                        datasets.DECAL_RANGE, datasets.DECAL_LISTS))
-        # Its lamps as the game's light culling packs them for that same viewer.
-        _stamped, unmatched = host.apply_light_records(context, datasets.scene_lights(map_name, anchor, states))
-        if unmatched:
-            notes.append("{0} light(s) carry no record".format(len(unmatched)))
         # The level's volumetric fog, integrated by the host the way the game integrates it.
         medium = datasets.scene_medium(map_name, anchor, states)
         if medium is not None:

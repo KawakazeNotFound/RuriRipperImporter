@@ -132,13 +132,22 @@ TEXEL_SIZES = extensions.point(
     "blender.texel_sizes",
     "Texel-size globals of level textures made at their level's own size.")
 
-#: ``light_record_attributes() -> [name, ...]``. The LIGHT attributes a stack's light
-#: loop reads a source's own per-light record through, one per record vector in record
-#: order; the host stamps each light's record under them (:mod:`light_records`). A stack
-#: that lights through the host's own light evaluation reads none.
-LIGHT_RECORDS = extensions.point(
-    "blender.light_records",
-    "Per-light records of a source's own light table a shading stack reads as light attributes.")
+#: ``light_parameter_attributes() -> [name, ...]``. The LIGHT attributes a stack's light
+#: loop reads a source's own per-light parameters through, one per parameter vector in the
+#: order a statement states them; the host stamps each stated light's vectors under them
+#: when it makes the light (:mod:`light_parameters`). A stack that lights through the
+#: host's own light alone reads none.
+LIGHT_PARAMETERS = extensions.point(
+    "blender.light_parameters",
+    "Per-light parameters of a source's own light model a shading stack reads as light attributes.")
+
+#: The LIGHT attribute every stack's light template reads a light's camera-distance fade
+#: through: four coefficients (a, k, b, m), the light scaled by
+#: saturate(1 + a - d²k) · saturate(1 + d²m - b) on the camera's squared distance d². The
+#: host stamps it on a stated light that fades (:mod:`light_parameters`); a light without it
+#: reads zeros, no fade. Declared on this registry module because every stack reaches the
+#: host through it.
+LIGHT_FADE_PROPERTY = "ruri_light_fade"
 
 #: ``render_footprint_attributes() -> [name, ...]``. Scene attributes a stack reads the
 #: world size of one render output pixel through: (orthographic term, perspective term
@@ -332,12 +341,12 @@ def write_level_table(name, rows):
     _plugin_data.content(image)
 
 
-def register_light_records(attributes):
-    LIGHT_RECORDS.add(attributes)
+def register_light_parameters(attributes):
+    LIGHT_PARAMETERS.add(attributes)
 
 
-def unregister_light_records(attributes):
-    LIGHT_RECORDS.remove(attributes)
+def unregister_light_parameters(attributes):
+    LIGHT_PARAMETERS.remove(attributes)
 
 
 def register_render_footprints(attributes):

@@ -172,10 +172,6 @@ class BlenderHost(host_port.Host, host_port.SceneGraph, host_port.Compositor, ho
         from . import material_builder
         return material_builder.apply_level_resources(context.scene, values, payloads)
 
-    def apply_light_records(self, context, records):
-        from . import light_records
-        return light_records.apply(context.scene, records)
-
     def apply_decals(self, context, boxes, range_attribute, list_table):
         from . import decals
         return decals.apply(context, boxes, range_attribute, list_table)

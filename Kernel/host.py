@@ -198,15 +198,6 @@ class SceneGraph(abc.ABC):
         level."""
 
     @abc.abstractmethod
-    def apply_light_records(self, context, records):
-        """Hand the lights a statement made their source's own per-light record, for the shading
-        stacks whose light loop lights through the source's light table. ``records`` maps a light's
-        source key to ``(visible, vectors)``: whether the source draws that light from the viewer
-        the records were packed for, and the record, one ``(x, y, z, w)`` per vector. A light the
-        source does not draw is hidden. Returns ``(stamped, unmatched)``: how many lights were
-        written and the names of the stated lights no record was supplied for."""
-
-    @abc.abstractmethod
     def apply_decals(self, context, boxes, range_attribute, list_table):
         """Hand every object the deferred decals whose boxes reach it, for the shading stacks that
         apply them inside the material (the source projects them into its GBuffer between the GBuffer
